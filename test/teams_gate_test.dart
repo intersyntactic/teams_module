@@ -120,6 +120,29 @@ void main() {
       expect(d.doorbell!.string('service_url'), serviceUrl);
     });
 
+    test('a quoted reply, with the entities that say what it quotes', () {
+      // The quotedReply entity's fields here are illustrative, not
+      // Microsoft's schema: the gate passes entities on unread, which is
+      // what this proves.
+      final entities = [
+        {
+          'type': 'mention',
+          'mentioned': {'id': '28:$appId', 'name': 'Hart'},
+          'text': '<at>Hart</at>',
+        },
+        {'type': 'quotedReply', 'messageId': '1730881000000'},
+      ];
+      final d = _gate({
+        ..._message(
+          text: '<quoted messageId="1730881000000"/> <at>Hart</at> not quite',
+        ),
+        'entities': entities,
+      });
+      expect(d.outcome, TeamsGateOutcome.trigger);
+      expect(jsonEncode(d.doorbell!.raw('entities')), jsonEncode(entities));
+      expect(d.doorbell!.string('text'), startsWith('<quoted messageId='));
+    });
+
     test('a conversation update, with who joined', () {
       final d = _gate(
         {

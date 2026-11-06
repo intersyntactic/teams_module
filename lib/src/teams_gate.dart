@@ -107,6 +107,7 @@ final class TeamsGateDecision {
   ///   "recipient": "28:...",         // the bot's id in this conversation
   ///   "text": "...",                 // a message, or an edit
   ///   "value": {...},                // a card action: what was submitted
+  ///   "entities": [{...}],           // mentions, quoted replies: as sent
   ///   "name": "adaptiveCard/action", // an invoke
   ///   "event_type": "editMessage",   // channelData.eventType, when given
   ///   "action": "add",               // an installation update
@@ -329,6 +330,12 @@ JsonObject _doorbell(
     'recipient': ?a.objectOrNull('recipient')?.stringOrNull('id'),
     'text': ?a.stringOrNull('text'),
     'value': ?a.objectOrNull('value'),
+    // As they came: @-mentions, and the quoted-reply entity that says which
+    // earlier message a reply quotes. That is how a free-text reply in a
+    // chat names the node it is about. Its JSON is described only in a
+    // Teams SDK blog post, not on Learn, so it is passed on unread rather
+    // than projected from a guess.
+    'entities': ?a.objectsOrNull('entities'),
     if (type == 'invoke') 'name': ?name,
     'event_type': ?a.objectOrNull('channelData')?.stringOrNull('eventType'),
     'action': ?a.stringOrNull('action'),
