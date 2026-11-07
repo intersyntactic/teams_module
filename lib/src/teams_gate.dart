@@ -1,4 +1,4 @@
-/// Decides whether an inbound Teams delivery is authentic, and what the shim
+/// Decides whether an inbound Teams delivery is authentic, and what the relay
 /// should do with it.
 ///
 /// A sibling of the Slack module's `slack_gate.dart`, and pure like it: the
@@ -13,7 +13,7 @@
 /// 2. THE TOKEN VOUCHES FOR THE SENDER, NOT THE BODY. Slack's and GitHub's
 ///    HMACs are computed over the body; no documented check of this token
 ///    touches it. The `serviceurl` claim matched against the activity is the
-///    only thing tying the two together. So whoever runs the shim is trusted
+///    only thing tying the two together. So whoever runs the relay is trusted
 ///    with content, in any design.
 ///
 /// 3. THE DOORBELL CARRIES CONTENT (Nick, 2026-11-06). A card submission
@@ -24,9 +24,10 @@
 ///
 /// 4. REPLAYS ARE KEYED BY ACTIVITY, NOT SIGNATURE. Because the doorbell
 ///    carries content, the receiver acts on it, which is the condition
-///    `relay.dart` names for needing a seen set. Slack's gate keys its seen
-///    set by signature digest; that cannot work here, because the Bot
-///    Connector reuses one token across many deliveries until it expires.
+///    the GitHub relay's `relay.dart` names for needing a seen set.
+///    Slack's gate keys its seen set by signature digest; that cannot work
+///    here, because the Bot Connector reuses one token across many
+///    deliveries until it expires.
 ///    The key is the conversation id with the activity id. Teams also
 ///    re-sends anything not answered within 15 seconds, so duplicates are
 ///    ordinary traffic, not only attacks.
