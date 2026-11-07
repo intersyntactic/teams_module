@@ -26,8 +26,8 @@
 ///    carries content, the receiver acts on it, which is the condition
 ///    the GitHub relay's `relay.dart` names for needing a seen set.
 ///    Slack's gate keys its seen set by signature digest; that cannot work
-///    here, because the Bot
-///    Connector reuses one token across many deliveries until it expires.
+///    here, because the Bot Connector reuses one token across many
+///    deliveries until it expires.
 ///    The key is the conversation id with the activity id. Teams also
 ///    re-sends anything not answered within 15 seconds, so duplicates are
 ///    ordinary traffic, not only attacks.
