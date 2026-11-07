@@ -1,5 +1,10 @@
 /// The HTTP front of the Teams module: the one endpoint Teams posts to.
 ///
+/// A relay in the sense of `intersyntactic_relay`, the one GitHub posts to:
+/// it checks a delivery and passes a doorbell on. That relay hands its
+/// doorbells to servers that dial in over a websocket; this one, so far,
+/// hands them to [TeamsRelay.onDoorbell].
+///
 /// It reads the body under a cap and a deadline, asks [teamsGate], answers
 /// at once, and only then hands a doorbell on, so nothing the receiver does
 /// can make Teams wait past its 15 seconds and send again. It holds no
@@ -16,8 +21,8 @@ import 'package:checked_json/checked_json.dart';
 import 'key_source.dart';
 import 'teams_gate.dart';
 
-final class TeamsShim {
-  TeamsShim({
+final class TeamsRelay {
+  TeamsRelay({
     required this.spec,
     required this.keys,
     this.onDoorbell = _logDoorbell,
@@ -36,7 +41,7 @@ final class TeamsShim {
   final BotFrameworkKeySource keys;
 
   /// What becomes of a doorbell once Teams has its answer. Defaults to a log
-  /// line, so the shim runs end to end before a receiver is wired in.
+  /// line, so the relay runs end to end before a receiver is wired in.
   final Future<void> Function(JsonObject doorbell) onDoorbell;
 
   final Duration bodyTimeout;
@@ -66,7 +71,7 @@ final class TeamsShim {
         await _messages(req);
       }
     } on Exception catch (e) {
-      log('teams shim: $e');
+      log('teams relay: $e');
       try {
         await _end(req, HttpStatus.internalServerError);
       } on Exception {
@@ -94,7 +99,7 @@ final class TeamsShim {
         }
       }().timeout(bodyTimeout);
     } on TimeoutException {
-      log('teams shim: body too slow');
+      log('teams relay: body too slow');
       return _end(req, HttpStatus.requestTimeout);
     }
     if (tooLarge) return _end(req, HttpStatus.requestEntityTooLarge);
@@ -103,7 +108,7 @@ final class TeamsShim {
     if (keySet == null) {
       // Not the sender's fault: no key set has arrived from Microsoft yet.
       // A 503 says "try again", and Teams will.
-      log('teams shim: no keys yet');
+      log('teams relay: no keys yet');
       return _end(req, HttpStatus.serviceUnavailable);
     }
 
@@ -123,7 +128,7 @@ final class TeamsShim {
     );
     if (d.seenKey case final key?) _markSeen(key, now);
     // The reason, never the content: the log is not a copy of Peter's words.
-    log('teams shim: ${d.outcome.name} ${d.status}: ${d.reason}');
+    log('teams relay: ${d.outcome.name} ${d.status}: ${d.reason}');
 
     req.response.statusCode = d.status;
     if (d.invokeResponse case final answer?) {
@@ -138,7 +143,7 @@ final class TeamsShim {
     try {
       await onDoorbell(doorbell);
     } on Exception catch (e) {
-      log('teams shim: doorbell handler: $e');
+      log('teams relay: doorbell handler: $e');
     }
   }
 
@@ -174,7 +179,7 @@ final class TeamsShim {
   /// Ids only: which conversation, which activity, what kind. Not the text.
   static Future<void> _logDoorbell(JsonObject bell) async {
     stderr.writeln(
-      'teams shim: doorbell ${bell.string('event')} '
+      'teams relay: doorbell ${bell.string('event')} '
       '${bell.string('conversation')} ${bell.string('activity')}',
     );
   }

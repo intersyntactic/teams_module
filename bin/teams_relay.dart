@@ -1,4 +1,4 @@
-/// Run behind TLS (a reverse proxy): Teams posts only to https. The shim
+/// Run behind TLS (a reverse proxy): Teams posts only to https. The relay
 /// holds no Microsoft secret, only the bot's app id, which the bot's own
 /// manifest prints.
 ///
@@ -68,12 +68,12 @@ Future<void> main() async {
     stderr.writeln('warning: no keys yet; requests get 503 until they arrive');
   }
 
-  final shim = TeamsShim(
+  final relay = TeamsRelay(
     spec: TeamsSourceSpec(appId: appId, tenantAllowlist: allow),
     keys: keys,
   );
   final server = await HttpServer.bind(address, port);
-  stdout.writeln('teams shim listening on ${address.address}:${server.port}');
+  stdout.writeln('teams relay listening on ${address.address}:${server.port}');
   if (!address.isLoopback) {
     stderr.writeln(
       'warning: bound to ${address.address}, which serves plain HTTP; '
@@ -81,7 +81,7 @@ Future<void> main() async {
     );
   }
   await for (final req in server) {
-    unawaited(shim.handle(req));
+    unawaited(relay.handle(req));
   }
 }
 

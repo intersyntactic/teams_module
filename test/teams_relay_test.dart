@@ -21,7 +21,7 @@ void main() {
     doorbells = [];
     logged = [];
     keysServed = true;
-    final shim = TeamsShim(
+    final relay = TeamsRelay(
       spec: const TeamsSourceSpec(appId: appId, tenantAllowlist: {tenant}),
       keys: BotFrameworkKeySource(
         get: (url) async => !keysServed
@@ -38,7 +38,7 @@ void main() {
       bodyTimeout: const Duration(milliseconds: 300),
     );
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    server.listen(shim.handle);
+    server.listen(relay.handle);
     client = HttpClient();
   });
 
@@ -49,7 +49,7 @@ void main() {
 
   Future<(int, String, ContentType?)> post(
     Object? activity, {
-    String path = TeamsShim.path,
+    String path = TeamsRelay.path,
     String method = 'POST',
     String? token,
     List<int>? body,
@@ -122,7 +122,7 @@ void main() {
   test('gives a body one deadline, not one per chunk', () async {
     // A byte every 100ms never leaves a gap as long as the 300ms deadline,
     // so only a deadline on the whole body stops it.
-    final req = await client.post('127.0.0.1', server.port, TeamsShim.path);
+    final req = await client.post('127.0.0.1', server.port, TeamsRelay.path);
     req.headers.set('authorization', 'Bearer ${signedToken()}');
     req.contentLength = 20;
     final response = req.done;
@@ -135,7 +135,7 @@ void main() {
         }
         await req.close();
       } on Exception {
-        // The shim has answered and closed; the rest has nowhere to go.
+        // The relay has answered and closed; the rest has nowhere to go.
       }
     }());
     final res = await response.timeout(const Duration(seconds: 5));
