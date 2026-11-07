@@ -10,7 +10,7 @@ open are answered in https://github.com/intersyntactic/teams_module/issues/1.
 ## Shape
 
 ```
-Teams ──POST (Bot Framework JWT)──▶ Teams shim ──doorbell, with content──▶ receiver
+Teams ──POST (Bot Framework JWT)──▶ Teams relay ──doorbell, with content──▶ receiver
                                      │  checks the token against            │  writes nodes,
                                      │  Microsoft's public keys; answers    │  runs Hart's turn
                                      │  a card action with "Got it"         ▼
@@ -20,8 +20,8 @@ Teams ──POST (Bot Framework JWT)──▶ Teams shim ──doorbell, with co
 
 It differs from the Slack module's shape in three ways, each forced by Teams:
 
-- **The shim holds no secret.** Microsoft signs with a private key and the
-  shim checks against the published public keys, so all it needs is the
+- **The relay holds no secret.** Microsoft signs with a private key and the
+  relay checks against the published public keys, so all it needs is the
   bot's app id.
 - **The doorbell carries the message and what was submitted.** A card
   submission exists nowhere but the request that delivers it, so a doorbell
@@ -36,7 +36,7 @@ permissions, so Peter's IT has one thing to do: upload the app.
 ## Status
 
 The inbound gate is here (`lib/src/teams_gate.dart`), with its key set and
-tests. Still to come: fetching and refreshing the key set, the HTTP shim
+tests. Still to come: fetching and refreshing the key set, the HTTP relay
 around the gate, the receiver, and the Bot Connector client that posts and
 edits cards.
 
