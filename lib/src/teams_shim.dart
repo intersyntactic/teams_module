@@ -1,0 +1,181 @@
+/// The HTTP front of the Teams module: the one endpoint Teams posts to.
+///
+/// It reads the body under a cap and a deadline, asks [teamsGate], answers
+/// at once, and only then hands a doorbell on, so nothing the receiver does
+/// can make Teams wait past its 15 seconds and send again. It holds no
+/// Microsoft credential: the gate needs only the app id and the public keys.
+library;
+
+import 'dart:async';
+import 'dart:collection';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:checked_json/checked_json.dart';
+
+import 'key_source.dart';
+import 'teams_gate.dart';
+
+final class TeamsShim {
+  TeamsShim({
+    required this.spec,
+    required this.keys,
+    this.onDoorbell = _logDoorbell,
+    DateTime Function()? now,
+    this.bodyTimeout = const Duration(seconds: 10),
+    this.maxBodyBytes = 1024 * 1024,
+    this.seenFor = const Duration(minutes: 10),
+    this.seenMax = 5000,
+    this.log = _stderr,
+  }) : _now = now ?? DateTime.now;
+
+  /// Where Teams posts: the Bot Framework's usual messaging path.
+  static const path = '/api/messages';
+
+  final TeamsSourceSpec spec;
+  final BotFrameworkKeySource keys;
+
+  /// What becomes of a doorbell once Teams has its answer. Defaults to a log
+  /// line, so the shim runs end to end before a receiver is wired in.
+  final Future<void> Function(JsonObject doorbell) onDoorbell;
+
+  final Duration bodyTimeout;
+  final int maxBodyBytes;
+
+  /// How long an activity is remembered as seen. Teams re-sends after 15
+  /// seconds; ten minutes covers its retries with room to spare.
+  final Duration seenFor;
+
+  /// A ceiling on the seen set, so a flood cannot grow it without bound.
+  final int seenMax;
+
+  final void Function(String line) log;
+
+  final DateTime Function() _now;
+
+  /// Seen key to first sight, oldest first.
+  final LinkedHashMap<String, DateTime> _seen = LinkedHashMap();
+
+  Future<void> handle(HttpRequest req) async {
+    try {
+      if (req.uri.path != path) {
+        await _end(req, HttpStatus.notFound);
+      } else if (req.method != 'POST') {
+        await _end(req, HttpStatus.methodNotAllowed);
+      } else {
+        await _messages(req);
+      }
+    } on Exception catch (e) {
+      log('teams shim: $e');
+      try {
+        await _end(req, HttpStatus.internalServerError);
+      } on Exception {
+        // The response was already under way; there is no one left to tell.
+      }
+    }
+  }
+
+  Future<void> _messages(HttpRequest req) async {
+    if (req.contentLength > maxBodyBytes) {
+      return _end(req, HttpStatus.requestEntityTooLarge);
+    }
+    final body = <int>[];
+    var tooLarge = false;
+    try {
+      // One deadline for the whole body, not a gap between chunks: a sender
+      // trickling a byte at a time must not hold the connection open.
+      await () async {
+        await for (final chunk in req) {
+          if (body.length + chunk.length > maxBodyBytes) {
+            tooLarge = true;
+            return;
+          }
+          body.addAll(chunk);
+        }
+      }().timeout(bodyTimeout);
+    } on TimeoutException {
+      log('teams shim: body too slow');
+      return _end(req, HttpStatus.requestTimeout);
+    }
+    if (tooLarge) return _end(req, HttpStatus.requestEntityTooLarge);
+
+    final keySet = await keys.keys();
+    if (keySet == null) {
+      // Not the sender's fault: no key set has arrived from Microsoft yet.
+      // A 503 says "try again", and Teams will.
+      log('teams shim: no keys yet');
+      return _end(req, HttpStatus.serviceUnavailable);
+    }
+
+    final headers = <String, String>{};
+    req.headers.forEach((name, values) => headers[name] = values.first);
+    final now = _now();
+    // No await from here to _markSeen: two copies of one activity arriving
+    // together cannot both get past hasSeen.
+    final d = teamsGate(
+      spec: spec,
+      keys: keySet,
+      headers: headers,
+      body: body,
+      now: now,
+      hasSeen: _hasSeen,
+      maxBodyBytes: maxBodyBytes,
+    );
+    if (d.seenKey case final key?) _markSeen(key, now);
+    // The reason, never the content: the log is not a copy of Peter's words.
+    log('teams shim: ${d.outcome.name} ${d.status}: ${d.reason}');
+
+    req.response.statusCode = d.status;
+    if (d.invokeResponse case final answer?) {
+      req.response.headers.contentType = ContentType.json;
+      req.response.write(jsonEncode(answer));
+    }
+    await req.response.close();
+    if (d.doorbell case final bell?) unawaited(_dispatch(bell));
+  }
+
+  Future<void> _dispatch(JsonObject doorbell) async {
+    try {
+      await onDoorbell(doorbell);
+    } on Exception catch (e) {
+      log('teams shim: doorbell handler: $e');
+    }
+  }
+
+  bool _hasSeen(String key) {
+    final at = _seen[key];
+    if (at == null) return false;
+    if (_now().difference(at) > seenFor) {
+      _seen.remove(key);
+      return false;
+    }
+    return true;
+  }
+
+  void _markSeen(String key, DateTime at) {
+    _seen.remove(key);
+    _seen[key] = at;
+    while (_seen.length > seenMax) {
+      _seen.remove(_seen.keys.first);
+    }
+    final cutoff = at.subtract(seenFor);
+    while (_seen.isNotEmpty && _seen.values.first.isBefore(cutoff)) {
+      _seen.remove(_seen.keys.first);
+    }
+  }
+
+  static Future<void> _end(HttpRequest req, int status) async {
+    req.response.statusCode = status;
+    await req.response.close();
+  }
+
+  static void _stderr(String line) => stderr.writeln(line);
+
+  /// Ids only: which conversation, which activity, what kind. Not the text.
+  static Future<void> _logDoorbell(JsonObject bell) async {
+    stderr.writeln(
+      'teams shim: doorbell ${bell.string('event')} '
+      '${bell.string('conversation')} ${bell.string('activity')}',
+    );
+  }
+}

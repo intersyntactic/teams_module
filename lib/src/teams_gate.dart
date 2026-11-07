@@ -260,14 +260,19 @@ TeamsGateDecision _decide(
   }
 
   final conversation = a.object('conversation');
+  // A tenant id is a GUID, compared and passed on in lower case, as the
+  // actor id `teams:<tenant>/<object id>` writes it: whether Teams always
+  // sends it lower case is not something the docs promise.
   final tenant =
-      a
-          .objectOrNull('channelData')
-          ?.objectOrNull('tenant')
-          ?.stringOrNull('id') ??
-      conversation.stringOrNull('tenantId');
+      (a
+                  .objectOrNull('channelData')
+                  ?.objectOrNull('tenant')
+                  ?.stringOrNull('id') ??
+              conversation.stringOrNull('tenantId'))
+          ?.toLowerCase();
   if (spec.tenantAllowlist.isNotEmpty &&
-      (tenant == null || !spec.tenantAllowlist.contains(tenant))) {
+      (tenant == null ||
+          !spec.tenantAllowlist.any((t) => t.toLowerCase() == tenant))) {
     return TeamsGateDecision._reject(403, 'tenant $tenant not allowed');
   }
 
