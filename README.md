@@ -62,8 +62,9 @@ upload the zip in the test tenant's Teams, and message the bot. To replace a
 package already uploaded, build it with a higher version: Teams refuses one
 that isn't.
 
-The icon is a hart's antlers drawn as a tree of nodes, a root at the base and
-a node at every tine's tip, with one tip gold: the node Peter approved.
+The icon is a hart's antlers drawn as a tree of nodes, like a transit map: a
+journey path in gold from the root up each beam, tines branching off it, and
+every node a station coloured by who wrote it, people and agents alike.
 
 ## Running the relay
 

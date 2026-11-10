@@ -110,7 +110,13 @@ Map<String, Object?> manifest(String appId, String name, String version) => {
 /// A hart's antlers drawn as a tree of nodes: a root at the base, branches
 /// forking upward, a node at every tine's tip. Hart is a stag, and what the
 /// module feeds is a tree of nodes on journey paths, so the one shape is
-/// both. In the colour icon one tip is gold, the node Peter approved.
+/// both.
+///
+/// The colour icon reads like a transit map. A journey path runs in gold
+/// from the root up each beam to its top tip; the tines branch off it in
+/// cream. Every node is a station coloured by who wrote it, people in coral
+/// and sky, agents in lilac and gold, ringed in the background colour so it
+/// stands clear of its line. Left and right mirror each other, colours too.
 ///
 /// The left antler is given in unit coordinates and mirrored for the right.
 const _beam = [(0.42, 0.70), (0.33, 0.52), (0.27, 0.34), (0.25, 0.17)];
@@ -121,75 +127,102 @@ const _tines = [
 ];
 const _root = (0.5, 0.84);
 
-/// Cream antlers on forest green for the colour icon; white on transparent
-/// for the outline icon, as Teams requires of each.
+/// Who wrote each tine's tip, in [_tines] order, mirrored on the right.
+const _tineActors = [_coral, _sky, _lilac];
+const _coral = (0xff, 0x8a, 0x65); // a person
+const _sky = (0x64, 0xc4, 0xf5); // another person
+const _lilac = (0xc6, 0xa8, 0xff); // an agent
+
+typedef _Point = (double, double);
+typedef _Stroke = (_Point, _Point);
+typedef _Rgb = (int, int, int);
+
+/// Transit-map antlers on forest green for the colour icon; white on
+/// transparent for the outline icon, as Teams requires of each.
 Uint8List icon(int size, {required bool outline}) {
-  (double, double) mirror((double, double) p) => (1 - p.$1, p.$2);
+  _Point mirror(_Point p) => (1 - p.$1, p.$2);
+  List<_Stroke> both(List<_Stroke> s) => [
+    ...s,
+    for (final (a, b) in s) (mirror(a), mirror(b)),
+  ];
   // At 32 pixels three tines a side crowd into a blob, so the outline icon
   // keeps only the brow and inner tines.
   final tines = outline ? [_tines.first, _tines.last] : _tines;
-  final strokes = <((double, double), (double, double))>[
+  final actors = outline ? [_tineActors.first, _tineActors.last] : _tineActors;
+
+  // The journey path, root to each top tip, and the tines branching off it.
+  final path = both([
     (_root, _beam.first),
     for (var i = 0; i < _beam.length - 1; i++) (_beam[i], _beam[i + 1]),
-    ...tines,
-  ];
-  final allStrokes = [
-    ...strokes,
-    for (final (a, b) in strokes) (mirror(a), mirror(b)),
-  ];
-  final tips = [_beam.last, for (final (_, tip) in tines) tip];
-  final gold = mirror(_tines.last.$2);
-  final nodes = [_root, ...tips, ...tips.map(mirror).where((p) => p != gold)];
+  ]);
+  final branches = both(tines);
 
   // At 32 pixels a thin stroke vanishes, so the outline icon draws heavier,
-  // with nodes only a little wider than the strokes.
-  final half = (outline ? 0.085 : 0.05) * size / 2;
-  final dot = (outline ? 0.06 : 0.05) * size;
-  final rootDot = dot * 1.25;
+  // with nodes only a little wider than the strokes. In colour the path is
+  // heavier than its branches: path first, branches second, stations third.
+  final pathHalf = (outline ? 0.085 : 0.064) * size / 2;
+  final branchHalf = (outline ? 0.085 : 0.042) * size / 2;
+  final dot = (outline ? 0.06 : 0.045) * size;
+  final ring = outline ? 0.0 : 0.016 * size;
+  final stations = <(_Point, _Rgb, double)>[
+    (_root, _gold, dot * 1.25),
+    (_beam.last, _gold, dot),
+    (mirror(_beam.last), _gold, dot),
+    for (var i = 0; i < tines.length; i++) ...[
+      (tines[i].$2, actors[i], dot),
+      (mirror(tines[i].$2), actors[i], dot),
+    ],
+  ];
 
   final rgba = Uint8List(size * size * 4);
   for (var y = 0; y < size; y++) {
     for (var x = 0; x < size; x++) {
       final px = x + 0.5, py = y + 0.5;
-      double from((double, double) p) =>
+      double from(_Point p) =>
           sqrt(pow(p.$1 * size - px, 2) + pow(p.$2 * size - py, 2));
-
-      var d = double.infinity;
-      for (final (a, b) in allStrokes) {
-        d = min(
-          d,
-          _toSegment(
-            px,
-            py,
-            a.$1 * size,
-            a.$2 * size,
-            b.$1 * size,
-            b.$2 * size,
-          ),
-        );
-      }
       // One pixel of soft edge everywhere, so nothing is jagged.
-      var ink = (half + 0.5 - d).clamp(0.0, 1.0);
-      for (final n in nodes) {
-        final r = n == _root ? rootDot : dot;
-        ink = max(ink, (r + 0.5 - from(n)).clamp(0.0, 1.0));
+      double within(double r, double d) => (r + 0.5 - d).clamp(0.0, 1.0);
+      double inked(List<_Stroke> strokes, double half) {
+        var d = double.infinity;
+        for (final (a, b) in strokes) {
+          d = min(
+            d,
+            _toSegment(
+              px,
+              py,
+              a.$1 * size,
+              a.$2 * size,
+              b.$1 * size,
+              b.$2 * size,
+            ),
+          );
+        }
+        return within(half, d);
       }
-      final shine = outline ? 0.0 : (dot + 0.5 - from(gold)).clamp(0.0, 1.0);
-      if (outline) ink = max(ink, (dot + 0.5 - from(gold)).clamp(0.0, 1.0));
 
       final o = (y * size + x) * 4;
       if (outline) {
+        var ink = max(inked(path, pathHalf), inked(branches, branchHalf));
+        for (final (at, _, r) in stations) {
+          ink = max(ink, within(r, from(at)));
+        }
         rgba.setAll(o, [255, 255, 255, (ink * 255).round()]);
-      } else {
-        int over(int bg, int fg, double a) => (bg + (fg - bg) * a).round();
-        int channel(int bg, int fg, int g) => over(over(bg, fg, ink), g, shine);
-        rgba.setAll(o, [
-          channel(accent.$1, _cream.$1, _gold.$1),
-          channel(accent.$2, _cream.$2, _gold.$2),
-          channel(accent.$3, _cream.$3, _gold.$3),
-          255,
-        ]);
+        continue;
       }
+      var c = accent;
+      _Rgb over(_Rgb under, _Rgb top, double a) => (
+        (under.$1 + (top.$1 - under.$1) * a).round(),
+        (under.$2 + (top.$2 - under.$2) * a).round(),
+        (under.$3 + (top.$3 - under.$3) * a).round(),
+      );
+      c = over(c, _cream, inked(branches, branchHalf));
+      c = over(c, _gold, inked(path, pathHalf));
+      for (final (at, colour, r) in stations) {
+        final d = from(at);
+        c = over(c, accent, within(r + ring, d));
+        c = over(c, colour, within(r, d));
+      }
+      rgba.setAll(o, [c.$1, c.$2, c.$3, 255]);
     }
   }
   return _png(size, rgba);
