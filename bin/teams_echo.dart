@@ -128,7 +128,10 @@ String _plain(String text) => text
     .replaceAll(RegExp(r'<quoted[^>]*/>'), '')
     .trim();
 
-/// A card with Approve and Not yet, or, once one is pressed, saying which.
+/// The card for a node in [state]: what its annotations add up to, and the
+/// actions that make sense from there (Nick, 2026-11-10). Approved offers
+/// only Edit, which writes nothing and reopens the choice; open, reopened or
+/// not yet offers Approve and Not yet.
 Map<String, Object?> _card({required String? state}) => {
   'contentType': 'application/vnd.microsoft.card.adaptive',
   'content': {
@@ -143,23 +146,19 @@ Map<String, Object?> _card({required String? state}) => {
         'wrap': true,
       },
       {'type': 'TextBlock', 'text': 'Level: supported', 'wrap': true},
-      if (state != null)
+      if (state case 'approve' || 'notyet')
         {
           'type': 'TextBlock',
-          'text': switch (state) {
-            'approve' => 'Approved.',
-            'notyet' => 'Not yet: noted.',
-            _ => 'Pressed: $state',
-          },
+          'text': state == 'approve' ? 'Approved.' : 'Not yet: noted.',
           'wrap': true,
           'isSubtle': true,
         },
     ],
     'actions': [
-      for (final (verb, title) in [
-        ('approve', 'Approve'),
-        ('notyet', 'Not yet'),
-      ])
+      for (final (verb, title)
+          in state == 'approve'
+              ? [('edit', 'Edit')]
+              : [('approve', 'Approve'), ('notyet', 'Not yet')])
         {
           'type': 'Action.Execute',
           'title': title,
