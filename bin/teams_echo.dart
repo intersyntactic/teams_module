@@ -18,13 +18,34 @@
 /// In Teams: say anything and it echoes; say "card" and it sends a card
 /// with Approve and Not yet; press one and the card is edited to say so.
 /// Adding the bot to a chat gets a hello, sent without being asked.
+///
+/// Each "card" appends a rung to a [StandInLine], as a pass of Hart's would,
+/// and the card shows it: "card" again is a later pass saying the same, and
+/// "card weak" one saying something new. Each press writes what
+/// [TeamsReceiver] reads it as to that line, and the log names each node.
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:checked_json/checked_json.dart';
+import 'package:is_annotation_shapes/is_annotation_shapes.dart';
+import 'package:is_shapes/is_shapes.dart';
 import 'package:is_teams_module/is_teams_module.dart';
+
+/// A stand-in for Hart's rung: what a card shows.
+final class _Rung {
+  const _Rung(this.failureMode, this.verdict);
+  @identity
+  final String failureMode;
+  final _Verdict verdict;
+}
+
+final class _Verdict extends Value {
+  const _Verdict(this.level);
+  final String level;
+}
 
 Future<void> main() async {
   final env = Platform.environment;
@@ -59,10 +80,37 @@ Future<void> main() async {
   );
   if (await keys.keys() == null) stderr.writeln('warning: no keys yet');
 
+  late final StandInLine line;
+  final receiver = TeamsReceiver(
+    sameVersion: (a, b) => line.sameVersion(a, b),
+    log: stderr.writeln,
+  );
+  line = StandInLine(
+    deliver: (id, node) {
+      receiver.delivered(id, node);
+      final of = switch (node) {
+        Approve(:final target) ||
+        Seen(:final target) => ' of ${_short(target.exact)}',
+        Withdraw<Approve>(:final target) => ' of ${_short(target)}',
+        _ => '',
+      };
+      stderr.writeln('echo: line ${_short(id)} ${node.runtimeType}$of');
+    },
+    encodeOther: (node) => switch (node) {
+      _Rung(:final failureMode, :final verdict) => {
+        'shape': 'Rung',
+        'failureMode': failureMode,
+        'level': verdict.level,
+      },
+      _ => throw ArgumentError.value(node, 'node', 'no encoding'),
+    },
+  );
+  final echo = (connector: connector, receiver: receiver, line: line);
+
   final relay = TeamsRelay(
     spec: TeamsSourceSpec(appId: appId, tenantAllowlist: {tenantId}),
     keys: keys,
-    onDoorbell: (bell) => _answer(connector, bell),
+    onDoorbell: (bell) => _answer(echo, bell),
   );
   final server = await HttpServer.bind(address, port);
   stdout.writeln('teams echo listening on ${address.address}:${server.port}');
@@ -71,7 +119,17 @@ Future<void> main() async {
   }
 }
 
-Future<void> _answer(BotConnector connector, JsonObject bell) async {
+typedef _Echo = ({
+  BotConnector connector,
+  TeamsReceiver receiver,
+  StandInLine line,
+});
+
+/// What each card shows, by its activity id, to draw it again when edited.
+final _rungs = <String, _Rung>{};
+
+Future<void> _answer(_Echo echo, JsonObject bell) async {
+  final connector = echo.connector;
   final serviceUrl = Uri.parse(bell.string('service_url'));
   final conversation = bell.string('conversation');
   final activity = bell.string('activity');
@@ -80,12 +138,29 @@ Future<void> _answer(BotConnector connector, JsonObject bell) async {
     switch (bell.string('event')) {
       case 'teams_message':
         final said = _plain(bell.stringOrNull('text') ?? '');
-        if (said.toLowerCase() == 'card') {
+        if (said.toLowerCase().split(' ') case ['card', ...final level]) {
+          final rung = _Rung(
+            'Rung 3: the thermostat failed',
+            _Verdict(level.isEmpty ? 'supported' : level.join(' ')),
+          );
+          final target = Target(
+            exact: echo.line.append(rung),
+            anchor: SemanticAnchor.of(utf8.encode('Rung:${rung.failureMode}')),
+          );
+          // A later pass that says the same arrives already approved.
+          final by = teamsActor(bell);
+          final stance = by == null
+              ? Stance.open
+              : echo.receiver.stanceOf(by, target.exact);
           final id = await connector.send(serviceUrl, conversation, {
             'type': 'message',
-            'attachments': [_card(state: null)],
+            'attachments': [_card(rung, stance: stance)],
           });
-          stderr.writeln('echo: card sent as $id');
+          _rungs[id] = rung;
+          echo.receiver.show(id, target, conversation: conversation);
+          stderr.writeln(
+            'echo: card $id shows ${_short(target.exact)}, ${stance.name}',
+          );
         } else {
           await connector.reply(serviceUrl, conversation, activity, {
             'type': 'message',
@@ -94,13 +169,26 @@ Future<void> _answer(BotConnector connector, JsonObject bell) async {
         }
       case 'teams_card_action':
         final verb = bell.object('value').object('action').stringOrNull('verb');
-        // The card's own id: what the button was pressed on.
+        echo.receiver.read(bell).inOrder.forEach(echo.line.append);
+        final by = teamsActor(bell);
+        if (by == null) return;
+        // The card's own id: what the button was pressed on. Edit reopens
+        // the choice on that card alone; any other press may change what
+        // every card showing the same version says.
         final card = bell.string('reply_to');
-        await connector.update(serviceUrl, conversation, card, {
-          'type': 'message',
-          'attachments': [_card(state: verb)],
-        });
-        stderr.writeln('echo: card $card edited for $verb');
+        final like = echo.receiver.cardsLike(card, conversation: conversation);
+        final editing = verb == 'edit';
+        for (final other in editing ? like.where((c) => c == card) : like) {
+          final rung = _rungs[other];
+          final target = echo.receiver.targetOf(other);
+          if (rung == null || target == null) continue;
+          final stance = echo.receiver.stanceOf(by, target.exact);
+          await connector.update(serviceUrl, conversation, other, {
+            'type': 'message',
+            'attachments': [_card(rung, stance: stance, editing: editing)],
+          });
+          stderr.writeln('echo: card $other edited, ${stance.name}');
+        }
       case 'teams_installation_update' || 'teams_conversation_update':
         if (bell.stringOrNull('action') == 'remove') return;
         final added = bell.stringsOrNull('members_added') ?? const [];
@@ -128,11 +216,19 @@ String _plain(String text) => text
     .replaceAll(RegExp(r'<quoted[^>]*/>'), '')
     .trim();
 
-/// The card for a node in [state]: what its annotations add up to, and the
-/// actions that make sense from there (Nick, 2026-11-10). Approved offers
-/// only Edit, which writes nothing and reopens the choice; open, reopened or
-/// not yet offers Approve and Not yet.
-Map<String, Object?> _card({required String? state}) => {
+/// The first eight hex digits of [id], enough to tell nodes apart in a log.
+String _short(TurnId id) => id.hex.substring(0, 8);
+
+/// The card for [rung], as the presser's annotations of its version add up
+/// ([stance]), and the actions that make sense from there (Nick,
+/// 2026-11-10). Approved offers only Edit, which writes nothing and reopens
+/// the choice on that card ([editing]); open, reopened or held off offers
+/// Approve and Not yet.
+Map<String, Object?> _card(
+  _Rung rung, {
+  required Stance stance,
+  bool editing = false,
+}) => {
   'contentType': 'application/vnd.microsoft.card.adaptive',
   'content': {
     r'$schema': 'http://adaptivecards.io/schemas/adaptive-card.json',
@@ -141,30 +237,29 @@ Map<String, Object?> _card({required String? state}) => {
     'body': [
       {
         'type': 'TextBlock',
-        'text': 'Rung 3: the thermostat failed',
+        'text': rung.failureMode,
         'weight': 'Bolder',
         'wrap': true,
       },
-      {'type': 'TextBlock', 'text': 'Level: supported', 'wrap': true},
-      if (state case 'approve' || 'notyet')
+      {
+        'type': 'TextBlock',
+        'text': 'Level: ${rung.verdict.level}',
+        'wrap': true,
+      },
+      if (!editing && stance != Stance.open)
         {
           'type': 'TextBlock',
-          'text': state == 'approve' ? 'Approved.' : 'Not yet: noted.',
+          'text': stance == Stance.approved ? 'Approved.' : 'Not yet: noted.',
           'wrap': true,
           'isSubtle': true,
         },
     ],
     'actions': [
       for (final (verb, title)
-          in state == 'approve'
+          in stance == Stance.approved && !editing
               ? [('edit', 'Edit')]
               : [('approve', 'Approve'), ('notyet', 'Not yet')])
-        {
-          'type': 'Action.Execute',
-          'title': title,
-          'verb': verb,
-          'data': {'node': 'rung-3'},
-        },
+        {'type': 'Action.Execute', 'title': title, 'verb': verb},
     ],
   },
 };
