@@ -2,8 +2,8 @@
 
 The Teams module for intersyntactic. Peter, Hart's expert, works in Microsoft
 Teams. This module lets him comment on Hart's report, correct it and approve
-it from there, and Hart takes each of those in as a node on a line without
-knowing Teams exists. The design is
+it from there, and Hart takes each of those in as a node on a journey path
+without knowing Teams exists. The design is
 https://github.com/enspyrco/intersyntactic/issues/1089; the questions it left
 open are answered in https://github.com/intersyntactic/teams_module/issues/1.
 
