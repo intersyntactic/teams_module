@@ -17,6 +17,15 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "14.7.0"
+  anthropic_client:
+    dependency: "direct overridden"
+    description:
+      path: "packages/anthropic_client"
+      ref: "32e6fd794c1778fb1f56a796e4a72ebb288762d0"
+      resolved-ref: "32e6fd794c1778fb1f56a796e4a72ebb288762d0"
+      url: "git@github.com:enspyrco/intersyntactic.git"
+    source: git
+    version: "0.0.0"
   args:
     dependency: transitive
     description:
@@ -97,6 +106,15 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.8"
+  executor:
+    dependency: "direct overridden"
+    description:
+      path: "packages/executor"
+      ref: "32e6fd794c1778fb1f56a796e4a72ebb288762d0"
+      resolved-ref: "32e6fd794c1778fb1f56a796e4a72ebb288762d0"
+      url: "git@github.com:enspyrco/intersyntactic.git"
+    source: git
+    version: "0.0.0"
   ffi:
     dependency: transitive
     description:
@@ -145,6 +163,15 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.1.2"
+  intersyntactic_protocol:
+    dependency: "direct main"
+    description:
+      path: "packages/intersyntactic_protocol"
+      ref: "32e6fd794c1778fb1f56a796e4a72ebb288762d0"
+      resolved-ref: "32e6fd794c1778fb1f56a796e4a72ebb288762d0"
+      url: "git@github.com:enspyrco/intersyntactic.git"
+    source: git
+    version: "0.0.0"
   io:
     dependency: transitive
     description:
@@ -156,11 +183,10 @@ packages:
   is_annotation_shapes:
     dependency: "direct main"
     description:
-      path: "."
-      ref: "0749035bc332ec4a3071434952a388db1922d643"
-      resolved-ref: "0749035bc332ec4a3071434952a388db1922d643"
-      url: "git@github.com:intersyntactic/annotation_shapes.git"
-    source: git
+      name: is_annotation_shapes
+      sha256: "2102b4e80f6d276b1e13e5de63c34f18dace718d582f6d2f9d9d44e764266d8f"
+      url: "https://pub.dev"
+    source: hosted
     version: "0.1.0"
   is_content_id:
     dependency: transitive
@@ -178,6 +204,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.3.0"
+  is_tools_api:
+    dependency: transitive
+    description:
+      name: is_tools_api
+      sha256: "7756973cac3e9e1880db6dc9417509a6daadb93d4797dd009b54cbda6aef677e"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.1.0"
   lints:
     dependency: "direct dev"
     description:
@@ -242,6 +276,15 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.9.1"
+  path_confinement:
+    dependency: "direct overridden"
+    description:
+      path: "packages/path_confinement"
+      ref: "32e6fd794c1778fb1f56a796e4a72ebb288762d0"
+      resolved-ref: "32e6fd794c1778fb1f56a796e4a72ebb288762d0"
+      url: "git@github.com:enspyrco/intersyntactic.git"
+    source: git
+    version: "0.0.0"
   pointycastle:
     dependency: "direct main"
     description:

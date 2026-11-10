@@ -11,13 +11,36 @@ environment:
 
 dependencies:
   checked_json: ^0.2.1
-  is_annotation_shapes:
-    git:
-      url: git@github.com:intersyntactic/annotation_shapes.git
-      ref: 0749035bc332ec4a3071434952a388db1922d643
+  is_annotation_shapes: ^0.1.0
   is_shapes: ^0.3.0
+  intersyntactic_protocol:
+    git:
+      url: git@github.com:enspyrco/intersyntactic.git
+      path: packages/intersyntactic_protocol
+      ref: 32e6fd794c1778fb1f56a796e4a72ebb288762d0
   pointycastle: ^4.0.0
 
 dev_dependencies:
   lints: ^6.1.0
   test: ^1.33.0
+
+# The protocol's own dependencies are packages of intersyntactic's workspace,
+# each asked for as `any`. Outside the workspace `any` means pub.dev, where
+# `executor` is another publisher's package (agilord.com), so every one is
+# named here, from the same commit as the protocol.
+dependency_overrides:
+  anthropic_client:
+    git:
+      url: git@github.com:enspyrco/intersyntactic.git
+      path: packages/anthropic_client
+      ref: 32e6fd794c1778fb1f56a796e4a72ebb288762d0
+  executor:
+    git:
+      url: git@github.com:enspyrco/intersyntactic.git
+      path: packages/executor
+      ref: 32e6fd794c1778fb1f56a796e4a72ebb288762d0
+  path_confinement:
+    git:
+      url: git@github.com:enspyrco/intersyntactic.git
+      path: packages/path_confinement
+      ref: 32e6fd794c1778fb1f56a796e4a72ebb288762d0

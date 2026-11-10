@@ -11,8 +11,10 @@
 /// secret and speaks as it.
 library;
 
+export 'src/agent_host_client.dart';
 export 'src/bot_connector.dart';
 export 'src/bot_framework_keys.dart';
+export 'src/journey_bridge.dart';
 export 'src/key_source.dart';
 export 'src/stand_in_journey_path.dart';
 export 'src/teams_gate.dart';
