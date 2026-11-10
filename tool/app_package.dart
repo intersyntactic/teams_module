@@ -17,9 +17,13 @@ import 'dart:math';
 import 'dart:typed_data';
 
 const manifestVersion = '1.21';
-const accent = (0x1d, 0x4a, 0x3c); // forest green, behind the antlers
-const _cream = (0xf3, 0xec, 0xdc); // the antlers
-const _gold = (0xe9, 0xb4, 0x4c); // the one approved node
+// The icon's palette, worked out in OKLCH so that equal numbers look
+// equally light: every pastel has the same lightness (0.87) and chroma
+// (0.075) and differs only in hue, spread around the wheel and skipping the
+// greens the background already holds. So no colour shouts over another.
+const accent = (0x18, 0x47, 0x35); // forest green, behind it all
+const _cream = (0xf5, 0xee, 0xe0); // the branches
+const _butter = (0xeb, 0xd1, 0x9c); // the journey path, hue 85
 
 Future<void> main(List<String> args) async {
   if (args.isEmpty || args.length > 3) {
@@ -112,11 +116,12 @@ Map<String, Object?> manifest(String appId, String name, String version) => {
 /// module feeds is a tree of nodes on journey paths, so the one shape is
 /// both.
 ///
-/// The colour icon reads like a transit map. A journey path runs in gold
+/// The colour icon reads like a transit map. A journey path runs in butter
 /// from the root up each beam to its top tip; the tines branch off it in
-/// cream. Every node is a station coloured by who wrote it, people in coral
-/// and sky, agents in lilac and gold, ringed in the background colour so it
-/// stands clear of its line. Left and right mirror each other, colours too.
+/// cream. Every node is a station coloured by who wrote it, people in rose
+/// and periwinkle, agents in aqua and lavender, ringed in the background
+/// colour so it stands clear of its line. Left and right mirror each other,
+/// colours too.
 ///
 /// The left antler is given in unit coordinates and mirrored for the right.
 const _beam = [(0.42, 0.70), (0.33, 0.52), (0.27, 0.34), (0.25, 0.17)];
@@ -127,11 +132,14 @@ const _tines = [
 ];
 const _root = (0.5, 0.84);
 
-/// Who wrote each tine's tip, in [_tines] order, mirrored on the right.
-const _tineActors = [_coral, _sky, _lilac];
-const _coral = (0xff, 0x8a, 0x65); // a person
-const _sky = (0x64, 0xc4, 0xf5); // another person
-const _lilac = (0xc6, 0xa8, 0xff); // an agent
+/// Who wrote each tine's tip, in [_tines] order, mirrored on the right; the
+/// path's top tips are the agent whose path it is.
+const _tineActors = [_rose, _periwinkle, _lavender];
+const _pathActor = _aqua;
+const _rose = (0xff, 0xc1, 0xc4); // a person, hue 15: green's complement
+const _periwinkle = (0xbc, 0xd4, 0xff); // another person, hue 265
+const _aqua = (0x98, 0xe4, 0xe8); // an agent, hue 200
+const _lavender = (0xe7, 0xc6, 0xf7); // another agent, hue 315
 
 typedef _Point = (double, double);
 typedef _Stroke = (_Point, _Point);
@@ -165,9 +173,9 @@ Uint8List icon(int size, {required bool outline}) {
   final dot = (outline ? 0.06 : 0.045) * size;
   final ring = outline ? 0.0 : 0.016 * size;
   final stations = <(_Point, _Rgb, double)>[
-    (_root, _gold, dot * 1.25),
-    (_beam.last, _gold, dot),
-    (mirror(_beam.last), _gold, dot),
+    (_root, _butter, dot * 1.25),
+    (_beam.last, _pathActor, dot),
+    (mirror(_beam.last), _pathActor, dot),
     for (var i = 0; i < tines.length; i++) ...[
       (tines[i].$2, actors[i], dot),
       (mirror(tines[i].$2), actors[i], dot),
@@ -216,7 +224,7 @@ Uint8List icon(int size, {required bool outline}) {
         (under.$3 + (top.$3 - under.$3) * a).round(),
       );
       c = over(c, _cream, inked(branches, branchHalf));
-      c = over(c, _gold, inked(path, pathHalf));
+      c = over(c, _butter, inked(path, pathHalf));
       for (final (at, colour, r) in stations) {
         final d = from(at);
         c = over(c, accent, within(r + ring, d));
