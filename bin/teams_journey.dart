@@ -30,11 +30,11 @@ import 'dart:io';
 import 'package:intersyntactic_protocol/intersyntactic_protocol.dart'
     show
         JourneyPathId,
+        JourneyPathSummary,
         LoggedEvent,
         ReplyText,
         RepoChoice,
-        RunSummary,
-        StartRun;
+        StartJourneyPath;
 import 'package:is_shapes/is_shapes.dart';
 import 'package:is_teams_module/is_teams_module.dart';
 
@@ -133,7 +133,7 @@ final class _Traced implements Journeys {
   final Journeys _inner;
 
   @override
-  Future<List<RunSummary>> list() => _inner.list();
+  Future<List<JourneyPathSummary>> list() => _inner.list();
 
   @override
   Future<String?> say(JourneyPathId journey, String text) async {
@@ -149,7 +149,9 @@ final class _Traced implements Journeys {
   Future<List<RepoChoice>> repos() => _inner.repos();
 
   @override
-  Future<({RunSummary? started, String? why})> start(StartRun run) async {
+  Future<({JourneyPathSummary? started, String? why})> start(
+    StartJourneyPath run,
+  ) async {
     final r = await _inner.start(run);
     stderr.writeln('trace: start: ${r.started?.id.value ?? r.why}');
     return r;

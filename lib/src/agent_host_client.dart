@@ -6,32 +6,31 @@ import 'package:checked_json/checked_json.dart';
 import 'package:intersyntactic_protocol/intersyntactic_protocol.dart'
     show
         AgentRoute,
+        JourneyPathFrame,
         JourneyPathId,
-        ListRunsRoute,
+        JourneyPathList,
+        JourneyPathMessageRoute,
+        JourneyPathStopRoute,
+        JourneyPathStreamEvent,
+        JourneyPathStreamRoute,
+        JourneyPathSummary,
+        ListJourneyPathsRoute,
         LoggedEvent,
         RepoChoice,
         RepoList,
         ReposRoute,
-        RunFrame,
-        RunList,
-        RunMessageRoute,
-        RunStopRoute,
-        RunStreamEvent,
-        RunStreamRoute,
-        RunSummary,
         SendMessage,
-        StartRun,
-        StartRunRoute;
+        StartJourneyPath,
+        StartJourneyPathRoute;
 
 import 'bot_connector.dart' show HttpCall, HttpResult, httpCall;
 
 /// What the bridge needs of intersyntactic's agent host: the journeys it
 /// holds, what happens in one as it happens, and the person's messages into
-/// one. The protocol still names a journey a run (`RunSummary`); the words
-/// here are RULINGS'.
+/// one. A journey here is one journey path on the host.
 abstract interface class Journeys {
   /// Every journey the host holds.
-  Future<List<RunSummary>> list();
+  Future<List<JourneyPathSummary>> list();
 
   /// Sends [text] into [journey] as the person's message. Null when it was
   /// taken, else the host's reason, such as that a turn is still running.
@@ -45,7 +44,9 @@ abstract interface class Journeys {
   Future<List<RepoChoice>> repos();
 
   /// Starts a journey: the new one, or the host's reason it did not.
-  Future<({RunSummary? started, String? why})> start(StartRun run);
+  Future<({JourneyPathSummary? started, String? why})> start(
+    StartJourneyPath run,
+  );
 
   /// Every event of [journey] after the one at seq [after], which happened
   /// [afterAt], then each as it happens. It ends when the connection does.
@@ -77,21 +78,24 @@ final class AgentHostClient implements Journeys {
   );
 
   @override
-  Future<List<RunSummary>> list() async {
-    final r = await _send(const ListRunsRoute());
+  Future<List<JourneyPathSummary>> list() async {
+    final r = await _send(const ListJourneyPathsRoute());
     if (r.status != 200) throw HttpException('list: ${r.status} ${r.body}');
-    return RunList.fromJson(JsonObject.decode(r.body)).runs;
+    return JourneyPathList.fromJson(JsonObject.decode(r.body)).journeyPaths;
   }
 
   @override
   Future<String?> say(JourneyPathId journey, String text) async {
-    final r = await _send(RunMessageRoute(journey), SendMessage(text).toJson());
+    final r = await _send(
+      JourneyPathMessageRoute(journey),
+      SendMessage(text).toJson(),
+    );
     return r.status == 200 ? null : _reason(r.body);
   }
 
   @override
   Future<String?> stop(JourneyPathId journey) async {
-    final r = await _send(RunStopRoute(journey));
+    final r = await _send(JourneyPathStopRoute(journey));
     return r.status == 200 ? null : _reason(r.body);
   }
 
@@ -103,10 +107,15 @@ final class AgentHostClient implements Journeys {
   }
 
   @override
-  Future<({RunSummary? started, String? why})> start(StartRun run) async {
-    final r = await _send(const StartRunRoute(), run.toJson());
+  Future<({JourneyPathSummary? started, String? why})> start(
+    StartJourneyPath run,
+  ) async {
+    final r = await _send(const StartJourneyPathRoute(), run.toJson());
     return r.status == 200
-        ? (started: RunSummary.fromJson(JsonObject.decode(r.body)), why: null)
+        ? (
+            started: JourneyPathSummary.fromJson(JsonObject.decode(r.body)),
+            why: null,
+          )
         : (started: null, why: _reason(r.body));
   }
 
@@ -126,7 +135,11 @@ final class AgentHostClient implements Journeys {
       onListen: () async {
         try {
           final req = await client.getUrl(
-            RunStreamRoute(journey, after: after, afterAt: afterAt).uri(base),
+            JourneyPathStreamRoute(
+              journey,
+              after: after,
+              afterAt: afterAt,
+            ).uri(base),
           );
           req.headers.set('accept', 'text/event-stream');
           final res = await req.close();
@@ -135,8 +148,11 @@ final class AgentHostClient implements Journeys {
           }
           frames = serverSentEvents(res).listen(
             (f) {
-              if (RunStreamEvent.parse(f.event) != RunStreamEvent.agent) return;
-              out.add(RunFrame.fromJson(JsonObject.decode(f.data)).event);
+              final kind = JourneyPathStreamEvent.parse(f.event);
+              if (kind != JourneyPathStreamEvent.agent) return;
+              out.add(
+                JourneyPathFrame.fromJson(JsonObject.decode(f.data)).event,
+              );
             },
             onError: out.addError,
             onDone: out.close,

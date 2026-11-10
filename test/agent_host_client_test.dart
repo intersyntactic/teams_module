@@ -4,11 +4,17 @@ import 'dart:io';
 
 import 'package:checked_json/checked_json.dart';
 import 'package:intersyntactic_protocol/intersyntactic_protocol.dart'
-    show JourneyPathId, LoggedEvent, ReplyText, RunFrame, RunList, RunSummary;
+    show
+        JourneyPathFrame,
+        JourneyPathId,
+        JourneyPathList,
+        JourneyPathSummary,
+        LoggedEvent,
+        ReplyText;
 import 'package:is_teams_module/is_teams_module.dart';
 import 'package:test/test.dart';
 
-final summary = RunSummary.fromJson(
+final summary = JourneyPathSummary.fromJson(
   JsonObject.of({
     'id': 'j1',
     'provider': 'anthropic',
@@ -47,7 +53,7 @@ void main() {
 
   test('lists the journeys the host holds', () async {
     answering((req, _) async {
-      req.response.write(jsonEncode(RunList([summary]).toJson()));
+      req.response.write(jsonEncode(JourneyPathList([summary]).toJson()));
       await req.response.close();
     });
     final listed = await client.list();
@@ -88,7 +94,7 @@ void main() {
         ..write(': connected\n\n')
         ..write('event: output\ndata: {"id":"c1","line":"building"}\n\n')
         ..write(
-          'event: agent\ndata: ${jsonEncode(RunFrame(summary, e).toJson())}\n\n',
+          'event: agent\ndata: ${jsonEncode(JourneyPathFrame(summary, e).toJson())}\n\n',
         );
       await req.response.flush();
     });

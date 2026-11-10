@@ -5,7 +5,9 @@ import 'package:checked_json/checked_json.dart';
 import 'package:intersyntactic_protocol/intersyntactic_protocol.dart'
     show
         BranchName,
+        JourneyPathEvent,
         JourneyPathId,
+        JourneyPathSummary,
         JourneyState,
         LandsIn,
         LoggedEvent,
@@ -16,9 +18,7 @@ import 'package:intersyntactic_protocol/intersyntactic_protocol.dart'
         ReplyText,
         RepoChoice,
         RepoPath,
-        RunEvent,
-        StartRun,
-        RunSummary,
+        StartJourneyPath,
         StatusChanged,
         ThinkingText,
         ToolAsked,
@@ -36,7 +36,7 @@ const chat = 'a:nick';
 final serviceUrl = Uri.parse('https://smba.trafficmanager.net/au/');
 final owner = ActorId.parse('teams:$tenant/$nick')!;
 
-RunSummary journey(
+JourneyPathSummary journey(
   String id, {
   JourneyState state = JourneyState.idle,
   int events = 5,
@@ -45,7 +45,7 @@ RunSummary journey(
   DateTime? lastActiveAt,
   String provider = 'anthropic',
   String model = 'claude-opus-5-5',
-}) => RunSummary.fromJson(
+}) => JourneyPathSummary.fromJson(
   JsonObject.of({
     'id': id,
     'provider': provider,
@@ -65,7 +65,7 @@ RunSummary journey(
 /// An agent host in memory: its journeys, what was said and stopped, and a
 /// stream of events per reading that the test feeds by hand.
 final class FakeJourneys implements Journeys {
-  final listed = <RunSummary>[];
+  final listed = <JourneyPathSummary>[];
   final said = <(JourneyPathId, String)>[];
   final stopped = <JourneyPathId>[];
   final streams =
@@ -84,7 +84,7 @@ final class FakeJourneys implements Journeys {
   int? echoAt;
 
   @override
-  Future<List<RunSummary>> list() async => listed;
+  Future<List<JourneyPathSummary>> list() async => listed;
 
   @override
   Future<String?> say(JourneyPathId journey, String text) async {
@@ -101,16 +101,18 @@ final class FakeJourneys implements Journeys {
   }
 
   final repoChoices = <RepoChoice>[];
-  final starts = <StartRun>[];
+  final starts = <StartJourneyPath>[];
 
   /// The journey a start makes, or with [refuse] set, none.
-  RunSummary? starting;
+  JourneyPathSummary? starting;
 
   @override
   Future<List<RepoChoice>> repos() async => repoChoices;
 
   @override
-  Future<({RunSummary? started, String? why})> start(StartRun run) async {
+  Future<({JourneyPathSummary? started, String? why})> start(
+    StartJourneyPath run,
+  ) async {
     starts.add(run);
     if (refuse != null) return (started: null, why: refuse);
     return (started: starting, why: null);
@@ -131,7 +133,7 @@ final class FakeJourneys implements Journeys {
   /// second after the one before it from [lastActive]'s next second.
   Future<void> feed(
     int from,
-    List<RunEvent> events, {
+    List<JourneyPathEvent> events, {
     DateTime Function(int seq) at = when,
   }) async {
     final c = streams.last.events;

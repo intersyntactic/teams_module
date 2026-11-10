@@ -6,6 +6,7 @@ import 'package:intersyntactic_protocol/intersyntactic_protocol.dart'
     show
         JourneyName,
         JourneyPathId,
+        JourneyPathSummary,
         JourneyState,
         LoggedEvent,
         MemoryAnswered,
@@ -15,8 +16,7 @@ import 'package:intersyntactic_protocol/intersyntactic_protocol.dart'
         Provider,
         ReplyText,
         RepoPath,
-        RunSummary,
-        StartRun,
+        StartJourneyPath,
         StatusChanged,
         ThinkingText,
         ToolAnswered,
@@ -227,7 +227,7 @@ final class JourneyBridge {
 
   /// The journeys not yet ended, the most recently active first: "a journey
   /// is active until its state is `ended`" (RULINGS).
-  Future<List<RunSummary>> _active() async =>
+  Future<List<JourneyPathSummary>> _active() async =>
       (await journeys.list())
           .where((j) => j.state != JourneyState.ended)
           .toList()
@@ -310,12 +310,12 @@ final class JourneyBridge {
           'attachments': [_startCard(offer.task, line)],
         });
     await say('Starting in $where…');
-    final last = (await journeys.list()).fold<RunSummary?>(
+    final last = (await journeys.list()).fold<JourneyPathSummary?>(
       null,
       (a, b) => a == null || b.lastActiveAt.isAfter(a.lastActiveAt) ? b : a,
     );
     final (:started, :why) = await journeys.start(
-      StartRun(
+      StartJourneyPath(
         task: offer.task,
         root: repo,
         provider: last?.provider ?? Provider.anthropic,
@@ -356,7 +356,7 @@ final class JourneyBridge {
     {'type': 'TextBlock', 'text': line, 'wrap': true, 'isSubtle': true},
   ], actions);
 
-  Future<void> _open(_At at, RunSummary j) async {
+  Future<void> _open(_At at, JourneyPathSummary j) async {
     await _chats.remove(at.conversation)?.close();
     // A journey's summary says when its newest event happened.
     final chat = _Chat(
@@ -806,7 +806,7 @@ final class JourneyBridge {
     _chats.clear();
   }
 
-  static String _title(RunSummary j) {
+  static String _title(JourneyPathSummary j) {
     final name = j.name?.value;
     if (name != null) return name;
     final task = j.task.split('\n').first.trim();
