@@ -16,7 +16,9 @@ import 'package:intersyntactic_protocol/intersyntactic_protocol.dart'
         RunId,
         RunSummary,
         StatusChanged,
+        ThinkingText,
         ToolAsked,
+        ToolCalled,
         ToolName,
         UserSaid;
 import 'package:is_shapes/is_shapes.dart' show ActorId;
@@ -113,6 +115,141 @@ final class FakeJourneys implements Journeys {
   }
 }
 
+/// Teams' side of a stream, as Microsoft documents it
+/// (https://learn.microsoft.com/en-us/microsoftteams/platform/bots/streaming-ux):
+/// a typing activity numbered 1 starts one and is answered with its id;
+/// updates are numbered on, and one out of order is dropped; a final message,
+/// with no number, ends it; and a stream takes a request only [every] so
+/// often. What it refuses it throws, as the Connector does.
+final class FakeTeams {
+  FakeTeams({this.every = Duration.zero});
+
+  final Duration every;
+
+  /// Everything posted, as it was posted.
+  final posted = <Map<String, Object?>>[];
+
+  /// What each stream showed of what the journey was doing, the text it grew
+  /// as the reply was written, and the final message that ended it.
+  final shown = <String, List<String>>{};
+  final written = <String, List<String>>{};
+  final finals = <String, String>{};
+
+  /// Informative updates sent once a stream had text: taken, never shown.
+  final hidden = <String>[];
+
+  /// Refuses every request on a stream, as Teams does where streaming is
+  /// not allowed.
+  String? refuse;
+
+  /// Refuses a final message, as Teams does once a stream has timed out.
+  bool refuseFinal = false;
+
+  final _last = <String, ({int sequence, DateTime at})>{};
+
+  Future<String?> post(
+    Uri serviceUrl,
+    String conversation,
+    Map<String, Object?> activity,
+  ) async {
+    posted.add(activity);
+    final info = (activity['entities'] as List<Object?>?)
+        ?.cast<Map<String, Object?>>()
+        .where((e) => e['type'] == 'streaminfo')
+        .firstOrNull;
+    if (info == null) return null;
+    BotConnectorException no(int status, String why) =>
+        BotConnectorException('post', status, why);
+    if (refuse != null) throw no(403, refuse!);
+    if (activity['replyToId'] == null) throw no(400, 'no replyToId');
+    final now = DateTime.now();
+    final id = info['streamId'] as String?;
+    if (id == null) {
+      if (activity['type'] != 'typing' ||
+          !const {'informative', 'streaming'}.contains(info['streamType']) ||
+          info['streamSequence'] != 1 ||
+          '${activity['text'] ?? ''}'.isEmpty) {
+        throw no(400, 'not a start: $activity');
+      }
+      if (shown.keys.any((s) => !finals.containsKey(s))) {
+        throw no(403, 'a stream is already open in this conversation');
+      }
+      final started = 'stream-${shown.length}';
+      shown[started] = [];
+      written[started] = [];
+      _take(started, info, activity);
+      _last[started] = (sequence: 1, at: now);
+      return started;
+    }
+    final last = _last[id] ?? (throw no(400, 'no stream $id'));
+    if (finals.containsKey(id)) {
+      throw no(
+        403,
+        'Content stream is not allowed on an already completed '
+        'streamed message',
+      );
+    }
+    // A little slack: the bridge's clock reads a moment before this one.
+    if (now.difference(last.at) < every * 0.9) {
+      throw no(429, 'API calls quota exceeded');
+    }
+    if (info['streamType'] == 'final') {
+      if (activity['type'] != 'message' || info.containsKey('streamSequence')) {
+        throw no(400, 'not a final: $activity');
+      }
+      if (refuseFinal) {
+        throw no(
+          403,
+          'Content stream finished due to exceeded streaming time.',
+        );
+      }
+      final text = activity['text']! as String;
+      if (!text.contains(written[id]!.lastOrNull?.trim() ?? '')) {
+        throw no(400, 'a final without the text streamed before it');
+      }
+      finals[id] = text;
+      _last[id] = (sequence: last.sequence, at: now);
+      return null;
+    }
+    final sequence = info['streamSequence']! as int;
+    _last[id] = (sequence: last.sequence, at: now);
+    // ContentStreamSequenceOrderPreConditionFailed, answered 202: dropped.
+    if (sequence <= last.sequence) return null;
+    _last[id] = (sequence: sequence, at: now);
+    _take(id, info, activity);
+    return null;
+  }
+
+  /// One update to stream [id]: shown, grown, or, once it has text, an
+  /// informative update that Teams takes and does not show.
+  void _take(String id, Map<String, Object?> info, Map<String, Object?> a) {
+    final text = a['text']! as String;
+    if (info['streamType'] == 'informative') {
+      (written[id]!.isEmpty ? shown[id]! : hidden).add(text);
+      return;
+    }
+    if (!text.startsWith(written[id]!.lastOrNull ?? '')) {
+      throw BotConnectorException(
+        'post',
+        403,
+        'Request streamed content should contain the previously streamed '
+            'content',
+      );
+    }
+    written[id]!.add(text);
+  }
+
+  /// The typing dots posted, with no stream.
+  int get dots => posted.where((a) => a['entities'] == null).length;
+}
+
+const merge = MergeAsked(
+  number: 42,
+  base: BranchName('release'),
+  landsIn: LandsIn.defaultBranch,
+  method: MergeMethod.squash,
+);
+
 /// When every journey in these tests last did something.
 final lastActive = DateTime.utc(2026, 11, 10);
 
@@ -127,6 +264,7 @@ Future<void> pump() =>
 
 void main() {
   late FakeJourneys host;
+  late FakeTeams teams;
   late JourneyBridge bridge;
   late List<Map<String, Object?>> sent;
   late List<String> ids;
@@ -134,7 +272,10 @@ void main() {
   late List<String> logged;
   var nextId = 0;
 
-  JourneyBridge bridgeFor(ActorId? who) => JourneyBridge(
+  JourneyBridge bridgeFor(
+    ActorId? who, {
+    Duration streamEvery = Duration.zero,
+  }) => JourneyBridge(
     journeys: host,
     owner: who,
     send: (url, conversation, activity) async {
@@ -142,15 +283,19 @@ void main() {
       ids.add('act-${nextId++}');
       return ids.last;
     },
+    post: (url, conversation, activity) =>
+        teams.post(url, conversation, activity),
     update: (url, conversation, id, activity) async =>
         updated.add((id, activity)),
     log: logged.add,
     retryAfter: const Duration(milliseconds: 10),
     typingEvery: Duration.zero,
+    streamEvery: streamEvery,
   );
 
   setUp(() {
     host = FakeJourneys();
+    teams = FakeTeams();
     sent = [];
     ids = [];
     updated = [];
@@ -160,10 +305,15 @@ void main() {
   });
   tearDown(() => bridge.close());
 
-  JsonObject message(String text, {String user = nick}) => JsonObject.of({
+  JsonObject message(
+    String text, {
+    String user = nick,
+    String activity = 'msg-1',
+  }) => JsonObject.of({
     'event': 'teams_message',
     'tenant': tenant,
     'conversation': chat,
+    'activity': activity,
     'service_url': '$serviceUrl',
     'from_aad_object_id': user,
     'text': text,
@@ -280,21 +430,26 @@ void main() {
   });
 
   group('what it shows', () {
-    test('a turn is one message, sent when it ends', () async {
-      await opened();
-      await bridge.onDoorbell(message('add a test'));
-      await host.feed(7, [
-        const UserSaid('add a test'),
-        const StatusChanged(JourneyState.running),
-        const ReplyText('Added '),
-        const ReplyText('one.'),
-      ]);
-      expect(sent.where((a) => a['type'] == 'message'), isEmpty);
-      await host.feed(11, [const StatusChanged(JourneyState.idle)]);
-      final messages = sent.where((a) => a['type'] == 'message').toList();
-      expect(messages.map(textOf), ['Added one.']);
-      expect(sent.where((a) => a['type'] == 'typing'), isNotEmpty);
-    });
+    test(
+      'a turn started in the app has dots, and is one message when it ends',
+      () async {
+        await opened();
+        await host.feed(7, [
+          const UserSaid('from the app'),
+          const ThinkingText('Hm.'),
+          const ReplyText('Added '),
+          const ReplyText('one.'),
+        ]);
+        expect(sent.map(textOf), ['_Said in the app:_ from the app']);
+        await host.feed(11, [const StatusChanged(JourneyState.idle)]);
+        expect(sent.map(textOf), [
+          '_Said in the app:_ from the app',
+          'Added one.',
+        ]);
+        expect(teams.dots, 3);
+        expect(teams.shown, isEmpty);
+      },
+    );
 
     test(
       'what was said in the app is shown, and its own echo is not',
@@ -303,8 +458,11 @@ void main() {
         await bridge.onDoorbell(message('from teams'));
         await host.feed(7, [
           const UserSaid('from teams'),
+          const ReplyText('Heard.'),
+          const StatusChanged(JourneyState.idle),
           const UserSaid('from the app'),
         ]);
+        expect(teams.finals.values, ['Heard.']);
         expect(sent.map(textOf), ['_Said in the app:_ from the app']);
       },
     );
@@ -320,13 +478,6 @@ void main() {
   });
 
   group('questions', () {
-    const merge = MergeAsked(
-      number: 42,
-      base: BranchName('release'),
-      landsIn: LandsIn.defaultBranch,
-      method: MergeMethod.squash,
-    );
-
     test(
       'a question is a card with Yes and No, after the reply so far',
       () async {
@@ -381,6 +532,248 @@ void main() {
       expect(card, contains('Run git_push?'));
       expect(card, contains('Monospace'));
       expect(card, contains(r'{\"force\":true}'));
+    });
+  });
+
+  group("the stream under the owner's message", () {
+    /// What the host does first when it takes what the owner said: it says
+    /// it back. It never says a journey is running, only that it stopped.
+    const begun = UserSaid('go');
+    const idle = StatusChanged(JourneyState.idle);
+
+    /// The owner says "go" here, into journey `j1`.
+    Future<void> said() async {
+      await opened();
+      await bridge.onDoorbell(message('go'));
+    }
+
+    test('shows what the turn is doing, and its reply ends it', () async {
+      await said();
+      await host.feed(7, [
+        begun,
+        const ThinkingText('Let me '),
+        const ThinkingText('look.'),
+        ToolCalled(
+          id: 't1',
+          name: const ToolName('bash'),
+          input: JsonObject.of({'timeout': 5, 'command': 'ls\n  test'}),
+        ),
+        const ThinkingText('Now write.'),
+        const ReplyText('Added '),
+        const ReplyText('one.'),
+        idle,
+      ]);
+      expect(teams.shown, {
+        'stream-0': [
+          'Working…',
+          'Thinking: Let me',
+          'Thinking: Let me look.',
+          'Running bash: ls test',
+          'Thinking: Now write.',
+        ],
+      });
+      expect(teams.written, {
+        'stream-0': ['Added ', 'Added one.'],
+      });
+      expect(teams.hidden, isEmpty);
+      expect(teams.finals, {'stream-0': 'Added one.'});
+      expect(sent, isEmpty);
+      expect(teams.posted.map((a) => a['replyToId']).toSet(), {'msg-1'});
+      expect(logged, isEmpty);
+    });
+
+    test('a long thought shows only its newest words', () async {
+      await said();
+      await host.feed(7, [begun, ThinkingText('${'a' * 150}${'b' * 150}')]);
+      expect(
+        teams.shown['stream-0']!.last,
+        'Thinking: …${'a' * 49}${'b' * 150}',
+      );
+    });
+
+    test('it shows the newest text, no faster than Teams takes it', () async {
+      const every = Duration(milliseconds: 50);
+      teams = FakeTeams(every: every);
+      bridge = bridgeFor(owner, streamEvery: every);
+      await said();
+      await host.feed(7, [
+        begun,
+        const ThinkingText('a'),
+        const ThinkingText('b'),
+        const ThinkingText('c'),
+      ]);
+      expect(teams.shown['stream-0'], ['Working…']);
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      expect(teams.shown['stream-0'], ['Working…', 'Thinking: abc']);
+      // The reply comes too soon after: its final message waits its turn,
+      // and the update it would have been is never sent.
+      await host.feed(11, [const ReplyText('Thought.'), idle]);
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      expect(teams.finals, {'stream-0': 'Thought.'});
+      expect(teams.shown['stream-0'], ['Working…', 'Thinking: abc']);
+      expect(logged, isEmpty);
+    });
+
+    test(
+      'a question ends it before its card, and the rest of the turn has dots',
+      () async {
+        await said();
+        await host.feed(7, [begun, const ThinkingText('Merging.'), merge]);
+        expect(teams.finals, {'stream-0': 'It has a question.'});
+        expect(cardOf(sent.single), contains('Merge PR #42'));
+        final dots = teams.dots;
+        await host.feed(10, [
+          const MergeAnswered(ask: 9, approved: true),
+          const ThinkingText('Merged.'),
+          const ReplyText('Merged it.'),
+          idle,
+        ]);
+        expect(teams.shown.keys, ['stream-0']);
+        expect(teams.dots, dots + 2);
+        expect(textOf(sent.last), 'Merged it.');
+      },
+    );
+
+    test('a failed turn ends it with its reply, then says it failed', () async {
+      await said();
+      await host.feed(7, [
+        begun,
+        const ReplyText('Half'),
+        const StatusChanged(JourneyState.failed, detail: 'overloaded'),
+      ]);
+      expect(teams.finals, {'stream-0': 'Half'});
+      expect(sent.map(textOf), ['It failed: overloaded']);
+    });
+
+    test('a turn that fails before replying ends it with that', () async {
+      await said();
+      await host.feed(7, [
+        begun,
+        const StatusChanged(JourneyState.failed, detail: 'overloaded'),
+      ]);
+      expect(teams.finals, {'stream-0': 'It failed: overloaded'});
+      expect(sent, isEmpty);
+    });
+
+    test('a turn with no reply ends it all the same', () async {
+      await said();
+      await host.feed(7, [begun, idle]);
+      expect(teams.finals, {'stream-0': 'Done.'});
+    });
+
+    test('a message the host refused starts none', () async {
+      await opened();
+      host.refuse = 'still working';
+      await bridge.onDoorbell(message('and another thing'));
+      await host.feed(7, [const ThinkingText('still on the last one')]);
+      expect(teams.shown, isEmpty);
+      expect(teams.dots, 1);
+    });
+
+    test('a second message never takes the place of one started', () async {
+      await said();
+      await host.feed(7, [begun]);
+      await bridge.onDoorbell(message('two', activity: 'msg-2'));
+      await host.feed(8, [
+        const UserSaid('two'),
+        const ReplyText('Both.'),
+        idle,
+      ]);
+      expect(teams.finals, {'stream-0': 'Both.'});
+      expect(logged, isEmpty);
+    });
+
+    test('a host that says it is running leaves the stream as it is', () async {
+      await said();
+      await host.feed(7, [
+        begun,
+        const StatusChanged(JourneyState.running),
+        const ReplyText('Still here.'),
+        idle,
+      ]);
+      expect(teams.shown, {
+        'stream-0': ['Working…'],
+      });
+      expect(teams.written, {
+        'stream-0': ['Still here.'],
+      });
+      expect(teams.finals, {'stream-0': 'Still here.'});
+    });
+
+    test('a step that goes back to work ends as a message, and the next has a '
+        'stream of its own', () async {
+      await said();
+      await host.feed(7, [
+        begun,
+        const ReplyText('Let me check.'),
+        ToolCalled(
+          id: 't1',
+          name: const ToolName('bash'),
+          input: JsonObject.of({'command': 'dart test'}),
+        ),
+        const ThinkingText('Passing.'),
+        const ReplyText('All '),
+        const ReplyText('good.'),
+        idle,
+      ]);
+      expect(teams.shown, {
+        'stream-0': ['Working…'],
+        'stream-1': ['Running bash: dart test', 'Thinking: Passing.'],
+      });
+      expect(teams.written, {
+        'stream-0': ['Let me check.'],
+        'stream-1': ['All ', 'All good.'],
+      });
+      expect(teams.finals, {
+        'stream-0': 'Let me check.',
+        'stream-1': 'All good.',
+      });
+      expect(teams.hidden, isEmpty);
+      expect(sent, isEmpty);
+      expect(teams.posted.map((a) => a['replyToId']).toSet(), {'msg-1'});
+      expect(logged, isEmpty);
+    });
+
+    test(
+      'a reply that starts with blank lines streams from its words',
+      () async {
+        await said();
+        await host.feed(7, [
+          begun,
+          const ReplyText('\n\n'),
+          const ReplyText('Hi.'),
+          idle,
+        ]);
+        expect(teams.written, {
+          'stream-0': ['Hi.'],
+        });
+        expect(teams.finals, {'stream-0': 'Hi.'});
+      },
+    );
+
+    test(
+      'where Teams refuses one, the turn has dots and a plain reply',
+      () async {
+        teams.refuse = 'Content stream is not allowed';
+        await said();
+        await host.feed(7, [
+          begun,
+          const ThinkingText('Hm.'),
+          const ReplyText('Hi.'),
+          idle,
+        ]);
+        expect(sent.map(textOf), ['Hi.']);
+        expect(teams.dots, 2);
+        expect(logged.single, contains('not allowed'));
+      },
+    );
+
+    test('a final message Teams refuses is sent plain instead', () async {
+      teams.refuseFinal = true;
+      await said();
+      await host.feed(7, [begun, const ReplyText('At last.'), idle]);
+      expect(sent.map(textOf), ['At last.']);
+      expect(logged.single, contains('final'));
     });
   });
 

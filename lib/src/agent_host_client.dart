@@ -54,7 +54,7 @@ abstract interface class Journeys {
 final class AgentHostClient implements Journeys {
   AgentHostClient(this.base, {HttpCall? http}) : _call = http ?? httpCall;
 
-  /// Where the host listens, such as `http://127.0.0.1:8900`.
+  /// Where the host listens, such as `http://127.0.0.1:8899`.
   final Uri base;
   final HttpCall _call;
 

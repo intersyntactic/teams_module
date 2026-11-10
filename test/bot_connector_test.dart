@@ -40,6 +40,8 @@ void main() {
         );
       }
       if (url.path.contains('broken')) return (status: 403, body: '{}');
+      if (url.path.contains('streamed')) return (status: 202, body: '{}');
+      if (url.path.contains('silent')) return (status: 202, body: '');
       return (status: 200, body: jsonEncode({'id': 'new-1'}));
     },
   );
@@ -86,6 +88,20 @@ void main() {
     expect(calls.last.method, 'PUT');
     expect(calls.last.url.path, endsWith('/activities/m1'));
     expect(jsonDecode(calls.last.body), {'type': 'message', 'id': 'm1'});
+  });
+
+  test('posts what Teams may answer with no id', () async {
+    final c = connector();
+    expect(await c.post(serviceUrl, conversation, {'type': 'typing'}), 'new-1');
+    expect(await c.post(serviceUrl, 'streamed', {'type': 'typing'}), isNull);
+    expect(await c.post(serviceUrl, 'silent', {'type': 'typing'}), isNull);
+    expect(calls.last.method, 'POST');
+    expect(calls.last.url.path, endsWith('/conversations/silent/activities'));
+    // Where an id is needed, its absence is an error.
+    await expectLater(
+      c.send(serviceUrl, 'streamed', {'type': 'typing'}),
+      throwsFormatException,
+    );
   });
 
   test('joins a service URL with or without its trailing slash', () async {

@@ -11,7 +11,9 @@
 ///   TEAMS_OWNER=...         the one actor whose messages reach a journey,
 ///                           `teams:<tenant>/<Entra object id>`; without it
 ///                           the bot tells whoever writes what theirs is
-///   AGENT_HOST=http://127.0.0.1:8900   where the agent host listens
+///   AGENT_HOST=http://127.0.0.1:8899   where the agent host listens: the
+///                           one the app is connected to, which sends it
+///                           the model credentials it uses
 ///   PORT=8087, HOST=127.0.0.1 as for the relay
 ///
 ///   env-run ENS_TEAMS_APP_ID:TEAMS_APP_ID \
@@ -52,7 +54,7 @@ Future<void> main() async {
   if (owner == null) {
     stderr.writeln('warning: no TEAMS_OWNER: nobody is let in');
   }
-  final host = Uri.parse(env['AGENT_HOST'] ?? 'http://127.0.0.1:8900');
+  final host = Uri.parse(env['AGENT_HOST'] ?? 'http://127.0.0.1:8899');
   final port = int.tryParse(env['PORT'] ?? '') ?? 8087;
   final address =
       InternetAddress.tryParse(env['HOST'] ?? '') ??
@@ -72,6 +74,7 @@ Future<void> main() async {
     journeys: AgentHostClient(host),
     owner: owner,
     send: connector.send,
+    post: connector.post,
     update: connector.update,
     log: stderr.writeln,
   );

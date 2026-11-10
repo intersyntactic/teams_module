@@ -32,6 +32,13 @@ typedef TeamsSend = Future<String> Function(
   Map<String, Object?> activity,
 );
 
+/// Posts [activity] to [conversation]; its id, if Teams gave it one.
+typedef TeamsPost = Future<String?> Function(
+  Uri serviceUrl,
+  String conversation,
+  Map<String, Object?> activity,
+);
+
 /// Replaces the bot's own message [activityId] in [conversation].
 typedef TeamsUpdate = Future<void> Function(
   Uri serviceUrl,
@@ -48,6 +55,13 @@ typedef TeamsUpdate = Future<void> Function(
 /// A question the journey asks (a merge, a tool, a memory) arrives as a card,
 /// and its Yes or No is the person's 1 or 2, which the host reads itself.
 ///
+/// While a turn the owner started here works, a stream under their message
+/// says what it is doing (thinking, running a tool), and then its reply grows
+/// in place as it is written. A step that goes back to work after writing
+/// ends as its own message, and the next has a stream of its own. Teams
+/// streams only an answer to a message, so a turn started in the app shows
+/// typing dots instead.
+///
 /// Only [owner]'s messages and presses reach a journey. A journey's agent has
 /// the whole of the owner's machine, so the tenant allowlist the gate keeps is
 /// not enough: anyone else in the tenant is answered, and nothing they send
@@ -57,10 +71,12 @@ final class JourneyBridge {
     required this.journeys,
     required this.owner,
     required this.send,
+    required this.post,
     required this.update,
     required this.log,
     this.retryAfter = const Duration(seconds: 2),
     this.typingEvery = const Duration(seconds: 3),
+    this.streamEvery = const Duration(seconds: 1),
   });
 
   final Journeys journeys;
@@ -70,6 +86,10 @@ final class JourneyBridge {
   final ActorId? owner;
 
   final TeamsSend send;
+
+  /// For what Teams may answer with no id: typing, and a stream's updates.
+  final TeamsPost post;
+
   final TeamsUpdate update;
 
   /// Where the bridge says what it refused, and why.
@@ -81,6 +101,10 @@ final class JourneyBridge {
 
   /// How often to say the journey is typing while it works.
   final Duration typingEvery;
+
+  /// How often a stream may change: Teams takes one request a second on
+  /// each.
+  final Duration streamEvery;
 
   final _chats = <String, _Chat>{};
 
@@ -110,7 +134,11 @@ final class JourneyBridge {
       return;
     }
     if (event == 'teams_message') {
-      await _message(at, _plain(bell.stringOrNull('text') ?? ''));
+      await _message(
+        at,
+        _plain(bell.stringOrNull('text') ?? ''),
+        activity: bell.string('activity'),
+      );
     } else {
       final action = bell.objectOrNull('value')?.objectOrNull('action');
       await _press(
@@ -122,7 +150,7 @@ final class JourneyBridge {
     }
   }
 
-  Future<void> _message(_At at, String text) async {
+  Future<void> _message(_At at, String text, {required String activity}) async {
     final chat = _chats[at.conversation];
     switch (text.toLowerCase()) {
       case 'journeys':
@@ -138,6 +166,10 @@ final class JourneyBridge {
         if (why != null) {
           chat.said.remove(text);
           await _say(at, 'Not sent: $why');
+        } else if (chat.stream?.id == null) {
+          // Never in place of a stream that has started: Teams keeps one
+          // open in a conversation, and it would be left without an end.
+          chat.stream = _Stream(activity);
         }
     }
   }
@@ -247,9 +279,7 @@ final class JourneyBridge {
             if (!chat.isNew(e)) return;
             chat.after = e.seq;
             chat.afterAt = e.at;
-            chat.queue = chat.queue
-                .then((_) => _on(chat, e))
-                .catchError((Object err) => log('teams journey: $err'));
+            _later(chat, () => _on(chat, e));
           },
           onError: (Object err) => log('teams journey: events: $err'),
           onDone: () {
@@ -262,29 +292,45 @@ final class JourneyBridge {
         );
   }
 
+  /// Runs [step] once everything queued in [chat] before it has run.
+  void _later(_Chat chat, Future<void> Function() step) {
+    chat.queue = chat.queue
+        .then((_) => step())
+        .catchError((Object err) => log('teams journey: $err'));
+  }
+
   /// What one event of the journey becomes in the chat.
   Future<void> _on(_Chat chat, LoggedEvent e) async {
     switch (e.event) {
       case UserSaid(:final text):
-        // What the owner said here comes back as the journey's own record.
-        if (chat.said.remove(text)) break;
-        await _flush(chat);
-        await _say(chat.at, '_Said in the app:_ $text');
+        // What the owner said here comes back as the journey's own record,
+        // which is also the sign its turn has begun: the host says nothing
+        // when a journey starts running, only when it stops.
+        if (chat.said.remove(text)) {
+          await _show(chat, 'Working…');
+          break;
+        }
+        await _flush(chat, after: ['_Said in the app:_ $text']);
       case ReplyText(:final text):
         chat.reply.write(text);
-      case ThinkingText() || ToolCalled():
-        await _typing(chat);
+        await _write(chat);
+      case ThinkingText(:final text):
+        await _show(chat, chat.streamed('Thinking', text));
+      case ToolCalled(:final name, :final input):
+        // What streams after a tool call is new: a thought begins again.
+        chat.label = null;
+        await _show(chat, _running(name.value, input));
       case StatusChanged(:final state, :final detail):
         if (state.busy) {
-          await _typing(chat);
+          await _show(chat, 'Working…');
         } else {
-          await _flush(chat);
-          if (state == JourneyState.failed) {
-            await _say(
-              chat.at,
-              'It failed${detail == null ? '.' : ': $detail'}',
-            );
-          }
+          await _flush(
+            chat,
+            after: [
+              if (state == JourneyState.failed)
+                'It failed${detail == null ? '.' : ': $detail'}',
+            ],
+          );
         }
       case MergeAsked(:final number, :final base):
         await _ask(
@@ -320,10 +366,9 @@ final class JourneyBridge {
           MemoryAnswered(:final ask, :final approved):
         await _answered(chat, ask, approved);
       case ToolOffered():
-        await _flush(chat);
-        await _say(
-          chat.at,
-          'It offers this journey new tools: answer in the app.',
+        await _flush(
+          chat,
+          after: ['It offers this journey new tools: answer in the app.'],
         );
       default:
         break;
@@ -331,9 +376,10 @@ final class JourneyBridge {
   }
 
   /// A question as a card, drawn by [draw]: with Yes and No until it is
-  /// answered.
+  /// answered. Its stream ends first, so the card comes after what led to
+  /// it, and the rest of the turn has dots.
   Future<void> _ask(_Chat chat, int seq, _Draw draw) async {
-    await _flush(chat);
+    await _flush(chat, orElse: 'It has a question.');
     final id = await send(chat.at.serviceUrl, chat.at.conversation, {
       'type': 'message',
       'attachments': [draw(null)],
@@ -351,16 +397,125 @@ final class JourneyBridge {
     });
   }
 
-  /// The reply so far, sent and cleared.
-  Future<void> _flush(_Chat chat) async {
-    final text = chat.reply.toString().trim();
+  /// The reply so far and then [after], each as a message, and the reply
+  /// cleared. While the turn has a stream the first of them is its final
+  /// message, or [orElse] if there are none: only a message ends a stream.
+  Future<void> _flush(
+    _Chat chat, {
+    List<String> after = const [],
+    String orElse = 'Done.',
+  }) async {
+    final texts = [...splitForTeams(chat.reply.toString().trim()), ...after];
     chat.reply.clear();
-    for (final part in splitForTeams(text)) {
-      await send(chat.at.serviceUrl, chat.at.conversation, {
-        'type': 'message',
-        'textFormat': 'markdown',
-        'text': part,
+    chat.label = null;
+    final stream = chat.stream;
+    chat.stream = null;
+    final ended =
+        stream != null && await _end(chat, stream, texts.firstOrNull ?? orElse);
+    for (final text in ended ? texts.skip(1) : texts) {
+      await _say(chat.at, text);
+    }
+  }
+
+  /// Shows [text], what the journey is doing, in the turn's stream. With no
+  /// stream, or one Teams refused, the turn has typing dots.
+  Future<void> _show(_Chat chat, String text) async {
+    final stream = chat.stream;
+    if (stream == null || stream.refused) return _typing(chat);
+    if (stream.writing) {
+      // Back to work after writing. A stream that has text shows nothing
+      // else, so what this step wrote ends as its own message, and the next
+      // step has a stream of its own under the same message of the owner's.
+      await _flush(chat);
+      chat.stream = _Stream(stream.replyTo);
+      return _show(chat, text);
+    }
+    return _sendOn(chat, stream, text);
+  }
+
+  /// Streams the reply so far into the turn's message, where it grows as it
+  /// is written. With no stream, or one Teams refused, the turn has dots.
+  Future<void> _write(_Chat chat) async {
+    final stream = chat.stream;
+    if (stream == null || stream.refused) return _typing(chat);
+    // Each text holds all of the one before it, as Teams requires.
+    final text = chat.reply.toString().trimLeft();
+    if (text.isEmpty) return;
+    stream.writing = true;
+    return _sendOn(chat, stream, text);
+  }
+
+  /// Sends [text] on [stream] now if Teams would take it now, or else once
+  /// it would, by when a newer text may have taken its place.
+  Future<void> _sendOn(_Chat chat, _Stream stream, String text) async {
+    stream.next = text;
+    if (stream.timer != null) return;
+    final wait = stream.sentAt.add(streamEvery).difference(DateTime.now());
+    if (wait <= Duration.zero) return _update(chat, stream);
+    stream.timer = Timer(wait, () {
+      stream.timer = null;
+      _later(chat, () => _update(chat, stream));
+    });
+  }
+
+  /// Sends [stream]'s next text, if it is still the turn's and the text is
+  /// new. The first is answered with the stream's id.
+  Future<void> _update(_Chat chat, _Stream stream) async {
+    final text = stream.next;
+    if (chat.stream != stream || stream.refused || text == stream.shown) {
+      return;
+    }
+    stream.sentAt = DateTime.now();
+    try {
+      final id = await post(chat.at.serviceUrl, chat.at.conversation, {
+        'type': 'typing',
+        'replyToId': stream.replyTo,
+        'text': text,
+        'entities': [
+          {
+            'type': 'streaminfo',
+            'streamId': ?stream.id,
+            'streamType': stream.writing ? 'streaming' : 'informative',
+            'streamSequence': stream.sequence + 1,
+          },
+        ],
       });
+      stream.sequence++;
+      stream.shown = text;
+      stream.id ??= id;
+      if (stream.id == null) {
+        stream.refused = true;
+        log('teams journey: stream: Teams gave it no id');
+      }
+    } on Exception catch (e) {
+      stream.refused = true;
+      log('teams journey: stream: $e');
+    }
+  }
+
+  /// Ends [stream] with [text] as its final message; whether Teams took it.
+  /// A stream that never started has nothing to end. An update still
+  /// waiting finds the stream no longer the turn's, and is not sent.
+  Future<bool> _end(_Chat chat, _Stream stream, String text) async {
+    final id = stream.id;
+    if (id == null) return false;
+    // The final message is a request on the stream, and waits its turn.
+    final wait = stream.sentAt.add(streamEvery).difference(DateTime.now());
+    if (wait > Duration.zero) await Future<void>.delayed(wait);
+    try {
+      await post(chat.at.serviceUrl, chat.at.conversation, {
+        'type': 'message',
+        'replyToId': stream.replyTo,
+        'textFormat': 'markdown',
+        'text': text,
+        'entities': [
+          {'type': 'streaminfo', 'streamId': id, 'streamType': 'final'},
+        ],
+      });
+      return true;
+    } on Exception catch (e) {
+      log('teams journey: stream: final: $e');
+      return false;
     }
   }
 
@@ -369,7 +524,7 @@ final class JourneyBridge {
     if (now.difference(chat.typedAt) < typingEvery) return;
     chat.typedAt = now;
     try {
-      await send(chat.at.serviceUrl, chat.at.conversation, {'type': 'typing'});
+      await post(chat.at.serviceUrl, chat.at.conversation, {'type': 'typing'});
     } on Exception catch (e) {
       // A dot that went missing; the reply itself is what matters.
       log('teams journey: typing: $e');
@@ -399,8 +554,18 @@ final class JourneyBridge {
     return task.length <= 60 ? task : '${task.substring(0, 59)}…';
   }
 
-  static String _clip(String s) =>
-      s.length <= 1500 ? s : '${s.substring(0, 1499)}…';
+  static String _clip(String s, [int max = 1500]) =>
+      s.length <= max ? s : '${s.substring(0, max - 1)}…';
+
+  /// A tool call, for its stream: the tool, and the first of its arguments
+  /// that is text, on one line and cut short.
+  static String _running(String tool, JsonObject input) {
+    final hint = input.keys.map(input.raw).whereType<String>().firstOrNull;
+    if (hint == null) return 'Running $tool';
+    return 'Running $tool: ${_clip(_oneLine(hint), 120)}';
+  }
+
+  static String _oneLine(String s) => s.replaceAll(RegExp(r'\s+'), ' ').trim();
 
   /// Text with Teams' `<at>…</at>` mention markup and quote tags taken out.
   static String _plain(String text) => text
@@ -457,6 +622,23 @@ final class _Chat {
   /// The cards asking a question, by the seq of the event that asked it.
   final asks = <int, ({String card, _Draw draw})>{};
 
+  /// The stream under the owner's message, from when it starts a turn until
+  /// the turn ends or asks.
+  _Stream? stream;
+
+  /// What the turn is streaming now, and the newest of what has come under
+  /// that label.
+  String? label;
+  String tail = '';
+
+  /// [label] and the newest of what has streamed under it, [more] last.
+  String streamed(String label, String more) {
+    final all = label == this.label ? '$tail$more' : more;
+    this.label = label;
+    tail = all.length <= 200 ? all : '…${all.substring(all.length - 199)}';
+    return '$label: ${JourneyBridge._oneLine(tail)}';
+  }
+
   DateTime typedAt = DateTime.fromMillisecondsSinceEpoch(0);
   Future<void> queue = Future.value();
   StreamSubscription<LoggedEvent>? events;
@@ -466,8 +648,41 @@ final class _Chat {
   Future<void> close() async {
     closed = true;
     retry?.cancel();
+    stream?.timer?.cancel();
     await events?.cancel();
   }
+}
+
+/// A Teams stream under the owner's message: informative updates saying
+/// what a step of the turn is doing, then the text it writes, until a final
+/// message ends it.
+final class _Stream {
+  _Stream(this.replyTo);
+
+  /// The owner's message it answers.
+  final String replyTo;
+
+  /// Teams' id for it, given for its first update.
+  String? id;
+
+  /// How many updates Teams has taken: each is numbered on from the last.
+  int sequence = 0;
+
+  /// The text Teams shows, and the text to show next.
+  String? shown;
+  String next = '';
+
+  /// It carries the reply as it is written, no longer what the journey is
+  /// doing: Teams shows no informative update once a stream has text.
+  bool writing = false;
+
+  DateTime sentAt = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// Waiting to send [next], when Teams would not yet take it.
+  Timer? timer;
+
+  /// Teams refused an update: the rest of the turn has dots.
+  bool refused = false;
 }
 
 Map<String, Object?> _cardOf(

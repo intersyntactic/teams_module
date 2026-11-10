@@ -83,6 +83,25 @@ final class BotConnector {
     await _call('POST', _url(serviceUrl, conversation, null), activity, 'send'),
   );
 
+  /// Posts [activity] into the conversation; its id, if Teams gave it one.
+  /// Not every activity gets one: an update to a stream is answered
+  /// `202 {}`.
+  Future<String?> post(
+    Uri serviceUrl,
+    String conversation,
+    Map<String, Object?> activity,
+  ) async {
+    final body = await _call(
+      'POST',
+      _url(serviceUrl, conversation, null),
+      activity,
+      'post',
+    );
+    return body.trim().isEmpty
+        ? null
+        : JsonObject.decode(body).stringOrNull('id');
+  }
+
   /// Posts [activity] as a reply to [activityId]; the new message's id.
   Future<String> reply(
     Uri serviceUrl,
