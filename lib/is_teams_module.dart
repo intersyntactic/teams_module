@@ -4,9 +4,11 @@
 ///
 /// So far, the way in: [TeamsRelay], the endpoint Teams posts to; [teamsGate],
 /// which every delivery passes first; and the keys it checks signatures
-/// against, [BotFrameworkKeys], fetched by [BotFrameworkKeySource].
+/// against, [BotFrameworkKeys], fetched by [BotFrameworkKeySource]. And the
+/// way out: [BotConnector], which holds the bot's secret and speaks as it.
 library;
 
+export 'src/bot_connector.dart';
 export 'src/bot_framework_keys.dart';
 export 'src/key_source.dart';
 export 'src/teams_gate.dart';
