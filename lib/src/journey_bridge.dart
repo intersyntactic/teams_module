@@ -60,11 +60,13 @@ typedef TeamsUpdate = Future<void> Function(
 /// and its Yes or No is the person's 1 or 2, which the host reads itself.
 ///
 /// While a turn the owner started here works, a stream under their message
-/// says what it is doing (thinking, running a tool), and then its reply grows
-/// in place as it is written. A step that goes back to work after writing
-/// ends as its own message, and the next has a stream of its own. Teams
-/// streams only an answer to a message, so a turn started in the app shows
-/// typing dots instead.
+/// says what it is doing (thinking, running a tool) until it writes, and
+/// then its reply grows in place as it is written. Teams shows no status in
+/// a stream once it has text, so a tool the turn runs after that goes on a
+/// card of steps instead, edited in place, which ends as one line, its tools
+/// a press away; what it writes after a tool is a paragraph of its own.
+/// Teams streams only an answer to a message, so a turn started in the app
+/// has the card for its tools, and typing dots.
 ///
 /// Only [owner]'s messages and presses reach a journey. A journey's agent has
 /// the whole of the owner's machine, so the tenant allowlist the gate keeps is
@@ -422,17 +424,38 @@ final class JourneyBridge {
         }
         await _flush(chat, after: ['_Said in the app:_ $text']);
       case ReplyText(:final text):
+        // What it writes after a tool is a paragraph of its own.
+        if (chat.stepped) chat.reply.write('\n\n');
+        chat.stepped = false;
+        chat.label = null;
         chat.reply.write(text);
         await _write(chat);
       case ThinkingText(:final text):
-        await _show(chat, chat.streamed('Thinking', text));
+        final line = chat.streamed('Thinking', text);
+        if (chat.shimmers) {
+          await _show(chat, line);
+        } else if (chat.steps case final steps?) {
+          steps.live = line;
+          await _stepsShowSoon(chat, steps);
+        } else {
+          await _typing(chat);
+        }
       case ToolCalled(:final name, :final input):
         // What streams after a tool call is new: a thought begins again.
         chat.label = null;
-        await _show(chat, _running(name.value, input));
+        chat.stepped = true;
+        if (chat.shimmers) {
+          await _show(chat, _running(name.value, input));
+        } else {
+          // Where the stream cannot show it, the card of steps does.
+          final steps = chat.steps ??= _Steps();
+          steps.tools.add(_tool(name.value, input));
+          steps.live = null;
+          await _stepsShowSoon(chat, steps);
+        }
       case StatusChanged(:final state, :final detail):
         if (state.busy) {
-          await _show(chat, 'Working…');
+          await _show(chat);
         } else {
           await _flush(
             chat,
@@ -520,27 +543,19 @@ final class JourneyBridge {
     chat.label = null;
     final stream = chat.stream;
     chat.stream = null;
+    // A turn with a stream ends it, even with nothing to say.
+    if (texts.isEmpty && stream != null) texts.add(orElse);
+    if (chat.steps case final steps?) {
+      chat.steps = null;
+      await _stepsDone(chat, steps);
+    }
     final ended =
-        stream != null && await _end(chat, stream, texts.firstOrNull ?? orElse);
+        stream != null &&
+        texts.isNotEmpty &&
+        await _end(chat, stream, texts.first);
     for (final text in ended ? texts.skip(1) : texts) {
       await _say(chat.at, text);
     }
-  }
-
-  /// Shows [text], what the journey is doing, in the turn's stream. With no
-  /// stream, or one Teams refused, the turn has typing dots.
-  Future<void> _show(_Chat chat, String text) async {
-    final stream = chat.stream;
-    if (stream == null || stream.refused) return _typing(chat);
-    if (stream.writing) {
-      // Back to work after writing. A stream that has text shows nothing
-      // else, so what this step wrote ends as its own message, and the next
-      // step has a stream of its own under the same message of the owner's.
-      await _flush(chat);
-      chat.stream = _Stream(stream.replyTo);
-      return _show(chat, text);
-    }
-    return _sendOn(chat, stream, text);
   }
 
   /// Streams the reply so far into the turn's message, where it grows as it
@@ -553,6 +568,142 @@ final class JourneyBridge {
     if (text.isEmpty) return;
     stream.writing = true;
     return _sendOn(chat, stream, text);
+  }
+
+  /// Opens [steps]' card, or shows it as it is now: no more often than a
+  /// stream may change.
+  Future<void> _stepsShowSoon(_Chat chat, _Steps steps) async {
+    if (steps.card == null) {
+      try {
+        steps.card = await send(chat.at.serviceUrl, chat.at.conversation, {
+          'type': 'message',
+          'attachments': [_stepsCard(steps)],
+        });
+      } on Exception catch (e) {
+        log('teams journey: steps: $e');
+      }
+      steps.sentAt = DateTime.now();
+      return;
+    }
+    if (steps.timer != null) return;
+    final wait = steps.sentAt.add(streamEvery).difference(DateTime.now());
+    if (wait <= Duration.zero) return _stepsShow(chat, steps);
+    steps.timer = Timer(wait, () {
+      steps.timer = null;
+      _later(chat, () => _stepsShow(chat, steps));
+    });
+  }
+
+  /// [steps] as they are now, on its card, while they are still the turn's.
+  Future<void> _stepsShow(_Chat chat, _Steps steps) async {
+    final card = steps.card;
+    if (chat.steps != steps || card == null) return;
+    steps.sentAt = DateTime.now();
+    try {
+      await update(chat.at.serviceUrl, chat.at.conversation, card, {
+        'type': 'message',
+        'attachments': [_stepsCard(steps)],
+      });
+    } on Exception catch (e) {
+      log('teams journey: steps: $e');
+    }
+  }
+
+  /// Ends [steps]' card as one line, its tools a press away.
+  Future<void> _stepsDone(_Chat chat, _Steps steps) async {
+    steps.timer?.cancel();
+    final card = steps.card;
+    if (card == null) return;
+    final wait = steps.sentAt.add(streamEvery).difference(DateTime.now());
+    if (wait > Duration.zero) await Future<void>.delayed(wait);
+    try {
+      await update(chat.at.serviceUrl, chat.at.conversation, card, {
+        'type': 'message',
+        'attachments': [_stepsCard(steps, done: true)],
+      });
+    } on Exception catch (e) {
+      log('teams journey: steps: $e');
+    }
+  }
+
+  /// The card of a turn's steps: while it works, the newest of its tools
+  /// and what it is thinking; once done, how many tools it ran, shown on a
+  /// press.
+  static Map<String, Object?> _stepsCard(_Steps s, {bool done = false}) {
+    Map<String, Object?> line(String text) => {
+      'type': 'TextBlock',
+      'text': text,
+      'size': 'Small',
+      'isSubtle': true,
+      'wrap': true,
+      'spacing': 'None',
+    };
+    final n = s.tools.length;
+    if (done) {
+      return _cardOf(
+        [
+          line('Ran $n tool${n == 1 ? '' : 's'}'),
+          {
+            'type': 'Container',
+            'id': 'steps',
+            'isVisible': false,
+            'items': [for (final t in s.tools) line('› $t')],
+          },
+        ],
+        [
+          {
+            'type': 'Action.ToggleVisibility',
+            'title': 'Show steps',
+            'targetElements': ['steps'],
+          },
+        ],
+      );
+    }
+    const most = 8;
+    return _cardOf([
+      {
+        'type': 'ColumnSet',
+        'columns': [
+          {
+            'type': 'Column',
+            'width': 'auto',
+            'verticalContentAlignment': 'Center',
+            'items': [
+              {
+                'type': 'Image',
+                'url': _dots,
+                'width': '24px',
+                'height': '8px',
+                'altText': 'working',
+              },
+            ],
+          },
+          {
+            'type': 'Column',
+            'width': 'stretch',
+            'items': [line('Working…')],
+          },
+        ],
+      },
+      if (n > most) line('› …and ${n - most} more'),
+      for (final t in s.tools.skip(n > most ? n - most : 0)) line('› $t'),
+      if (s.live case final live?) line('_${live}_'),
+    ]);
+  }
+
+  /// Shows [text], what the turn is doing, in its stream's status, which
+  /// Teams draws with a shimmer; with no [text], what it showed last, or
+  /// "Working…". Only until the reply's first words: Teams then shows no
+  /// status. With no stream, or one Teams refused, the turn has dots.
+  Future<void> _show(_Chat chat, [String? text]) async {
+    final stream = chat.stream;
+    if (stream == null || stream.refused) return _typing(chat);
+    if (stream.writing) return;
+    return _sendOn(
+      chat,
+      stream,
+      text ?? (stream.next.isEmpty ? 'Working…' : stream.next),
+    );
   }
 
   /// Sends [text] on [stream] now if Teams would take it now, or else once
@@ -669,10 +820,14 @@ final class JourneyBridge {
 
   /// A tool call, for its stream: the tool, and the first of its arguments
   /// that is text, on one line and cut short.
-  static String _running(String tool, JsonObject input) {
+  static String _running(String tool, JsonObject input) =>
+      'Running ${_tool(tool, input)}';
+
+  /// A tool call, for the card of steps.
+  static String _tool(String tool, JsonObject input) {
     final hint = input.keys.map(input.raw).whereType<String>().firstOrNull;
-    if (hint == null) return 'Running $tool';
-    return 'Running $tool: ${_clip(_oneLine(hint), 120)}';
+    if (hint == null) return tool;
+    return '$tool: ${_clip(_oneLine(hint), 120)}';
   }
 
   static String _oneLine(String s) => s.replaceAll(RegExp(r'\s+'), ' ').trim();
@@ -698,6 +853,17 @@ List<String> splitForTeams(String text, {int max = 20000}) {
   if (rest.isNotEmpty) parts.add(rest);
   return parts;
 }
+
+/// Three dots lit in turn, Teams purple on clear, 48 by 16: the card of
+/// steps' own shimmer while the turn works. A GIF, so Teams plays it.
+const _dots =
+    'data:image/gif;base64,'
+    'R0lGODlhMAAQAPECAHuD67m+8wAAAAAAACH/C05FVFNDQVBFMi4wAwEAAAAh+QQJHgACACwA'
+    'AAAAMAAQAAACRZSPqcvtD6OcNIKLQd0pe855IhOU5WOei/gpqdm8asdiixzE8lpf904C0nq/'
+    'l86o6PlcQiZyWAvCHM9kFBQaYbfcrpdSAAAh+QQJHgACACwFAAMAJwALAAACNZSPKcANCqNc'
+    'zk0Vco61R72BGtRVkIiOSmlhKUqyzPmKsUzXaiLPrm27sT6gC29oTB5NSkEBACH5BAUeAAIA'
+    'LAUAAwApAAsAAAI3lI+pi+APmJwKWhNypnovC3aaJHoJaJUBWX7oo7Ki+wIxc5+13eK9XhPM'
+    'JsPKjoJkBJNMIMRQAAA7';
 
 typedef _At = ({Uri serviceUrl, String conversation});
 
@@ -729,12 +895,27 @@ final class _Chat {
   /// The reply so far in this turn: the model's text, as it streams.
   final reply = StringBuffer();
 
+  /// Whether it called a tool since it last wrote: its next text begins a
+  /// paragraph. Before a reply's first words, or left over from a turn that
+  /// ended on a tool, it only puts blank lines before them, trimmed off.
+  bool stepped = false;
+
   /// The cards asking a question, by the seq of the event that asked it.
   final asks = <int, ({String card, _Draw draw})>{};
 
   /// The stream under the owner's message, from when it starts a turn until
   /// the turn ends or asks.
   _Stream? stream;
+
+  /// Whether the stream can show what the turn is doing: until it has text.
+  bool get shimmers {
+    final s = stream;
+    return s != null && !s.refused && !s.writing;
+  }
+
+  /// The card of the tools the stream could not show, from the first of
+  /// them until the turn ends or asks.
+  _Steps? steps;
 
   /// What the turn is streaming now, and the newest of what has come under
   /// that label.
@@ -763,8 +944,22 @@ final class _Chat {
   }
 }
 
-/// A Teams stream under the owner's message: informative updates saying
-/// what a step of the turn is doing, then the text it writes, until a final
+/// A turn's card of steps: the tools it ran where its stream could not show
+/// them, and the newest words of what it is thinking.
+final class _Steps {
+  /// The card's id, once Teams has it.
+  String? card;
+  final tools = <String>[];
+  String? live;
+  DateTime sentAt = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// Waiting to show the newest, when the card changed less than a stream's
+  /// interval ago.
+  Timer? timer;
+}
+
+/// A Teams stream under the owner's message: what the turn is doing until
+/// it writes, then the reply, growing as it is written, until a final
 /// message ends it.
 final class _Stream {
   _Stream(this.replyTo);
@@ -782,14 +977,13 @@ final class _Stream {
   String? shown;
   String next = '';
 
-  /// It carries the reply as it is written, no longer what the journey is
-  /// doing: Teams shows no informative update once a stream has text.
-  bool writing = false;
-
   DateTime sentAt = DateTime.fromMillisecondsSinceEpoch(0);
 
   /// Waiting to send [next], when Teams would not yet take it.
   Timer? timer;
+
+  /// It carries the reply as it is written: Teams then shows no status.
+  bool writing = false;
 
   /// Teams refused an update: the rest of the turn has dots.
   bool refused = false;

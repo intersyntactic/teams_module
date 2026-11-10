@@ -368,6 +368,22 @@ void main() {
   });
 
   String textOf(Map<String, Object?> activity) => activity['text']! as String;
+
+  /// The cards of steps sent, as JSON.
+  List<String> stepCards() => [
+    for (final a in sent)
+      if (jsonEncode(a).contains('Working…')) jsonEncode(a),
+  ];
+
+  /// What the cards of steps were edited to, as JSON, in order.
+  List<String> stepEdits() => [for (final (_, a) in updated) jsonEncode(a)];
+
+  /// The messages sent as text, leaving out cards.
+  List<String> texts() => [
+    for (final a in sent)
+      if (a['text'] case final String t) t,
+  ];
+
   String cardOf(Map<String, Object?> activity) => jsonEncode(activity);
 
   /// Opens journey `j1` in this chat.
@@ -375,6 +391,7 @@ void main() {
     host.listed.add(journey('j1', events: 7, name: 'teams-bridge'));
     await bridge.onDoorbell(press('open', journey: 'j1'));
     sent.clear();
+    ids.clear();
   }
 
   group('who it answers', () {
@@ -515,6 +532,9 @@ void main() {
         expect(teams.shown, {
           'stream-0': ['Working…'],
         });
+        expect(teams.written, {
+          'stream-0': ['On it.'],
+        });
         expect(teams.finals, {'stream-0': 'On it.'});
         expect(teams.posted.map((a) => a['replyToId']).toSet(), {'msg-1'});
       },
@@ -568,26 +588,28 @@ void main() {
   });
 
   group('what it shows', () {
-    test(
-      'a turn started in the app has dots, and is one message when it ends',
-      () async {
-        await opened();
-        await host.feed(7, [
-          const UserSaid('from the app'),
-          const ThinkingText('Hm.'),
-          const ReplyText('Added '),
-          const ReplyText('one.'),
-        ]);
-        expect(sent.map(textOf), ['_Said in the app:_ from the app']);
-        await host.feed(11, [const StatusChanged(JourneyState.idle)]);
-        expect(sent.map(textOf), [
-          '_Said in the app:_ from the app',
-          'Added one.',
-        ]);
-        expect(teams.dots, 3);
-        expect(teams.shown, isEmpty);
-      },
-    );
+    test('a turn started in the app has its card of steps, dots while it '
+        'writes, and is one message when it ends', () async {
+      await opened();
+      await host.feed(7, [
+        const UserSaid('from the app'),
+        const ThinkingText('Hm.'),
+        ToolCalled(
+          id: 't',
+          name: const ToolName('ls'),
+          input: JsonObject.empty,
+        ),
+        const ReplyText('Added '),
+        const ReplyText('one.'),
+      ]);
+      expect(texts(), ['_Said in the app:_ from the app']);
+      expect(stepCards().single, contains('› ls'));
+      await host.feed(12, [const StatusChanged(JourneyState.idle)]);
+      expect(texts(), ['_Said in the app:_ from the app', 'Added one.']);
+      expect(stepEdits().last, contains('Ran 1 tool'));
+      expect(teams.dots, 3);
+      expect(teams.posted.where((a) => a['entities'] != null), isEmpty);
+    });
 
     test(
       'what was said in the app is shown, and its own echo is not',
@@ -601,7 +623,7 @@ void main() {
           const UserSaid('from the app'),
         ]);
         expect(teams.finals.values, ['Heard.']);
-        expect(sent.map(textOf), ['_Said in the app:_ from the app']);
+        expect(texts(), ['_Said in the app:_ from the app']);
       },
     );
 
@@ -611,7 +633,7 @@ void main() {
         const ReplyText('Half'),
         const StatusChanged(JourneyState.failed, detail: 'overloaded'),
       ]);
-      expect(sent.map(textOf), ['Half', 'It failed: overloaded']);
+      expect(texts(), ['Half', 'It failed: overloaded']);
     });
   });
 
@@ -701,6 +723,9 @@ void main() {
         const ReplyText('one.'),
         idle,
       ]);
+      // Until its first words, the stream's status says what it is doing,
+      // so it needs no card; then the reply grows in it, and ends it.
+      expect(sent, isEmpty);
       expect(teams.shown, {
         'stream-0': [
           'Working…',
@@ -710,14 +735,93 @@ void main() {
           'Thinking: Now write.',
         ],
       });
+      expect(teams.hidden, isEmpty);
       expect(teams.written, {
         'stream-0': ['Added ', 'Added one.'],
       });
-      expect(teams.hidden, isEmpty);
       expect(teams.finals, {'stream-0': 'Added one.'});
-      expect(sent, isEmpty);
       expect(teams.posted.map((a) => a['replyToId']).toSet(), {'msg-1'});
       expect(logged, isEmpty);
+    });
+
+    test('tools once it has written go on a card, which ends as one line, its '
+        'tools a press away', () async {
+      await said();
+      await host.feed(7, [
+        begun,
+        const ReplyText('Checking.'),
+        ToolCalled(
+          id: 't1',
+          name: const ToolName('git_log'),
+          input: JsonObject.of({'range': '-5'}),
+        ),
+        const ThinkingText('Fine.'),
+        ToolCalled(
+          id: 't2',
+          name: const ToolName('git_status'),
+          input: JsonObject.empty,
+        ),
+        const ReplyText('Clean.'),
+        idle,
+      ]);
+      expect(stepCards().single, contains('› git_log: -5'));
+      // Its dots play while it works, and are gone once it is done.
+      expect(stepCards().single, contains('data:image/gif;base64,'));
+      final edits = stepEdits();
+      expect(edits.last, isNot(contains('data:image/gif')));
+      expect(edits[0], contains('_Thinking: Fine._'));
+      expect(edits[1], contains('› git_status'));
+      expect(edits[1], isNot(contains('Thinking')));
+      expect(edits.last, contains('Ran 2 tools'));
+      expect(edits.last, contains('Show steps'));
+      expect(edits.last, contains('› git_log: -5'));
+      expect(edits.last, isNot(contains('Working')));
+      expect(updated.map((u) => u.$1).toSet(), {ids.single});
+      // The stream showed no tool: it had text by then.
+      expect(teams.shown, {
+        'stream-0': ['Working…'],
+      });
+      expect(teams.hidden, isEmpty);
+      expect(teams.finals, {'stream-0': 'Checking.\n\nClean.'});
+    });
+
+    test(
+      'the card shows the newest tools, and says how many came before',
+      () async {
+        await said();
+        await host.feed(7, [
+          begun,
+          const ReplyText('Many.'),
+          for (var i = 0; i < 10; i++)
+            ToolCalled(
+              id: 't$i',
+              name: ToolName('t$i'),
+              input: JsonObject.empty,
+            ),
+        ]);
+        final last = stepEdits().last;
+        expect(last, contains('…and 2 more'));
+        expect(last, isNot(contains('› t1"')));
+        expect(last, contains('› t2'));
+        expect(last, contains('› t9'));
+      },
+    );
+
+    test('its card changes no faster than a stream may', () async {
+      const every = Duration(milliseconds: 50);
+      teams = FakeTeams(every: every);
+      bridge = bridgeFor(owner, streamEvery: every);
+      await said();
+      await host.feed(7, [
+        begun,
+        const ReplyText('Looking.'),
+        for (final t in ['a', 'b', 'c'])
+          ToolCalled(id: t, name: ToolName(t), input: JsonObject.empty),
+      ]);
+      expect(stepCards().single, contains('› a'));
+      expect(updated, isEmpty);
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      expect(stepEdits().single, contains('› c'));
     });
 
     test('a long thought shows only its newest words', () async {
@@ -745,32 +849,39 @@ void main() {
       expect(teams.shown['stream-0'], ['Working…', 'Thinking: abc']);
       // The reply comes too soon after: its final message waits its turn,
       // and the update it would have been is never sent.
-      await host.feed(11, [const ReplyText('Thought.'), idle]);
+      await host.feed(11, [
+        const ReplyText('Thought.'),
+        const ReplyText(' Twice.'),
+        idle,
+      ]);
       await Future<void>.delayed(const Duration(milliseconds: 80));
-      expect(teams.finals, {'stream-0': 'Thought.'});
-      expect(teams.shown['stream-0'], ['Working…', 'Thinking: abc']);
+      expect(teams.written, {'stream-0': isEmpty});
+      expect(teams.finals, {'stream-0': 'Thought. Twice.'});
       expect(logged, isEmpty);
     });
 
-    test(
-      'a question ends it before its card, and the rest of the turn has dots',
-      () async {
-        await said();
-        await host.feed(7, [begun, const ThinkingText('Merging.'), merge]);
-        expect(teams.finals, {'stream-0': 'It has a question.'});
-        expect(cardOf(sent.single), contains('Merge PR #42'));
-        final dots = teams.dots;
-        await host.feed(10, [
-          const MergeAnswered(ask: 9, approved: true),
-          const ThinkingText('Merged.'),
-          const ReplyText('Merged it.'),
-          idle,
-        ]);
-        expect(teams.shown.keys, ['stream-0']);
-        expect(teams.dots, dots + 2);
-        expect(textOf(sent.last), 'Merged it.');
-      },
-    );
+    test('a question ends the stream before its card; the rest of the turn '
+        'has its tools on a card, and dots', () async {
+      await said();
+      await host.feed(7, [begun, const ThinkingText('Merging.'), merge]);
+      expect(teams.finals, {'stream-0': 'It has a question.'});
+      expect(cardOf(sent.single), contains('Merge PR #42'));
+      await host.feed(10, [
+        const MergeAnswered(ask: 9, approved: true),
+        const ThinkingText('Merged.'),
+        ToolCalled(
+          id: 't',
+          name: const ToolName('gh_pr_view'),
+          input: JsonObject.empty,
+        ),
+        const ReplyText('Merged it.'),
+        idle,
+      ]);
+      expect(stepCards().single, contains('› gh_pr_view'));
+      expect(teams.shown.keys, ['stream-0']);
+      expect(teams.dots, 2);
+      expect(texts().last, 'Merged it.');
+    });
 
     test('a failed turn ends it with its reply, then says it failed', () async {
       await said();
@@ -780,7 +891,7 @@ void main() {
         const StatusChanged(JourneyState.failed, detail: 'overloaded'),
       ]);
       expect(teams.finals, {'stream-0': 'Half'});
-      expect(sent.map(textOf), ['It failed: overloaded']);
+      expect(texts(), ['It failed: overloaded']);
     });
 
     test('a turn that fails before replying ends it with that', () async {
@@ -790,7 +901,7 @@ void main() {
         const StatusChanged(JourneyState.failed, detail: 'overloaded'),
       ]);
       expect(teams.finals, {'stream-0': 'It failed: overloaded'});
-      expect(sent, isEmpty);
+      expect(texts(), isEmpty);
     });
 
     test('a turn with no reply ends it all the same', () async {
@@ -799,22 +910,46 @@ void main() {
       expect(teams.finals, {'stream-0': 'Done.'});
     });
 
-    test('a message the host refused starts none', () async {
+    test(
+      'a turn with no stream and no reply adds nothing as it ends',
+      () async {
+        await opened();
+        await host.feed(7, [
+          const UserSaid('from the app'),
+          const ThinkingText('Hm.'),
+          const StatusChanged(JourneyState.idle),
+        ]);
+        expect(texts(), ['_Said in the app:_ from the app']);
+      },
+    );
+
+    test('a later end of a turn already ended says nothing', () async {
+      await said();
+      await host.feed(7, [begun, const ReplyText('Hi.'), idle, idle]);
+      expect(teams.finals, {'stream-0': 'Hi.'});
+      expect(texts(), isEmpty);
+    });
+
+    test('a message the host refused starts no stream', () async {
       await opened();
       host.refuse = 'still working';
       await bridge.onDoorbell(message('and another thing'));
       await host.feed(7, [const ThinkingText('still on the last one')]);
-      expect(teams.shown, isEmpty);
-      expect(teams.dots, 1);
+      await host.feed(8, [const ReplyText('Still.')]);
+      expect(teams.posted.where((a) => a['entities'] != null), isEmpty);
+      expect(teams.dots, 2);
     });
 
     test('an echo that comes before the host answers shows in it', () async {
       await opened();
       host.echoAt = 7;
       await bridge.onDoorbell(message('go'));
-      await host.feed(8, [const ReplyText('Hi.'), idle]);
       expect(teams.shown, {
         'stream-0': ['Working…'],
+      });
+      await host.feed(8, [const ReplyText('Hi.'), idle]);
+      expect(teams.written, {
+        'stream-0': ['Hi.'],
       });
       expect(teams.finals, {'stream-0': 'Hi.'});
       expect(teams.dots, 0);
@@ -837,12 +972,20 @@ void main() {
       await said();
       await host.feed(7, [
         begun,
+        const ThinkingText('Hm.'),
+        const StatusChanged(JourneyState.running),
+        ToolCalled(
+          id: 't',
+          name: const ToolName('ls'),
+          input: JsonObject.empty,
+        ),
         const StatusChanged(JourneyState.running),
         const ReplyText('Still here.'),
         idle,
       ]);
+      expect(sent, isEmpty);
       expect(teams.shown, {
-        'stream-0': ['Working…'],
+        'stream-0': ['Working…', 'Thinking: Hm.', 'Running ls'],
       });
       expect(teams.written, {
         'stream-0': ['Still here.'],
@@ -850,8 +993,8 @@ void main() {
       expect(teams.finals, {'stream-0': 'Still here.'});
     });
 
-    test('a step that goes back to work ends as a message, and the next has a '
-        'stream of its own', () async {
+    test('the reply grows through the turn in one stream, and what it wrote '
+        'after a tool is a paragraph of its own', () async {
       await said();
       await host.feed(7, [
         begun,
@@ -866,20 +1009,17 @@ void main() {
         const ReplyText('good.'),
         idle,
       ]);
-      expect(teams.shown, {
-        'stream-0': ['Working…'],
-        'stream-1': ['Running bash: dart test', 'Thinking: Passing.'],
-      });
       expect(teams.written, {
-        'stream-0': ['Let me check.'],
-        'stream-1': ['All ', 'All good.'],
+        'stream-0': [
+          'Let me check.',
+          'Let me check.\n\nAll ',
+          'Let me check.\n\nAll good.',
+        ],
       });
-      expect(teams.finals, {
-        'stream-0': 'Let me check.',
-        'stream-1': 'All good.',
-      });
-      expect(teams.hidden, isEmpty);
-      expect(sent, isEmpty);
+      expect(teams.finals, {'stream-0': 'Let me check.\n\nAll good.'});
+      expect(stepEdits().first, contains('› bash: dart test'));
+      expect(stepEdits().last, contains('Ran 1 tool'));
+      expect(texts(), isEmpty);
       expect(teams.posted.map((a) => a['replyToId']).toSet(), {'msg-1'});
       expect(logged, isEmpty);
     });
@@ -909,10 +1049,16 @@ void main() {
         await host.feed(7, [
           begun,
           const ThinkingText('Hm.'),
+          ToolCalled(
+            id: 't',
+            name: const ToolName('ls'),
+            input: JsonObject.empty,
+          ),
           const ReplyText('Hi.'),
           idle,
         ]);
-        expect(sent.map(textOf), ['Hi.']);
+        expect(texts(), ['Hi.']);
+        expect(stepCards().single, contains('› ls'));
         expect(teams.dots, 2);
         expect(logged.single, contains('not allowed'));
       },
@@ -922,7 +1068,7 @@ void main() {
       teams.refuseFinal = true;
       await said();
       await host.feed(7, [begun, const ReplyText('At last.'), idle]);
-      expect(sent.map(textOf), ['At last.']);
+      expect(texts(), ['At last.']);
       expect(logged.single, contains('final'));
     });
   });
@@ -952,13 +1098,13 @@ void main() {
         const ReplyText('new'),
         const StatusChanged(JourneyState.idle),
       ]);
-      expect(sent.map(textOf), ['new']);
+      expect(texts(), ['new']);
       // And again, from the top, once it has moved on.
       await host.feed(0, [
         const ReplyText('older still'),
         const StatusChanged(JourneyState.idle),
       ]);
-      expect(sent.map(textOf), ['new']);
+      expect(texts(), ['new']);
     },
   );
 
@@ -970,7 +1116,7 @@ void main() {
       const ReplyText('moment'),
       const StatusChanged(JourneyState.idle),
     ], at: (_) => moment);
-    expect(sent.map(textOf), ['one moment']);
+    expect(texts(), ['one moment']);
   });
 
   test(
@@ -987,7 +1133,7 @@ void main() {
         const ReplyText('after'),
         const StatusChanged(JourneyState.idle),
       ], at: (seq) => when(seq).add(const Duration(hours: 1)));
-      expect(sent.map(textOf), ['before', 'after']);
+      expect(texts(), ['before', 'after']);
     },
   );
 
