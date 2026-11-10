@@ -176,17 +176,13 @@ final class JourneyBridge {
       case _ when chat == null:
         await _say(at, 'Say "journeys" to open one.');
       case _:
-        chat.said.add(text);
-        // Before it is said: the host can send its echo, which shows in
-        // this stream, before it answers. Never in place of a stream that
-        // has started: Teams keeps one open in a conversation, and it would
-        // be left without an end.
-        final stream = chat.stream?.id == null ? _Stream(activity) : null;
-        if (stream != null) chat.stream = stream;
+        // Before it is said: the host can send its echo, which takes up
+        // this stream, before it answers.
+        final waiting = (text: text, stream: _Stream(activity));
+        chat.said.add(waiting);
         final why = await journeys.say(chat.journey, text);
         if (why != null) {
-          chat.said.remove(text);
-          if (stream != null && chat.stream == stream) chat.stream = null;
+          chat.said.remove(waiting);
           await _say(at, 'Not sent: $why');
         }
     }
@@ -334,8 +330,7 @@ final class JourneyBridge {
     // After its first event, which says it started: the task comes back
     // next, as what the owner said.
     final chat = _Chat(at, started.id, after: 0, afterAt: null)
-      ..said.add(offer.task)
-      ..stream = _Stream(offer.asked);
+      ..said.add((text: offer.task, stream: _Stream(offer.asked)));
     _chats[at.conversation] = chat;
     _listen(chat);
   }
@@ -418,7 +413,10 @@ final class JourneyBridge {
         // What the owner said here comes back as the journey's own record,
         // which is also the sign its turn has begun: the host says nothing
         // when a journey starts running, only when it stops.
-        if (chat.said.remove(text)) {
+        if (chat.echoed(text) case final stream?) {
+          // Never in place of a stream still open: Teams keeps one open in
+          // a conversation, and it would be left without an end.
+          chat.stream ??= stream;
           await _show(chat, 'Working…');
           break;
         }
@@ -889,8 +887,16 @@ final class _Chat {
     return e.at.isAfter(seen) || (e.at.isAtSameMomentAs(seen) && e.seq > after);
   }
 
-  /// What the owner said from this chat, until the journey records it.
-  final said = <String>[];
+  /// What the owner said from this chat, until the journey records it, each
+  /// with the stream that will answer it. Its turn takes the stream up when
+  /// the echo comes, never sooner: a turn still ending keeps its own.
+  final said = <({String text, _Stream stream})>[];
+
+  /// The stream waiting for [text]'s echo, no longer waiting.
+  _Stream? echoed(String text) {
+    final i = said.indexWhere((s) => s.text == text);
+    return i < 0 ? null : said.removeAt(i).stream;
+  }
 
   /// The reply so far in this turn: the model's text, as it streams.
   final reply = StringBuffer();

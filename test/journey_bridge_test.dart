@@ -940,6 +940,17 @@ void main() {
       expect(teams.dots, 2);
     });
 
+    test(
+      'a message the host refused is not taken for its echo later',
+      () async {
+        await opened();
+        host.refuse = 'still working';
+        await bridge.onDoorbell(message('go'));
+        await host.feed(7, [const UserSaid('go'), idle]);
+        expect(texts(), ['Not sent: still working', '_Said in the app:_ go']);
+      },
+    );
+
     test('an echo that comes before the host answers shows in it', () async {
       await opened();
       host.echoAt = 7;
@@ -966,6 +977,47 @@ void main() {
       ]);
       expect(teams.finals, {'stream-0': 'Both.'});
       expect(logged, isEmpty);
+    });
+
+    test('a message while the last turn winds down has a stream of its '
+        'own', () async {
+      await said();
+      await host.feed(7, [begun, const ReplyText('Hi.')]);
+      // Said before the host has said the last turn is over.
+      await bridge.onDoorbell(message('two', activity: 'msg-2'));
+      await host.feed(9, [
+        idle,
+        const UserSaid('two'),
+        const ReplyText('Again.'),
+        idle,
+      ]);
+      expect(teams.finals, {'stream-0': 'Hi.', 'stream-1': 'Again.'});
+      expect(teams.posted.map((a) => a['replyToId']).toSet(), {
+        'msg-1',
+        'msg-2',
+      });
+      expect(teams.dots, 0);
+      expect(logged, isEmpty);
+    });
+
+    test('a message said before the last was echoed takes nothing from '
+        'it', () async {
+      await said();
+      await bridge.onDoorbell(message('two', activity: 'msg-2'));
+      await host.feed(7, [
+        begun,
+        const ReplyText('Hi.'),
+        idle,
+        const UserSaid('two'),
+        const ReplyText('Again.'),
+        idle,
+      ]);
+      expect(teams.finals, {'stream-0': 'Hi.', 'stream-1': 'Again.'});
+      final firsts = teams.posted.where(
+        (a) => jsonEncode(a).contains('"streamSequence":1'),
+      );
+      expect(firsts.map((a) => a['replyToId']), ['msg-1', 'msg-2']);
+      expect(teams.dots, 0);
     });
 
     test('a host that says it is running leaves the stream as it is', () async {
