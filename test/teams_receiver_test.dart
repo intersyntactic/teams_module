@@ -45,7 +45,7 @@ JsonObject press(
 });
 
 void main() {
-  late StandInLine line;
+  late StandInJourneyPath journeyPath;
   late TeamsReceiver receiver;
   late List<String> logged;
   late Map<Object, TurnId> ids;
@@ -54,10 +54,10 @@ void main() {
     logged = [];
     ids = Map.identity();
     receiver = TeamsReceiver(
-      sameVersion: (a, b) => line.sameVersion(a, b),
+      sameVersion: (a, b) => journeyPath.sameVersion(a, b),
       log: logged.add,
     );
-    line = StandInLine(
+    journeyPath = StandInJourneyPath(
       deliver: (id, node) {
         ids[node] = id;
         receiver.delivered(id, node);
@@ -78,7 +78,7 @@ void main() {
   /// Appends [rung] as one pass would, and shows it on [card].
   Target shown(String card, Rung rung, {String conversation = chat}) {
     final target = Target(
-      exact: line.append(rung),
+      exact: journeyPath.append(rung),
       anchor: SemanticAnchor.of(utf8.encode(rung.failureMode)),
     );
     receiver.show(card, target, conversation: conversation);
@@ -88,7 +88,7 @@ void main() {
   /// Reads [bell] and appends what it writes, as the module does.
   Annotations write(JsonObject bell) {
     final written = receiver.read(bell);
-    written.inOrder.forEach(line.append);
+    written.inOrder.forEach(journeyPath.append);
     return written;
   }
 
@@ -209,7 +209,7 @@ void main() {
     shown('card-1', supported);
     final approval = ids[write(press('card-1', 'approve')).approve]!;
     // Sian names Peter's approval: it counts for nothing.
-    line.append(Withdraw<Approve>(target: approval, by: actor(sian)));
+    journeyPath.append(Withdraw<Approve>(target: approval, by: actor(sian)));
     expect(write(press('card-1', 'notyet')).withdrawn.map((w) => w.target), [
       approval,
     ]);
@@ -275,25 +275,25 @@ void main() {
     });
   });
 
-  group('the stand-in line', () {
+  group('the stand-in journey path', () {
     test('names the same bytes on two passes differently, as one version', () {
-      final a = line.append(supported);
-      final b = line.append(supported);
+      final a = journeyPath.append(supported);
+      final b = journeyPath.append(supported);
       expect(a, isNot(b));
-      expect(line.sameVersion(a, b), isTrue);
+      expect(journeyPath.sameVersion(a, b), isTrue);
     });
 
     test('tells apart two nodes that say different things', () {
-      final a = line.append(supported);
-      final b = line.append(const Rung('rung-3', Verdict('weak')));
-      expect(line.sameVersion(a, b), isFalse);
+      final a = journeyPath.append(supported);
+      final b = journeyPath.append(const Rung('rung-3', Verdict('weak')));
+      expect(journeyPath.sameVersion(a, b), isFalse);
     });
 
     test('knows no version of a node it never appended', () {
-      final a = line.append(supported);
+      final a = journeyPath.append(supported);
       final stranger = TurnId.of(utf8.encode('elsewhere'));
-      expect(line.sameVersion(stranger, stranger), isFalse);
-      expect(line.sameVersion(a, stranger), isFalse);
+      expect(journeyPath.sameVersion(stranger, stranger), isFalse);
+      expect(journeyPath.sameVersion(a, stranger), isFalse);
     });
   });
 }
