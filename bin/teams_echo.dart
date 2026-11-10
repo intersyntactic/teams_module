@@ -19,10 +19,11 @@
 /// with Approve and Not yet; press one and the card is edited to say so.
 /// Adding the bot to a chat gets a hello, sent without being asked.
 ///
-/// Each "card" appends a rung to a [StandInLine], as a pass of Hart's would,
-/// and the card shows it: "card" again is a later pass saying the same, and
-/// "card weak" one saying something new. Each press writes what
-/// [TeamsReceiver] reads it as to that line, and the log names each node.
+/// Each "card" appends a rung to a [StandInJourneyPath], as a pass of Hart's
+/// would, and the card shows it: "card" again is a later pass saying the
+/// same, and "card weak" one saying something new. Each press writes what
+/// [TeamsReceiver] reads it as to that journey path, and the log names each
+/// node.
 library;
 
 import 'dart:async';
@@ -80,12 +81,12 @@ Future<void> main() async {
   );
   if (await keys.keys() == null) stderr.writeln('warning: no keys yet');
 
-  late final StandInLine line;
+  late final StandInJourneyPath journeyPath;
   final receiver = TeamsReceiver(
-    sameVersion: (a, b) => line.sameVersion(a, b),
+    sameVersion: (a, b) => journeyPath.sameVersion(a, b),
     log: stderr.writeln,
   );
-  line = StandInLine(
+  journeyPath = StandInJourneyPath(
     deliver: (id, node) {
       receiver.delivered(id, node);
       final of = switch (node) {
@@ -94,7 +95,7 @@ Future<void> main() async {
         Withdraw<Approve>(:final target) => ' of ${_short(target)}',
         _ => '',
       };
-      stderr.writeln('echo: line ${_short(id)} ${node.runtimeType}$of');
+      stderr.writeln('echo: appended ${_short(id)} ${node.runtimeType}$of');
     },
     encodeOther: (node) => switch (node) {
       _Rung(:final failureMode, :final verdict) => {
@@ -105,7 +106,11 @@ Future<void> main() async {
       _ => throw ArgumentError.value(node, 'node', 'no encoding'),
     },
   );
-  final echo = (connector: connector, receiver: receiver, line: line);
+  final echo = (
+    connector: connector,
+    receiver: receiver,
+    journeyPath: journeyPath,
+  );
 
   final relay = TeamsRelay(
     spec: TeamsSourceSpec(appId: appId, tenantAllowlist: {tenantId}),
@@ -122,7 +127,7 @@ Future<void> main() async {
 typedef _Echo = ({
   BotConnector connector,
   TeamsReceiver receiver,
-  StandInLine line,
+  StandInJourneyPath journeyPath,
 });
 
 /// What each card shows, by its activity id, to draw it again when edited.
@@ -144,7 +149,7 @@ Future<void> _answer(_Echo echo, JsonObject bell) async {
             _Verdict(level.isEmpty ? 'supported' : level.join(' ')),
           );
           final target = Target(
-            exact: echo.line.append(rung),
+            exact: echo.journeyPath.append(rung),
             anchor: SemanticAnchor.of(utf8.encode('Rung:${rung.failureMode}')),
           );
           // A later pass that says the same arrives already approved.
@@ -169,7 +174,7 @@ Future<void> _answer(_Echo echo, JsonObject bell) async {
         }
       case 'teams_card_action':
         final verb = bell.object('value').object('action').stringOrNull('verb');
-        echo.receiver.read(bell).inOrder.forEach(echo.line.append);
+        echo.receiver.read(bell).inOrder.forEach(echo.journeyPath.append);
         final by = teamsActor(bell);
         if (by == null) return;
         // The card's own id: what the button was pressed on. Edit reopens
