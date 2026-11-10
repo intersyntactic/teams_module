@@ -11,6 +11,11 @@ environment:
 
 dependencies:
   checked_json: ^0.2.1
+  is_annotation_shapes:
+    git:
+      url: git@github.com:intersyntactic/annotation_shapes.git
+      ref: 0749035bc332ec4a3071434952a388db1922d643
+  is_shapes: ^0.3.0
   pointycastle: ^4.0.0
 
 dev_dependencies:
