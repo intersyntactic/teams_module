@@ -50,14 +50,20 @@ handler that answers through the Connector. It echoes text, sends a card with
 Approve and Not yet when told "card", and edits the card when one is pressed.
 
 ```
-env-run TEAMS_TEST_APP_ID:TEAMS_APP_ID TEAMS_TEST_APP_SECRET:TEAMS_APP_SECRET \
-  TEAMS_TEST_TENANT_ID:TEAMS_TENANT_ID -- dart run bin/teams_echo.dart
+env-run ENS_TEAMS_APP_ID:TEAMS_APP_ID ENS_TEAMS_APP_SECRET:TEAMS_APP_SECRET \
+  ENS_TEAMS_TENANT_ID:TEAMS_TENANT_ID -- dart run bin/teams_echo.dart
 cloudflared tunnel --url http://127.0.0.1:8087   # a public https address
-dart run tool/app_package.dart <app id> "Hart Reports"   # build/appPackage.zip
+dart run tool/app_package.dart <app id> "Hart Reports" 0.0.1   # build/appPackage.zip
 ```
 
-Set the bot's endpoint to the tunnel's address plus `/api/messages`, upload the
-zip in the test tenant's Teams, and message the bot.
+`ENS_TEAMS_*` is the bot in Enspyr's tenant; `HA_TEAMS_*` is Sian's, in Hart
+Aspects'. Set the bot's endpoint to the tunnel's address plus `/api/messages`,
+upload the zip in the test tenant's Teams, and message the bot. To replace a
+package already uploaded, build it with a higher version: Teams refuses one
+that isn't.
+
+The icon is a hart's antlers drawn as a tree of nodes, a root at the base and
+a node at every tine's tip, with one tip gold: the node Peter approved.
 
 ## Running the relay
 

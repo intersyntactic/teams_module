@@ -17,11 +17,15 @@ import 'dart:math';
 import 'dart:typed_data';
 
 const manifestVersion = '1.21';
-const accent = (0x2f, 0x6f, 0x6a); // a dark teal
+const accent = (0x1d, 0x4a, 0x3c); // forest green, behind the antlers
+const _cream = (0xf3, 0xec, 0xdc); // the antlers
+const _gold = (0xe9, 0xb4, 0x4c); // the one approved node
 
 Future<void> main(List<String> args) async {
-  if (args.isEmpty || args.length > 2) {
-    stderr.writeln('usage: dart run tool/app_package.dart BOT_APP_ID [NAME]');
+  if (args.isEmpty || args.length > 3) {
+    stderr.writeln(
+      'usage: dart run tool/app_package.dart BOT_APP_ID [NAME] [VERSION]',
+    );
     exit(64);
   }
   final appId = args[0].toLowerCase();
@@ -30,15 +34,22 @@ Future<void> main(List<String> args) async {
     stderr.writeln('abort: "$appId" is not a GUID');
     exit(64);
   }
-  final name = args.length == 2 ? args[1] : 'Hart Reports';
+  final name = args.length >= 2 ? args[1] : 'Hart Reports';
   if (name.isEmpty || name.length > 30) {
     stderr.writeln('abort: a short name is 1 to 30 characters');
+    exit(64);
+  }
+  // Teams takes a replacement package only if its version is higher than
+  // the one already uploaded, so a re-upload names the next version.
+  final version = args.length == 3 ? args[2] : '0.0.1';
+  if (!RegExp(r'^\d+\.\d+\.\d+$').hasMatch(version)) {
+    stderr.writeln('abort: "$version" is not a version like 1.2.3');
     exit(64);
   }
 
   final dir = Directory('build/appPackage')..createSync(recursive: true);
   File('${dir.path}/manifest.json').writeAsStringSync(
-    const JsonEncoder.withIndent('  ').convert(manifest(appId, name)),
+    const JsonEncoder.withIndent('  ').convert(manifest(appId, name, version)),
   );
   File('${dir.path}/color.png').writeAsBytesSync(icon(192, outline: false));
   File('${dir.path}/outline.png').writeAsBytesSync(icon(32, outline: true));
@@ -61,12 +72,12 @@ Future<void> main(List<String> args) async {
   stdout.writeln('wrote ${zip.path} for "$name" ($appId)');
 }
 
-Map<String, Object?> manifest(String appId, String name) => {
+Map<String, Object?> manifest(String appId, String name, String version) => {
   r'$schema':
       'https://developer.microsoft.com/json-schemas/teams/'
       'v$manifestVersion/MicrosoftTeams.schema.json',
   'manifestVersion': manifestVersion,
-  'version': '0.0.1',
+  'version': version,
   'id': appId,
   'developer': {
     'name': 'Enspyr',
@@ -96,37 +107,88 @@ Map<String, Object?> manifest(String appId, String name) => {
   'validDomains': <String>[],
 };
 
-/// A check mark: white on the accent colour for the colour icon, white on
-/// transparent for the outline icon, as Teams requires of each.
+/// A hart's antlers drawn as a tree of nodes: a root at the base, branches
+/// forking upward, a node at every tine's tip. Hart is a stag, and what the
+/// module feeds is a tree of nodes on journey paths, so the one shape is
+/// both. In the colour icon one tip is gold, the node Peter approved.
+///
+/// The left antler is given in unit coordinates and mirrored for the right.
+const _beam = [(0.42, 0.70), (0.33, 0.52), (0.27, 0.34), (0.25, 0.17)];
+const _tines = [
+  ((0.37, 0.61), (0.17, 0.57)), // brow tine, out
+  ((0.30, 0.43), (0.13, 0.33)), // middle tine, out and up
+  ((0.27, 0.33), (0.39, 0.20)), // inner tine, in and up
+];
+const _root = (0.5, 0.84);
+
+/// Cream antlers on forest green for the colour icon; white on transparent
+/// for the outline icon, as Teams requires of each.
 Uint8List icon(int size, {required bool outline}) {
-  const path = [(0.22, 0.53), (0.42, 0.72), (0.78, 0.31)];
-  final half = (outline ? 0.11 : 0.085) * size / 2;
+  (double, double) mirror((double, double) p) => (1 - p.$1, p.$2);
+  // At 32 pixels three tines a side crowd into a blob, so the outline icon
+  // keeps only the brow and inner tines.
+  final tines = outline ? [_tines.first, _tines.last] : _tines;
+  final strokes = <((double, double), (double, double))>[
+    (_root, _beam.first),
+    for (var i = 0; i < _beam.length - 1; i++) (_beam[i], _beam[i + 1]),
+    ...tines,
+  ];
+  final allStrokes = [
+    ...strokes,
+    for (final (a, b) in strokes) (mirror(a), mirror(b)),
+  ];
+  final tips = [_beam.last, for (final (_, tip) in tines) tip];
+  final gold = mirror(_tines.last.$2);
+  final nodes = [_root, ...tips, ...tips.map(mirror).where((p) => p != gold)];
+
+  // At 32 pixels a thin stroke vanishes, so the outline icon draws heavier,
+  // with nodes only a little wider than the strokes.
+  final half = (outline ? 0.085 : 0.05) * size / 2;
+  final dot = (outline ? 0.06 : 0.05) * size;
+  final rootDot = dot * 1.25;
+
   final rgba = Uint8List(size * size * 4);
   for (var y = 0; y < size; y++) {
     for (var x = 0; x < size; x++) {
       final px = x + 0.5, py = y + 0.5;
+      double from((double, double) p) =>
+          sqrt(pow(p.$1 * size - px, 2) + pow(p.$2 * size - py, 2));
+
       var d = double.infinity;
-      for (var i = 0; i < path.length - 1; i++) {
+      for (final (a, b) in allStrokes) {
         d = min(
           d,
           _toSegment(
             px,
             py,
-            path[i].$1 * size,
-            path[i].$2 * size,
-            path[i + 1].$1 * size,
-            path[i + 1].$2 * size,
+            a.$1 * size,
+            a.$2 * size,
+            b.$1 * size,
+            b.$2 * size,
           ),
         );
       }
-      // One pixel of soft edge, so the mark isn't jagged.
-      final ink = (half + 0.5 - d).clamp(0.0, 1.0);
+      // One pixel of soft edge everywhere, so nothing is jagged.
+      var ink = (half + 0.5 - d).clamp(0.0, 1.0);
+      for (final n in nodes) {
+        final r = n == _root ? rootDot : dot;
+        ink = max(ink, (r + 0.5 - from(n)).clamp(0.0, 1.0));
+      }
+      final shine = outline ? 0.0 : (dot + 0.5 - from(gold)).clamp(0.0, 1.0);
+      if (outline) ink = max(ink, (dot + 0.5 - from(gold)).clamp(0.0, 1.0));
+
       final o = (y * size + x) * 4;
       if (outline) {
         rgba.setAll(o, [255, 255, 255, (ink * 255).round()]);
       } else {
-        int mix(int bg) => (bg + (255 - bg) * ink).round();
-        rgba.setAll(o, [mix(accent.$1), mix(accent.$2), mix(accent.$3), 255]);
+        int over(int bg, int fg, double a) => (bg + (fg - bg) * a).round();
+        int channel(int bg, int fg, int g) => over(over(bg, fg, ink), g, shine);
+        rgba.setAll(o, [
+          channel(accent.$1, _cream.$1, _gold.$1),
+          channel(accent.$2, _cream.$2, _gold.$2),
+          channel(accent.$3, _cream.$3, _gold.$3),
+          255,
+        ]);
       }
     }
   }
