@@ -6,13 +6,13 @@ import 'package:checked_json/checked_json.dart';
 import 'package:intersyntactic_protocol/intersyntactic_protocol.dart'
     show
         AgentRoute,
+        JourneyPathId,
         ListRunsRoute,
         LoggedEvent,
         RepoChoice,
         RepoList,
         ReposRoute,
         RunFrame,
-        RunId,
         RunList,
         RunMessageRoute,
         RunStopRoute,
@@ -27,19 +27,19 @@ import 'bot_connector.dart' show HttpCall, HttpResult, httpCall;
 
 /// What the bridge needs of intersyntactic's agent host: the journeys it
 /// holds, what happens in one as it happens, and the person's messages into
-/// one. The protocol still names a journey a run (`RunId`, `RunSummary`); the
-/// words here are RULINGS'.
+/// one. The protocol still names a journey a run (`RunSummary`); the words
+/// here are RULINGS'.
 abstract interface class Journeys {
   /// Every journey the host holds.
   Future<List<RunSummary>> list();
 
   /// Sends [text] into [journey] as the person's message. Null when it was
   /// taken, else the host's reason, such as that a turn is still running.
-  Future<String?> say(RunId journey, String text);
+  Future<String?> say(JourneyPathId journey, String text);
 
   /// Stops the turn [journey] is running. Null when stopped, else the host's
   /// reason.
-  Future<String?> stop(RunId journey);
+  Future<String?> stop(JourneyPathId journey);
 
   /// The repos a journey can start in, the most recently used first.
   Future<List<RepoChoice>> repos();
@@ -54,7 +54,7 @@ abstract interface class Journeys {
   /// [afterAt]: a restart can renumber its log. Otherwise it sends every
   /// event from the first, so a reader must skip what it has seen by time.
   Stream<LoggedEvent> events(
-    RunId journey, {
+    JourneyPathId journey, {
     required int after,
     required DateTime? afterAt,
   });
@@ -84,13 +84,13 @@ final class AgentHostClient implements Journeys {
   }
 
   @override
-  Future<String?> say(RunId journey, String text) async {
+  Future<String?> say(JourneyPathId journey, String text) async {
     final r = await _send(RunMessageRoute(journey), SendMessage(text).toJson());
     return r.status == 200 ? null : _reason(r.body);
   }
 
   @override
-  Future<String?> stop(RunId journey) async {
+  Future<String?> stop(JourneyPathId journey) async {
     final r = await _send(RunStopRoute(journey));
     return r.status == 200 ? null : _reason(r.body);
   }
@@ -115,7 +115,7 @@ final class AgentHostClient implements Journeys {
   /// until the next event arrives, and a journey can be quiet for hours.
   @override
   Stream<LoggedEvent> events(
-    RunId journey, {
+    JourneyPathId journey, {
     required int after,
     required DateTime? afterAt,
   }) {

@@ -5,6 +5,7 @@ import 'package:checked_json/checked_json.dart';
 import 'package:intersyntactic_protocol/intersyntactic_protocol.dart'
     show
         JourneyName,
+        JourneyPathId,
         JourneyState,
         LoggedEvent,
         MemoryAnswered,
@@ -14,7 +15,6 @@ import 'package:intersyntactic_protocol/intersyntactic_protocol.dart'
         Provider,
         ReplyText,
         RepoPath,
-        RunId,
         RunSummary,
         StartRun,
         StatusChanged,
@@ -119,7 +119,7 @@ final class JourneyBridge {
   final _starts = <String, ({String task, String asked, String card})>{};
 
   /// The journey open in [conversation], or null.
-  RunId? openIn(String conversation) => _chats[conversation]?.journey;
+  JourneyPathId? openIn(String conversation) => _chats[conversation]?.journey;
 
   /// Answers one doorbell from the relay.
   Future<void> onDoorbell(JsonObject bell) async {
@@ -873,7 +873,7 @@ final class _Chat {
   _Chat(this.at, this.journey, {required this.after, required this.afterAt});
 
   final _At at;
-  final RunId journey;
+  final JourneyPathId journey;
 
   /// The newest event seen: its seq, and when it happened.
   int after;

@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:checked_json/checked_json.dart';
 import 'package:intersyntactic_protocol/intersyntactic_protocol.dart'
-    show LoggedEvent, ReplyText, RunFrame, RunId, RunList, RunSummary;
+    show JourneyPathId, LoggedEvent, ReplyText, RunFrame, RunList, RunSummary;
 import 'package:is_teams_module/is_teams_module.dart';
 import 'package:test/test.dart';
 
@@ -51,7 +51,7 @@ void main() {
       await req.response.close();
     });
     final listed = await client.list();
-    expect(listed.single.id, RunId('j1'));
+    expect(listed.single.id, JourneyPathId('j1'));
     expect(requests.single.$2, '/agent');
   });
 
@@ -60,7 +60,7 @@ void main() {
       req.response.write('{}');
       await req.response.close();
     });
-    expect(await client.say(RunId('j1'), 'hello'), isNull);
+    expect(await client.say(JourneyPathId('j1'), 'hello'), isNull);
     final (method, path, body) = requests.single;
     expect((method, path), ('POST', '/agent/j1/message'));
     expect(jsonDecode(body), {'text': 'hello'});
@@ -73,7 +73,7 @@ void main() {
         ..write('{"error":"still working"}');
       await req.response.close();
     });
-    expect(await client.say(RunId('j1'), 'hello'), 'still working');
+    expect(await client.say(JourneyPathId('j1'), 'hello'), 'still working');
   });
 
   group('events', () {
@@ -98,7 +98,7 @@ void main() {
     test("reads the journey's events, and only those", () async {
       quietAfter(LoggedEvent(3, const ReplyText('hi')));
       final first = await client
-          .events(RunId('j1'), after: 2, afterAt: at)
+          .events(JourneyPathId('j1'), after: 2, afterAt: at)
           .first;
       expect(first.seq, 3);
       expect(first.event, isA<ReplyText>());
@@ -112,7 +112,7 @@ void main() {
       quietAfter(LoggedEvent(3, const ReplyText('hi')));
       final got = Completer<void>();
       final sub = client
-          .events(RunId('j1'), after: 2, afterAt: at)
+          .events(JourneyPathId('j1'), after: 2, afterAt: at)
           .listen((_) => got.complete());
       await got.future;
       await sub.cancel().timeout(const Duration(seconds: 2));
@@ -125,7 +125,7 @@ void main() {
         final asked = Completer<void>();
         host.listen((_) => asked.complete());
         final sub = client
-            .events(RunId('j1'), after: 2, afterAt: at)
+            .events(JourneyPathId('j1'), after: 2, afterAt: at)
             .listen((_) {}, onError: (_) {});
         await asked.future;
         await sub.cancel().timeout(const Duration(seconds: 2));

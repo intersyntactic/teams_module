@@ -28,7 +28,13 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:intersyntactic_protocol/intersyntactic_protocol.dart'
-    show LoggedEvent, ReplyText, RepoChoice, RunId, RunSummary, StartRun;
+    show
+        JourneyPathId,
+        LoggedEvent,
+        ReplyText,
+        RepoChoice,
+        RunSummary,
+        StartRun;
 import 'package:is_shapes/is_shapes.dart';
 import 'package:is_teams_module/is_teams_module.dart';
 
@@ -130,14 +136,14 @@ final class _Traced implements Journeys {
   Future<List<RunSummary>> list() => _inner.list();
 
   @override
-  Future<String?> say(RunId journey, String text) async {
+  Future<String?> say(JourneyPathId journey, String text) async {
     final why = await _inner.say(journey, text);
     stderr.writeln('trace: say: ${why ?? 'taken'}');
     return why;
   }
 
   @override
-  Future<String?> stop(RunId journey) => _inner.stop(journey);
+  Future<String?> stop(JourneyPathId journey) => _inner.stop(journey);
 
   @override
   Future<List<RepoChoice>> repos() => _inner.repos();
@@ -151,7 +157,7 @@ final class _Traced implements Journeys {
 
   @override
   Stream<LoggedEvent> events(
-    RunId journey, {
+    JourneyPathId journey, {
     required int after,
     required DateTime? afterAt,
   }) {

@@ -5,6 +5,7 @@ import 'package:checked_json/checked_json.dart';
 import 'package:intersyntactic_protocol/intersyntactic_protocol.dart'
     show
         BranchName,
+        JourneyPathId,
         JourneyState,
         LandsIn,
         LoggedEvent,
@@ -17,7 +18,6 @@ import 'package:intersyntactic_protocol/intersyntactic_protocol.dart'
         RepoPath,
         RunEvent,
         StartRun,
-        RunId,
         RunSummary,
         StatusChanged,
         ThinkingText,
@@ -66,12 +66,12 @@ RunSummary journey(
 /// stream of events per reading that the test feeds by hand.
 final class FakeJourneys implements Journeys {
   final listed = <RunSummary>[];
-  final said = <(RunId, String)>[];
-  final stopped = <RunId>[];
+  final said = <(JourneyPathId, String)>[];
+  final stopped = <JourneyPathId>[];
   final streams =
       <
         ({
-          RunId journey,
+          JourneyPathId journey,
           int after,
           DateTime? afterAt,
           StreamController<LoggedEvent> events,
@@ -87,7 +87,7 @@ final class FakeJourneys implements Journeys {
   Future<List<RunSummary>> list() async => listed;
 
   @override
-  Future<String?> say(RunId journey, String text) async {
+  Future<String?> say(JourneyPathId journey, String text) async {
     if (refuse != null) return refuse;
     said.add((journey, text));
     if (echoAt case final seq?) await feed(seq, [UserSaid(text)]);
@@ -95,7 +95,7 @@ final class FakeJourneys implements Journeys {
   }
 
   @override
-  Future<String?> stop(RunId journey) async {
+  Future<String?> stop(JourneyPathId journey) async {
     stopped.add(journey);
     return null;
   }
@@ -118,7 +118,7 @@ final class FakeJourneys implements Journeys {
 
   @override
   Stream<LoggedEvent> events(
-    RunId journey, {
+    JourneyPathId journey, {
     required int after,
     required DateTime? afterAt,
   }) {
@@ -434,7 +434,7 @@ void main() {
 
     test('Open reads it from its newest event', () async {
       await opened();
-      expect(bridge.openIn(chat), RunId('j1'));
+      expect(bridge.openIn(chat), JourneyPathId('j1'));
       expect(host.streams.single.after, 6);
       expect(host.streams.single.afterAt, lastActive);
     });
@@ -512,7 +512,7 @@ void main() {
         expect(run.name?.value, 'Tidy the README and fix its');
         expect(updated.map((u) => u.$1).toSet(), {'act-0'});
         expect(cardOf(updated.last.$2), contains('Started in r2.'));
-        expect(bridge.openIn(chat), RunId('j9'));
+        expect(bridge.openIn(chat), JourneyPathId('j9'));
         expect(host.streams.single.after, 0);
         expect(host.streams.single.afterAt, isNull);
       },
@@ -570,7 +570,7 @@ void main() {
     test('a message is said into the journey open', () async {
       await opened();
       await bridge.onDoorbell(message('add a test'));
-      expect(host.said.single, (RunId('j1'), 'add a test'));
+      expect(host.said.single, (JourneyPathId('j1'), 'add a test'));
     });
 
     test("the host's refusal is passed on", () async {
@@ -583,7 +583,7 @@ void main() {
     test('"stop" stops it', () async {
       await opened();
       await bridge.onDoorbell(message('stop'));
-      expect(host.stopped.single, RunId('j1'));
+      expect(host.stopped.single, JourneyPathId('j1'));
     });
   });
 
