@@ -1,50 +1,17 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:checked_json/checked_json.dart';
 import 'package:is_teams_module/is_teams_module.dart';
-import 'package:pointycastle/api.dart';
-import 'package:pointycastle/asymmetric/api.dart';
-import 'package:pointycastle/digests/sha256.dart';
-import 'package:pointycastle/key_generators/api.dart';
-import 'package:pointycastle/key_generators/rsa_key_generator.dart';
-import 'package:pointycastle/random/fortuna_random.dart';
-import 'package:pointycastle/signers/rsa_signer.dart';
 import 'package:test/test.dart';
 
-const appId = '00000000-0000-0000-0000-00000000b07a';
-const tenant = 'tenant-peter';
-const serviceUrl = 'https://smba.trafficmanager.net/amer/';
-final now = DateTime.utc(2026, 11, 6, 10);
-final nowSeconds = now.millisecondsSinceEpoch ~/ 1000;
-
-late RSAPrivateKey teamsKey; // kid k1, endorsed for msteams
-late RSAPrivateKey otherKey; // kid k2, endorsed for another channel only
-late BotFrameworkKeys keys;
+import 'support/fixtures.dart';
 
 void main() {
-  setUpAll(() {
-    final k1 = _keyPair(1);
-    final k2 = _keyPair(2);
-    teamsKey = k1.privateKey;
-    otherKey = k2.privateKey;
-    // Through JSON and back, as the set arrives from Microsoft.
-    keys = BotFrameworkKeys.parse(
-      JsonObject.decode(
-        jsonEncode({
-          'keys': [
-            _jwk('k1', k1.publicKey, ['msteams', 'skype']),
-            _jwk('k2', k2.publicKey, ['skype']),
-            {'kty': 'EC', 'kid': 'ec1', 'crv': 'P-256', 'x': 'AA', 'y': 'AA'},
-          ],
-        }),
-      ),
-    );
-  });
+  setUpAll(setUpKeys);
 
   group('takes', () {
     test('a message in a one-to-one chat, with its text', () {
-      final d = _gate(_message());
+      final d = _gate(message());
       expect(d.outcome, TeamsGateOutcome.trigger);
       expect(d.status, 200);
       expect(d.invokeResponse, isNull);
@@ -65,7 +32,7 @@ void main() {
     });
 
     test('a card action, answered with the acknowledgement', () {
-      final d = _gate(_cardAction());
+      final d = _gate(cardAction());
       expect(d.outcome, TeamsGateOutcome.trigger);
       expect(d.invokeResponse!.asUncheckedMap(), {
         'statusCode': 200,
@@ -80,38 +47,44 @@ void main() {
     });
 
     test('an audience given as a list', () {
-      final t = _token(
+      final t = signedToken(
         claims: {
-          ..._claims(),
+          ...tokenClaims(),
           'aud': ['someone', appId],
         },
       );
-      expect(_gate(_message(), token: t).outcome, TeamsGateOutcome.trigger);
+      expect(_gate(message(), token: t).outcome, TeamsGateOutcome.trigger);
     });
 
     test('the claim spelled serviceUrl, as the docs spell it', () {
-      final claims = _claims()
+      final claims = tokenClaims()
         ..remove('serviceurl')
         ..['serviceUrl'] = serviceUrl;
-      final t = _token(claims: claims);
-      expect(_gate(_message(), token: t).outcome, TeamsGateOutcome.trigger);
+      final t = signedToken(claims: claims);
+      expect(_gate(message(), token: t).outcome, TeamsGateOutcome.trigger);
     });
 
     test('a key named by x5t alone', () {
-      final t = _token(header: {'typ': 'JWT', 'alg': 'RS256', 'x5t': 'k1'});
-      expect(_gate(_message(), token: t).outcome, TeamsGateOutcome.trigger);
+      final t = signedToken(
+        header: {'typ': 'JWT', 'alg': 'RS256', 'x5t': 'k1'},
+      );
+      expect(_gate(message(), token: t).outcome, TeamsGateOutcome.trigger);
     });
 
     test('a token inside the clock skew at either end', () {
-      final late_ = _token(claims: {..._claims(), 'exp': nowSeconds - 240});
-      final early = _token(claims: {..._claims(), 'nbf': nowSeconds + 240});
-      expect(_gate(_message(), token: late_).outcome, TeamsGateOutcome.trigger);
-      expect(_gate(_message(), token: early).outcome, TeamsGateOutcome.trigger);
+      final late_ = signedToken(
+        claims: {...tokenClaims(), 'exp': nowSeconds - 240},
+      );
+      final early = signedToken(
+        claims: {...tokenClaims(), 'nbf': nowSeconds + 240},
+      );
+      expect(_gate(message(), token: late_).outcome, TeamsGateOutcome.trigger);
+      expect(_gate(message(), token: early).outcome, TeamsGateOutcome.trigger);
     });
 
     test('an install, which carries what messaging first needs', () {
       final d = _gate(
-        {..._message(), 'type': 'installationUpdate', 'action': 'add'}
+        {...message(), 'type': 'installationUpdate', 'action': 'add'}
           ..remove('text'),
       );
       expect(d.outcome, TeamsGateOutcome.trigger);
@@ -133,7 +106,7 @@ void main() {
         {'type': 'quotedReply', 'messageId': '1730881000000'},
       ];
       final d = _gate({
-        ..._message(
+        ...message(
           text: '<quoted messageId="1730881000000"/> <at>Hart</at> not quite',
         ),
         'entities': entities,
@@ -143,10 +116,22 @@ void main() {
       expect(d.doorbell!.string('text'), startsWith('<quoted messageId='));
     });
 
+    test('a tenant in upper case, matched and passed on in lower', () {
+      final upper = tenant.toUpperCase();
+      final d = _gate({
+        ...message(),
+        'channelData': {
+          'tenant': {'id': upper},
+        },
+      }, spec: TeamsSourceSpec(appId: appId, tenantAllowlist: {upper}));
+      expect(d.outcome, TeamsGateOutcome.trigger);
+      expect(d.doorbell!.string('tenant'), tenant);
+    });
+
     test('a conversation update, with who joined', () {
       final d = _gate(
         {
-          ..._message(),
+          ...message(),
           'type': 'conversationUpdate',
           'membersAdded': [
             {'id': '28:$appId'},
@@ -160,7 +145,7 @@ void main() {
 
   group('ignores', () {
     test('a quiet activity type, but still marks it seen', () {
-      final d = _gate({..._message(), 'type': 'typing'}..remove('text'));
+      final d = _gate({...message(), 'type': 'typing'}..remove('text'));
       expect(d.outcome, TeamsGateOutcome.ignore);
       expect(d.status, 200);
       expect(d.doorbell, isNull);
@@ -168,31 +153,31 @@ void main() {
     });
 
     test('an invoke it was not built for, with no answer to give', () {
-      final d = _gate({..._cardAction(), 'name': 'composeExtension/query'});
+      final d = _gate({...cardAction(), 'name': 'composeExtension/query'});
       expect(d.outcome, TeamsGateOutcome.ignore);
       expect(d.invokeResponse, isNull);
     });
 
     test('an activity already seen', () {
       final seen = <String>{};
-      final first = _gate(_message(), hasSeen: seen.contains);
+      final first = _gate(message(), hasSeen: seen.contains);
       seen.add(first.seenKey!);
-      final again = _gate(_message(), hasSeen: seen.contains);
+      final again = _gate(message(), hasSeen: seen.contains);
       expect(again.outcome, TeamsGateOutcome.ignore);
       expect(again.doorbell, isNull);
     });
 
     test('a card action re-sent, still answered as the first was', () {
-      final seen = {_gate(_cardAction()).seenKey!};
-      final again = _gate(_cardAction(), hasSeen: seen.contains);
+      final seen = {_gate(cardAction()).seenKey!};
+      final again = _gate(cardAction(), hasSeen: seen.contains);
       expect(again.outcome, TeamsGateOutcome.ignore);
       expect(again.invokeResponse!.string('value'), 'Got it');
     });
 
     test('the same activity id in another conversation is not a repeat', () {
-      final seen = {_gate(_message()).seenKey!};
+      final seen = {_gate(message()).seenKey!};
       final elsewhere = {
-        ..._message(),
+        ...message(),
         'conversation': {'id': '19:group@thread.v2', 'tenantId': tenant},
       };
       expect(
@@ -215,7 +200,7 @@ void main() {
 
     test('when no app id is configured', () {
       refused(
-        _gate(_message(), spec: const TeamsSourceSpec(appId: '')),
+        _gate(message(), spec: const TeamsSourceSpec(appId: '')),
         401,
         contains('app id'),
       );
@@ -225,8 +210,8 @@ void main() {
       final d = teamsGate(
         spec: const TeamsSourceSpec(appId: appId),
         keys: keys,
-        headers: {'Authorization': 'Bearer ${_token()}'},
-        body: utf8.encode(jsonEncode(_message())),
+        headers: {'Authorization': 'Bearer ${signedToken()}'},
+        body: utf8.encode(jsonEncode(message())),
         now: now,
         maxBodyBytes: 10,
       );
@@ -234,117 +219,124 @@ void main() {
     });
 
     test('a request with no bearer token', () {
-      refused(_gate(_message(), headers: {}), 401, contains('bearer'));
+      refused(_gate(message(), headers: {}), 401, contains('bearer'));
       refused(
-        _gate(_message(), headers: {'Authorization': 'Basic abc'}),
+        _gate(message(), headers: {'Authorization': 'Basic abc'}),
         401,
         contains('bearer'),
       );
     });
 
     test('a token that is not three parts', () {
-      refused(_gate(_message(), token: 'a.b'), 401, contains('three parts'));
+      refused(_gate(message(), token: 'a.b'), 401, contains('three parts'));
     });
 
     test('an unsigned token that says alg none', () {
-      String seg(Object o) => _b64(utf8.encode(jsonEncode(o)));
-      final t = '${seg({'alg': 'none', 'kid': 'k1'})}.${seg(_claims())}.';
-      refused(_gate(_message(), token: t), 401, contains('alg none'));
+      String seg(Object o) => b64(utf8.encode(jsonEncode(o)));
+      final t = '${seg({'alg': 'none', 'kid': 'k1'})}.${seg(tokenClaims())}.';
+      refused(_gate(message(), token: t), 401, contains('alg none'));
     });
 
     test('a token that names an HMAC algorithm', () {
-      final t = _token(header: {'alg': 'HS256', 'kid': 'k1'});
-      refused(_gate(_message(), token: t), 401, contains('HS256'));
+      final t = signedToken(header: {'alg': 'HS256', 'kid': 'k1'});
+      refused(_gate(message(), token: t), 401, contains('HS256'));
     });
 
     test('a token from a key not in the set', () {
-      final t = _token(header: {'alg': 'RS256', 'kid': 'rotated-out'});
-      refused(_gate(_message(), token: t), 401, contains('not in the key set'));
+      final t = signedToken(header: {'alg': 'RS256', 'kid': 'rotated-out'});
+      refused(_gate(message(), token: t), 401, contains('not in the key set'));
     });
 
     test('claims changed after signing', () {
-      final [h, _, s] = _token().split('.');
-      final forged = _b64(
-        utf8.encode(jsonEncode({..._claims(), 'aud': 'another-bot'})),
+      final [h, _, s] = signedToken().split('.');
+      final forged = b64(
+        utf8.encode(jsonEncode({...tokenClaims(), 'aud': 'another-bot'})),
       );
       refused(
-        _gate(_message(), token: '$h.$forged.$s'),
+        _gate(message(), token: '$h.$forged.$s'),
         401,
         contains('bad signature'),
       );
     });
 
     test('a signature the wrong length for its key', () {
-      final [h, c, _] = _token().split('.');
+      final [h, c, _] = signedToken().split('.');
       refused(
-        _gate(_message(), token: '$h.$c.${_b64([1, 2, 3])}'),
+        _gate(message(), token: '$h.$c.${b64([1, 2, 3])}'),
         401,
         contains('wrong length'),
       );
     });
 
     test('a token from another issuer', () {
-      final t = _token(
-        claims: {..._claims(), 'iss': 'https://sts.windows.net/x/'},
+      final t = signedToken(
+        claims: {...tokenClaims(), 'iss': 'https://sts.windows.net/x/'},
       );
-      refused(_gate(_message(), token: t), 401, contains('issuer'));
+      refused(_gate(message(), token: t), 401, contains('issuer'));
     });
 
     test('a token for another bot', () {
-      final t = _token(claims: {..._claims(), 'aud': 'another-bot'});
-      refused(_gate(_message(), token: t), 401, contains('audience'));
+      final t = signedToken(claims: {...tokenClaims(), 'aud': 'another-bot'});
+      refused(_gate(message(), token: t), 401, contains('audience'));
     });
 
     test('a token past its expiry and the skew', () {
-      final t = _token(claims: {..._claims(), 'exp': nowSeconds - 301});
-      refused(_gate(_message(), token: t), 401, contains('expired'));
+      final t = signedToken(
+        claims: {...tokenClaims(), 'exp': nowSeconds - 301},
+      );
+      refused(_gate(message(), token: t), 401, contains('expired'));
     });
 
     test('a token not yet valid, beyond the skew', () {
-      final t = _token(claims: {..._claims(), 'nbf': nowSeconds + 301});
-      refused(_gate(_message(), token: t), 401, contains('not valid'));
+      final t = signedToken(
+        claims: {...tokenClaims(), 'nbf': nowSeconds + 301},
+      );
+      refused(_gate(message(), token: t), 401, contains('not valid'));
     });
 
     test('a token with no expiry', () {
-      final t = _token(claims: _claims()..remove('exp'));
-      refused(_gate(_message(), token: t), 401, contains('no expiry'));
+      final t = signedToken(claims: tokenClaims()..remove('exp'));
+      refused(_gate(message(), token: t), 401, contains('no expiry'));
     });
 
     test('a token with no serviceurl claim', () {
-      final t = _token(claims: _claims()..remove('serviceurl'));
-      refused(_gate(_message(), token: t), 401, contains('no serviceurl'));
+      final t = signedToken(claims: tokenClaims()..remove('serviceurl'));
+      refused(_gate(message(), token: t), 401, contains('no serviceurl'));
     });
 
     test('a serviceurl claim that is not the activity\'s', () {
-      final t = _token(
-        claims: {..._claims(), 'serviceurl': 'https://elsewhere.example/'},
+      final t = signedToken(
+        claims: {...tokenClaims(), 'serviceurl': 'https://elsewhere.example/'},
       );
-      refused(_gate(_message(), token: t), 401, contains('does not match'));
+      refused(_gate(message(), token: t), 401, contains('does not match'));
     });
 
     test('an activity from another channel', () {
       refused(
-        _gate({..._message(), 'channelId': 'slack'}),
+        _gate({...message(), 'channelId': 'slack'}),
         403,
         contains('not msteams'),
       );
     });
 
     test('a Teams activity signed by a key not endorsed for Teams', () {
-      final t = _token(key: otherKey, header: {'alg': 'RS256', 'kid': 'k2'});
-      refused(_gate(_message(), token: t), 403, contains('not endorsed'));
+      final t = signedToken(
+        key: otherKey,
+        header: {'alg': 'RS256', 'kid': 'k2'},
+      );
+      refused(_gate(message(), token: t), 403, contains('not endorsed'));
     });
 
     test('a tenant not on the allowlist, or no tenant at all', () {
       final other = {
-        ..._message(),
+        ...message(),
         'channelData': {
           'tenant': {'id': 'someone-else'},
         },
       };
       refused(_gate(other), 403, contains('someone-else'));
       final none = {
-        ..._message(),
+        ...message(),
         'conversation': {'id': 'a:1personal'},
       }..remove('channelData');
       refused(_gate(none), 403, contains('not allowed'));
@@ -352,7 +344,7 @@ void main() {
 
     test('a body that is not a JSON object', () {
       refused(
-        _gate(_message(), body: utf8.encode('[1]')),
+        _gate(message(), body: utf8.encode('[1]')),
         400,
         contains('JSON'),
       );
@@ -360,7 +352,7 @@ void main() {
 
     test('an activity missing what every activity has', () {
       refused(
-        _gate(_message()..remove('conversation')),
+        _gate(message()..remove('conversation')),
         400,
         contains('conversation'),
       );
@@ -372,7 +364,7 @@ void main() {
     // The token is valid; the body is not the one Microsoft sent with it.
     // Nothing the gate can check catches that, because no documented check
     // of the token covers the body (see the library comment, point 2).
-    final d = _gate(_message(text: 'words Peter never typed'));
+    final d = _gate(message(text: 'words Peter never typed'));
     expect(d.outcome, TeamsGateOutcome.trigger);
     expect(d.doorbell!.string('text'), 'words Peter never typed');
   });
@@ -413,107 +405,8 @@ TeamsGateDecision _gate(
 }) => teamsGate(
   spec: spec,
   keys: keys,
-  headers: headers ?? {'Authorization': 'Bearer ${token ?? _token()}'},
+  headers: headers ?? {'Authorization': 'Bearer ${token ?? signedToken()}'},
   body: body ?? utf8.encode(jsonEncode(activity)),
   now: now,
   hasSeen: hasSeen,
 );
-
-Map<String, Object?> _message({
-  String id = '1730881234567',
-  String text = 'Looks right to me',
-}) => {
-  'type': 'message',
-  'id': id,
-  'channelId': 'msteams',
-  'serviceUrl': serviceUrl,
-  'timestamp': '2026-11-06T10:00:00.000Z',
-  'from': {'id': '29:1peter', 'aadObjectId': 'oid-peter', 'name': 'Peter'},
-  'recipient': {'id': '28:$appId', 'name': 'Hart'},
-  'conversation': {
-    'id': 'a:1personal',
-    'conversationType': 'personal',
-    'tenantId': tenant,
-  },
-  'channelData': {
-    'tenant': {'id': tenant},
-  },
-  'text': text,
-};
-
-Map<String, Object?> _cardAction() => {
-  ..._message(id: 'f:9001'),
-  'type': 'invoke',
-  'name': 'adaptiveCard/action',
-  'replyToId': '1730881000000',
-  'value': {
-    'action': {
-      'type': 'Action.Execute',
-      'verb': 'approve',
-      'data': {'node': 'rung-3'},
-    },
-    'trigger': 'manual',
-  },
-}..remove('text');
-
-Map<String, Object?> _claims() => {
-  'iss': botFrameworkIssuer,
-  'aud': appId,
-  'serviceurl': serviceUrl,
-  'nbf': nowSeconds - 60,
-  'exp': nowSeconds + 3600,
-};
-
-/// A token signed as the Bot Connector signs one: RS256 over
-/// `base64url(header).base64url(claims)`.
-String _token({
-  RSAPrivateKey? key,
-  Map<String, Object?> header = const {
-    'typ': 'JWT',
-    'alg': 'RS256',
-    'kid': 'k1',
-    'x5t': 'k1',
-  },
-  Map<String, Object?>? claims,
-}) {
-  final h = _b64(utf8.encode(jsonEncode(header)));
-  final c = _b64(utf8.encode(jsonEncode(claims ?? _claims())));
-  final signer = RSASigner(SHA256Digest(), '0609608648016503040201')
-    ..init(true, PrivateKeyParameter<RSAPrivateKey>(key ?? teamsKey));
-  final signature = signer.generateSignature(utf8.encode('$h.$c'));
-  return '$h.$c.${_b64(signature.bytes)}';
-}
-
-/// A 2048-bit key, seeded so every run makes the same one.
-AsymmetricKeyPair<RSAPublicKey, RSAPrivateKey> _keyPair(int seed) {
-  final random = FortunaRandom()
-    ..seed(KeyParameter(Uint8List.fromList(List.generate(32, (i) => seed))));
-  final generator = RSAKeyGenerator()
-    ..init(
-      ParametersWithRandom(
-        RSAKeyGeneratorParameters(BigInt.from(65537), 2048, 64),
-        random,
-      ),
-    );
-  return generator.generateKeyPair();
-}
-
-Map<String, Object?> _jwk(String kid, RSAPublicKey k, List<String> endorse) => {
-  'kty': 'RSA',
-  'use': 'sig',
-  'kid': kid,
-  'n': _b64(_unsigned(k.modulus!)),
-  'e': _b64(_unsigned(k.exponent!)),
-  'endorsements': endorse,
-};
-
-String _b64(List<int> bytes) => base64Url.encode(bytes).replaceAll('=', '');
-
-Uint8List _unsigned(BigInt n) {
-  final hex = n.toRadixString(16);
-  final even = hex.length.isOdd ? '0$hex' : hex;
-  return Uint8List.fromList([
-    for (var i = 0; i < even.length; i += 2)
-      int.parse(even.substring(i, i + 2), radix: 16),
-  ]);
-}
