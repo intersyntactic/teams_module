@@ -8,6 +8,9 @@ import 'package:intersyntactic_protocol/intersyntactic_protocol.dart'
         AgentRoute,
         ListRunsRoute,
         LoggedEvent,
+        RepoChoice,
+        RepoList,
+        ReposRoute,
         RunFrame,
         RunId,
         RunList,
@@ -16,7 +19,9 @@ import 'package:intersyntactic_protocol/intersyntactic_protocol.dart'
         RunStreamEvent,
         RunStreamRoute,
         RunSummary,
-        SendMessage;
+        SendMessage,
+        StartRun,
+        StartRunRoute;
 
 import 'bot_connector.dart' show HttpCall, HttpResult, httpCall;
 
@@ -35,6 +40,12 @@ abstract interface class Journeys {
   /// Stops the turn [journey] is running. Null when stopped, else the host's
   /// reason.
   Future<String?> stop(RunId journey);
+
+  /// The repos a journey can start in, the most recently used first.
+  Future<List<RepoChoice>> repos();
+
+  /// Starts a journey: the new one, or the host's reason it did not.
+  Future<({RunSummary? started, String? why})> start(StartRun run);
 
   /// Every event of [journey] after the one at seq [after], which happened
   /// [afterAt], then each as it happens. It ends when the connection does.
@@ -82,6 +93,21 @@ final class AgentHostClient implements Journeys {
   Future<String?> stop(RunId journey) async {
     final r = await _send(RunStopRoute(journey));
     return r.status == 200 ? null : _reason(r.body);
+  }
+
+  @override
+  Future<List<RepoChoice>> repos() async {
+    final r = await _send(const ReposRoute());
+    if (r.status != 200) throw HttpException('repos: ${r.status} ${r.body}');
+    return RepoList.fromJson(JsonObject.decode(r.body)).repos;
+  }
+
+  @override
+  Future<({RunSummary? started, String? why})> start(StartRun run) async {
+    final r = await _send(const StartRunRoute(), run.toJson());
+    return r.status == 200
+        ? (started: RunSummary.fromJson(JsonObject.decode(r.body)), why: null)
+        : (started: null, why: _reason(r.body));
   }
 
   /// Cancelling closes the connection at once. A generator here (`async*`)

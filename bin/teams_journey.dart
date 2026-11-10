@@ -15,6 +15,9 @@
 ///                           one the app is connected to, which sends it
 ///                           the model credentials it uses
 ///   PORT=8087, HOST=127.0.0.1 as for the relay
+///   TRACE=1                 also logs each event the host sends (but its
+///                           deltas) and each post to a stream, with what
+///                           Teams answered
 ///
 ///   env-run ENS_TEAMS_APP_ID:TEAMS_APP_ID \
 ///     ENS_TEAMS_APP_SECRET:TEAMS_APP_SECRET \
@@ -24,6 +27,8 @@ library;
 import 'dart:async';
 import 'dart:io';
 
+import 'package:intersyntactic_protocol/intersyntactic_protocol.dart'
+    show LoggedEvent, ReplyText, RepoChoice, RunId, RunSummary, StartRun;
 import 'package:is_shapes/is_shapes.dart';
 import 'package:is_teams_module/is_teams_module.dart';
 
@@ -70,11 +75,13 @@ Future<void> main() async {
   );
   if (await keys.keys() == null) stderr.writeln('warning: no keys yet');
 
+  final trace = env['TRACE'] == '1';
+  final Journeys journeys = AgentHostClient(host);
   final bridge = JourneyBridge(
-    journeys: AgentHostClient(host),
+    journeys: trace ? _Traced(journeys) : journeys,
     owner: owner,
     send: connector.send,
-    post: connector.post,
+    post: trace ? _tracedPost(connector.post) : connector.post,
     update: connector.update,
     log: stderr.writeln,
   );
@@ -90,5 +97,80 @@ Future<void> main() async {
   );
   await for (final req in server) {
     unawaited(relay.handle(req));
+  }
+}
+
+/// [post], logging what each post to a stream was and what Teams answered.
+Future<String?> Function(Uri, String, Map<String, Object?>) _tracedPost(
+  Future<String?> Function(Uri, String, Map<String, Object?>) post,
+) => (url, conversation, activity) async {
+  final info = (activity['entities'] as List<Object?>?)?.firstOrNull;
+  final text = '${activity['text'] ?? ''}'.replaceAll('\n', ' ');
+  final what =
+      '${activity['type']} to ${activity['replyToId']} $info '
+      '"${text.length > 60 ? '${text.substring(0, 60)}…' : text}"';
+  try {
+    final id = await post(url, conversation, activity);
+    stderr.writeln('trace: post $what: $id');
+    return id;
+  } catch (e) {
+    stderr.writeln('trace: post $what: $e');
+    rethrow;
+  }
+};
+
+/// [Journeys], logging each connection to a journey's events and each event
+/// but the reply's deltas.
+final class _Traced implements Journeys {
+  _Traced(this._inner);
+
+  final Journeys _inner;
+
+  @override
+  Future<List<RunSummary>> list() => _inner.list();
+
+  @override
+  Future<String?> say(RunId journey, String text) async {
+    final why = await _inner.say(journey, text);
+    stderr.writeln('trace: say: ${why ?? 'taken'}');
+    return why;
+  }
+
+  @override
+  Future<String?> stop(RunId journey) => _inner.stop(journey);
+
+  @override
+  Future<List<RepoChoice>> repos() => _inner.repos();
+
+  @override
+  Future<({RunSummary? started, String? why})> start(StartRun run) async {
+    final r = await _inner.start(run);
+    stderr.writeln('trace: start: ${r.started?.id.value ?? r.why}');
+    return r;
+  }
+
+  @override
+  Stream<LoggedEvent> events(
+    RunId journey, {
+    required int after,
+    required DateTime? afterAt,
+  }) {
+    stderr.writeln('trace: events of ${journey.value} after $after ($afterAt)');
+    return _inner
+        .events(journey, after: after, afterAt: afterAt)
+        .map((e) {
+          if (e.event is! ReplyText) {
+            stderr.writeln('trace: event ${e.seq} ${e.event.runtimeType}');
+          }
+          return e;
+        })
+        // Logged, and not handled: the error goes on to the bridge.
+        .handleError(
+          (_) {},
+          test: (e) {
+            stderr.writeln('trace: events: $e');
+            return false;
+          },
+        );
   }
 }

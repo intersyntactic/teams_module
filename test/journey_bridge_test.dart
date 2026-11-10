@@ -11,8 +11,12 @@ import 'package:intersyntactic_protocol/intersyntactic_protocol.dart'
         MergeAnswered,
         MergeAsked,
         MergeMethod,
+        Provider,
         ReplyText,
+        RepoChoice,
+        RepoPath,
         RunEvent,
+        StartRun,
         RunId,
         RunSummary,
         StatusChanged,
@@ -39,11 +43,13 @@ RunSummary journey(
   String? name,
   bool awaiting = false,
   DateTime? lastActiveAt,
+  String provider = 'anthropic',
+  String model = 'claude-opus-5-5',
 }) => RunSummary.fromJson(
   JsonObject.of({
     'id': id,
-    'provider': 'anthropic',
-    'model': 'claude-opus-5-5',
+    'provider': provider,
+    'model': model,
     'state': state.name,
     'events': events,
     'task': 'Task of $id\nmore lines',
@@ -73,6 +79,10 @@ final class FakeJourneys implements Journeys {
       >[];
   String? refuse;
 
+  /// Echoes what is said, numbered [echoAt], before answering, as the live
+  /// host does when its event stream wins the race with its answer.
+  int? echoAt;
+
   @override
   Future<List<RunSummary>> list() async => listed;
 
@@ -80,6 +90,7 @@ final class FakeJourneys implements Journeys {
   Future<String?> say(RunId journey, String text) async {
     if (refuse != null) return refuse;
     said.add((journey, text));
+    if (echoAt case final seq?) await feed(seq, [UserSaid(text)]);
     return null;
   }
 
@@ -87,6 +98,22 @@ final class FakeJourneys implements Journeys {
   Future<String?> stop(RunId journey) async {
     stopped.add(journey);
     return null;
+  }
+
+  final repoChoices = <RepoChoice>[];
+  final starts = <StartRun>[];
+
+  /// The journey a start makes, or with [refuse] set, none.
+  RunSummary? starting;
+
+  @override
+  Future<List<RepoChoice>> repos() async => repoChoices;
+
+  @override
+  Future<({RunSummary? started, String? why})> start(StartRun run) async {
+    starts.add(run);
+    if (refuse != null) return (started: null, why: refuse);
+    return (started: starting, why: null);
   }
 
   @override
@@ -323,6 +350,7 @@ void main() {
     String verb, {
     String card = 'card',
     String? journey,
+    String? repo,
     String user = nick,
   }) => JsonObject.of({
     'event': 'teams_card_action',
@@ -334,7 +362,7 @@ void main() {
     'value': {
       'action': {
         'verb': verb,
-        'data': {'journey': ?journey},
+        'data': {'journey': ?journey, 'repo': ?repo},
       },
     },
   });
@@ -405,6 +433,116 @@ void main() {
       await bridge.onDoorbell(message('hello'));
       expect(textOf(sent.single), contains('journeys'));
       expect(host.said, isEmpty);
+    });
+  });
+
+  group('starting a journey', () {
+    const task = 'Tidy the README and fix its broken links please';
+
+    RepoChoice repo(String name) => RepoChoice.fromJson(
+      JsonObject.of({
+        'path': '/src/$name',
+        'name': name,
+        'last_used': '2026-11-10T00:00:00Z',
+        'self': false,
+      }),
+    );
+
+    /// The owner asks for a journey with [task] in message `msg-1`, from
+    /// eight repos, and is offered the card `act-0`.
+    Future<void> offered() async {
+      host.repoChoices.addAll([for (var i = 0; i < 8; i++) repo('r$i')]);
+      await bridge.onDoorbell(message('new $task'));
+    }
+
+    test('"new" offers the repos used most recently', () async {
+      await offered();
+      final card = cardOf(sent.single);
+      expect(card, contains(task));
+      for (var i = 0; i < 6; i++) {
+        expect(card, contains('"repo":"/src/r$i"'));
+      }
+      expect(card, isNot(contains('/src/r6')));
+      expect(host.starts, isEmpty);
+    });
+
+    test('"new" alone says how', () async {
+      await bridge.onDoorbell(message('new'));
+      expect(textOf(sent.single), contains('new tidy the README'));
+      expect(host.repoChoices, isEmpty);
+    });
+
+    test(
+      'a press starts it there as the newest journey did, and opens it',
+      () async {
+        host.listed.addAll([
+          journey('older', lastActiveAt: DateTime.utc(2026, 11, 1)),
+          journey(
+            'newest',
+            provider: 'chatgpt',
+            model: 'gpt-6.1-sol',
+            lastActiveAt: DateTime.utc(2026, 11, 9),
+          ),
+        ]);
+        host.starting = journey('j9', events: 1);
+        await offered();
+        await bridge.onDoorbell(press('start', card: 'act-0', repo: '/src/r2'));
+        final run = host.starts.single;
+        expect(run.task, task);
+        expect(run.root, const RepoPath('/src/r2'));
+        expect(run.provider, const Provider('chatgpt'));
+        expect(run.model?.value, 'gpt-6.1-sol');
+        expect(run.name?.value, 'Tidy the README and fix its');
+        expect(updated.map((u) => u.$1).toSet(), {'act-0'});
+        expect(cardOf(updated.last.$2), contains('Started in r2.'));
+        expect(bridge.openIn(chat), RunId('j9'));
+        expect(host.streams.single.after, 0);
+        expect(host.streams.single.afterAt, isNull);
+      },
+    );
+
+    test(
+      'its first turn streams under the message that asked for it',
+      () async {
+        host.starting = journey('j9', events: 1);
+        await offered();
+        await bridge.onDoorbell(press('start', card: 'act-0', repo: '/src/r0'));
+        await host.feed(1, [
+          const UserSaid(task),
+          const ReplyText('On it.'),
+          const StatusChanged(JourneyState.idle),
+        ]);
+        expect(teams.shown, {
+          'stream-0': ['Working…'],
+        });
+        expect(teams.finals, {'stream-0': 'On it.'});
+        expect(teams.posted.map((a) => a['replyToId']).toSet(), {'msg-1'});
+      },
+    );
+
+    test('a start the host refuses says why on its card', () async {
+      await offered();
+      host.refuse = 'no credential for anthropic';
+      await bridge.onDoorbell(press('start', card: 'act-0', repo: '/src/r0'));
+      expect(cardOf(updated.last.$2), contains('no credential for anthropic'));
+      expect(bridge.openIn(chat), isNull);
+    });
+
+    test('an offer starts once', () async {
+      host.starting = journey('j9', events: 1);
+      await offered();
+      await bridge.onDoorbell(press('start', card: 'act-0', repo: '/src/r0'));
+      await bridge.onDoorbell(press('start', card: 'act-0', repo: '/src/r1'));
+      expect(host.starts.single.root, const RepoPath('/src/r0'));
+      expect(textOf(sent.last), contains('That start has gone'));
+    });
+
+    test('a card older than the newest offer starts nothing', () async {
+      host.starting = journey('j9', events: 1);
+      await offered();
+      await bridge.onDoorbell(press('start', card: 'old', repo: '/src/r0'));
+      expect(host.starts, isEmpty);
+      expect(textOf(sent.last), contains('That start has gone'));
     });
   });
 
@@ -668,6 +806,18 @@ void main() {
       await host.feed(7, [const ThinkingText('still on the last one')]);
       expect(teams.shown, isEmpty);
       expect(teams.dots, 1);
+    });
+
+    test('an echo that comes before the host answers shows in it', () async {
+      await opened();
+      host.echoAt = 7;
+      await bridge.onDoorbell(message('go'));
+      await host.feed(8, [const ReplyText('Hi.'), idle]);
+      expect(teams.shown, {
+        'stream-0': ['Working…'],
+      });
+      expect(teams.finals, {'stream-0': 'Hi.'});
+      expect(teams.dots, 0);
     });
 
     test('a second message never takes the place of one started', () async {

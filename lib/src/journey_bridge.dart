@@ -4,15 +4,19 @@ import 'dart:convert';
 import 'package:checked_json/checked_json.dart';
 import 'package:intersyntactic_protocol/intersyntactic_protocol.dart'
     show
+        JourneyName,
         JourneyState,
         LoggedEvent,
         MemoryAnswered,
         MemoryAsked,
         MergeAnswered,
         MergeAsked,
+        Provider,
         ReplyText,
+        RepoPath,
         RunId,
         RunSummary,
+        StartRun,
         StatusChanged,
         ThinkingText,
         ToolAnswered,
@@ -108,6 +112,10 @@ final class JourneyBridge {
 
   final _chats = <String, _Chat>{};
 
+  /// A journey offered to start, by conversation: its task, the owner's
+  /// message that asked for it, and the card of repos to start it in.
+  final _starts = <String, ({String task, String asked, String card})>{};
+
   /// The journey open in [conversation], or null.
   RunId? openIn(String conversation) => _chats[conversation]?.journey;
 
@@ -146,6 +154,7 @@ final class JourneyBridge {
         card: bell.stringOrNull('reply_to'),
         verb: action?.stringOrNull('verb'),
         journey: action?.objectOrNull('data')?.stringOrNull('journey'),
+        repo: action?.objectOrNull('data')?.stringOrNull('repo'),
       );
     }
   }
@@ -155,6 +164,10 @@ final class JourneyBridge {
     switch (text.toLowerCase()) {
       case 'journeys':
         await _offer(at);
+      case 'new':
+        await _say(at, 'Say "new" and what it is for: new tidy the README.');
+      case final t when t.startsWith('new '):
+        await _offerStart(at, text.substring(4).trim(), asked: activity);
       case 'stop' when chat != null:
         final why = await journeys.stop(chat.journey);
         await _say(at, why == null ? 'Stopped.' : 'Not stopped: $why');
@@ -162,14 +175,17 @@ final class JourneyBridge {
         await _say(at, 'Say "journeys" to open one.');
       case _:
         chat.said.add(text);
+        // Before it is said: the host can send its echo, which shows in
+        // this stream, before it answers. Never in place of a stream that
+        // has started: Teams keeps one open in a conversation, and it would
+        // be left without an end.
+        final stream = chat.stream?.id == null ? _Stream(activity) : null;
+        if (stream != null) chat.stream = stream;
         final why = await journeys.say(chat.journey, text);
         if (why != null) {
           chat.said.remove(text);
+          if (stream != null && chat.stream == stream) chat.stream = null;
           await _say(at, 'Not sent: $why');
-        } else if (chat.stream?.id == null) {
-          // Never in place of a stream that has started: Teams keeps one
-          // open in a conversation, and it would be left without an end.
-          chat.stream = _Stream(activity);
         }
     }
   }
@@ -179,9 +195,19 @@ final class JourneyBridge {
     required String? card,
     required String? verb,
     required String? journey,
+    String? repo,
   }) async {
     final chat = _chats[at.conversation];
     switch (verb) {
+      case 'start' when repo != null:
+        final offer = _starts[at.conversation];
+        // Only on the newest offer: each start is pressed once.
+        if (offer == null || offer.card != card) {
+          await _say(at, 'That start has gone: say "new" and the task again.');
+          return;
+        }
+        _starts.remove(at.conversation);
+        await _start(at, offer, RepoPath(repo));
       case 'open' when journey != null:
         final active = await _active();
         final j = active.where((j) => j.id.value == journey).firstOrNull;
@@ -248,6 +274,90 @@ final class JourneyBridge {
       ],
     });
   }
+
+  /// A card offering to start a journey for [task] in one of the repos used
+  /// most recently, as a reply to the owner's message [asked].
+  Future<void> _offerStart(_At at, String task, {required String asked}) async {
+    final repos = (await journeys.repos()).take(6).toList();
+    if (repos.isEmpty) return _say(at, 'There is no repo to start one in.');
+    final card = await send(at.serviceUrl, at.conversation, {
+      'type': 'message',
+      'attachments': [
+        _startCard(task, 'Start it in:', [
+          for (final r in repos)
+            {
+              'type': 'Action.Execute',
+              'title': r.name,
+              'verb': 'start',
+              'data': {'repo': r.path.value},
+            },
+        ]),
+      ],
+    });
+    _starts[at.conversation] = (task: task, asked: asked, card: card);
+  }
+
+  /// Starts [offer]'s journey in [repo], with the provider and model of the
+  /// journey active most recently, and opens it here. Its first turn streams
+  /// under the message that asked for it.
+  Future<void> _start(
+    _At at,
+    ({String task, String asked, String card}) offer,
+    RepoPath repo,
+  ) async {
+    final where = repo.value.split('/').last;
+    Future<void> say(String line) =>
+        update(at.serviceUrl, at.conversation, offer.card, {
+          'type': 'message',
+          'attachments': [_startCard(offer.task, line)],
+        });
+    await say('Starting in $where…');
+    final last = (await journeys.list()).fold<RunSummary?>(
+      null,
+      (a, b) => a == null || b.lastActiveAt.isAfter(a.lastActiveAt) ? b : a,
+    );
+    final (:started, :why) = await journeys.start(
+      StartRun(
+        task: offer.task,
+        root: repo,
+        provider: last?.provider ?? Provider.anthropic,
+        model: last?.model,
+        effort: last?.effort,
+        name: _nameFor(offer.task),
+      ),
+    );
+    if (started == null) return say('Not started in $where: $why');
+    await say('Started in $where.');
+    await _chats.remove(at.conversation)?.close();
+    // After its first event, which says it started: the task comes back
+    // next, as what the owner said.
+    final chat = _Chat(at, started.id, after: 0, afterAt: null)
+      ..said.add(offer.task)
+      ..stream = _Stream(offer.asked);
+    _chats[at.conversation] = chat;
+    _listen(chat);
+  }
+
+  /// A journey's name from its task: its first words.
+  static JourneyName? _nameFor(String task) {
+    final words = _oneLine(task).split(' ').take(6).join(' ');
+    return JourneyName.parse(_clip(words, 50));
+  }
+
+  static Map<String, Object?> _startCard(
+    String task,
+    String line, [
+    List<Map<String, Object?>> actions = const [],
+  ]) => _cardOf([
+    {
+      'type': 'TextBlock',
+      'text': 'New journey',
+      'weight': 'Bolder',
+      'wrap': true,
+    },
+    {'type': 'TextBlock', 'text': _clip(task, 400), 'wrap': true},
+    {'type': 'TextBlock', 'text': line, 'wrap': true, 'isSubtle': true},
+  ], actions);
 
   Future<void> _open(_At at, RunSummary j) async {
     await _chats.remove(at.conversation)?.close();
