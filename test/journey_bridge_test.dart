@@ -79,12 +79,18 @@ final class FakeJourneys implements Journeys {
       >[];
   String? refuse;
 
+  /// What a list that cannot be read throws, as a host on another wire does.
+  Exception? unreadable;
+
   /// Echoes what is said, numbered [echoAt], before answering, as the live
   /// host does when its event stream wins the race with its answer.
   int? echoAt;
 
   @override
-  Future<List<JourneyPathSummary>> list() async => listed;
+  Future<List<JourneyPathSummary>> list() async {
+    if (unreadable case final e?) throw e;
+    return listed;
+  }
 
   @override
   Future<String?> say(JourneyPathId journey, String text) async {
@@ -439,6 +445,15 @@ void main() {
       expect(bridge.openIn(chat), JourneyPathId('j1'));
       expect(host.streams.single.after, 6);
       expect(host.streams.single.afterAt, lastActive);
+    });
+
+    test('a host it cannot read is said, not silence', () async {
+      host.unreadable = const FormatException('no journey_paths');
+      await bridge.onDoorbell(message('journeys'));
+      expect(texts(), [
+        'The agent host could not answer: '
+            'FormatException: no journey_paths',
+      ]);
     });
 
     test('a journey that has ended is not opened', () async {

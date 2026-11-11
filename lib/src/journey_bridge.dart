@@ -143,21 +143,28 @@ final class JourneyBridge {
       }
       return;
     }
-    if (event == 'teams_message') {
-      await _message(
-        at,
-        _plain(bell.stringOrNull('text') ?? ''),
-        activity: bell.string('activity'),
-      );
-    } else {
-      final action = bell.objectOrNull('value')?.objectOrNull('action');
-      await _press(
-        at,
-        card: bell.stringOrNull('reply_to'),
-        verb: action?.stringOrNull('verb'),
-        journey: action?.objectOrNull('data')?.stringOrNull('journey'),
-        repo: action?.objectOrNull('data')?.stringOrNull('repo'),
-      );
+    try {
+      if (event == 'teams_message') {
+        await _message(
+          at,
+          _plain(bell.stringOrNull('text') ?? ''),
+          activity: bell.string('activity'),
+        );
+      } else {
+        final action = bell.objectOrNull('value')?.objectOrNull('action');
+        await _press(
+          at,
+          card: bell.stringOrNull('reply_to'),
+          verb: action?.stringOrNull('verb'),
+          journey: action?.objectOrNull('data')?.stringOrNull('journey'),
+          repo: action?.objectOrNull('data')?.stringOrNull('repo'),
+        );
+      }
+    } on Exception catch (e) {
+      // The owner hears why, not silence: a host on another wire throws
+      // here, where an empty answer would look like nothing open.
+      log('teams journey: host: $e');
+      await _say(at, 'The agent host could not answer: $e');
     }
   }
 
