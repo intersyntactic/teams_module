@@ -1,5 +1,5 @@
 /// A TEST bot: the relay, with a doorbell handler that answers through the
-/// Bot Connector. It proves the round trip on a test tenant before any Hart
+/// Bot Connector. It proves the round trip on a test tenant before any real
 /// content goes near it, and it is not the module's shape: in the module
 /// the relay never holds the secret, and the sender runs beside the agent.
 ///
@@ -19,9 +19,9 @@
 /// with Approve and Not yet; press one and the card is edited to say so.
 /// Adding the bot to a chat gets a hello, sent without being asked.
 ///
-/// Each "card" appends a rung to a [StandInJourneyPath], as a pass of Hart's
+/// Each "card" appends a step to a [StandInJourneyPath], as a module's pass
 /// would, and the card shows it: "card" again is a later pass saying the
-/// same, and "card weak" one saying something new. Each press writes what
+/// same, and "card done" one saying something new. Each press writes what
 /// [TeamsReceiver] reads it as to that journey path, and the log names each
 /// node.
 library;
@@ -35,17 +35,18 @@ import 'package:is_annotation_shapes/is_annotation_shapes.dart';
 import 'package:is_shapes/is_shapes.dart';
 import 'package:is_teams_module/is_teams_module.dart';
 
-/// A stand-in for Hart's rung: what a card shows.
-final class _Rung {
-  const _Rung(this.failureMode, this.verdict);
+/// A stand-in for what a module shows on a card: a step, the same step on
+/// every pass, and a note on it that a later pass may change.
+final class _Step {
+  const _Step(this.name, this.note);
   @identity
-  final String failureMode;
-  final _Verdict verdict;
+  final String name;
+  final _Note note;
 }
 
-final class _Verdict extends Value {
-  const _Verdict(this.level);
-  final String level;
+final class _Note extends Value {
+  const _Note(this.text);
+  final String text;
 }
 
 Future<void> main() async {
@@ -98,10 +99,10 @@ Future<void> main() async {
       stderr.writeln('echo: appended ${_short(id)} ${node.runtimeType}$of');
     },
     encodeOther: (node) => switch (node) {
-      _Rung(:final failureMode, :final verdict) => {
-        'shape': 'Rung',
-        'failureMode': failureMode,
-        'level': verdict.level,
+      _Step(:final name, :final note) => {
+        'shape': 'Step',
+        'name': name,
+        'note': note.text,
       },
       _ => throw ArgumentError.value(node, 'node', 'no encoding'),
     },
@@ -131,7 +132,7 @@ typedef _Echo = ({
 });
 
 /// What each card shows, by its activity id, to draw it again when edited.
-final _rungs = <String, _Rung>{};
+final _steps = <String, _Step>{};
 
 Future<void> _answer(_Echo echo, JsonObject bell) async {
   final connector = echo.connector;
@@ -143,14 +144,14 @@ Future<void> _answer(_Echo echo, JsonObject bell) async {
     switch (bell.string('event')) {
       case 'teams_message':
         final said = _plain(bell.stringOrNull('text') ?? '');
-        if (said.toLowerCase().split(' ') case ['card', ...final level]) {
-          final rung = _Rung(
-            'Rung 3: the thermostat failed',
-            _Verdict(level.isEmpty ? 'supported' : level.join(' ')),
+        if (said.toLowerCase().split(' ') case ['card', ...final note]) {
+          final step = _Step(
+            'Step 3: tidy the README',
+            _Note(note.isEmpty ? 'as planned' : note.join(' ')),
           );
           final target = Target(
-            exact: echo.journeyPath.append(rung),
-            anchor: SemanticAnchor.of(utf8.encode('Rung:${rung.failureMode}')),
+            exact: echo.journeyPath.append(step),
+            anchor: SemanticAnchor.of(utf8.encode('Step:${step.name}')),
           );
           // A later pass that says the same arrives already approved.
           final by = teamsActor(bell);
@@ -159,9 +160,9 @@ Future<void> _answer(_Echo echo, JsonObject bell) async {
               : echo.receiver.stanceOf(by, target.exact);
           final id = await connector.send(serviceUrl, conversation, {
             'type': 'message',
-            'attachments': [_card(rung, stance: stance)],
+            'attachments': [_card(step, stance: stance)],
           });
-          _rungs[id] = rung;
+          _steps[id] = step;
           echo.receiver.show(id, target, conversation: conversation);
           stderr.writeln(
             'echo: card $id shows ${_short(target.exact)}, ${stance.name}',
@@ -184,13 +185,13 @@ Future<void> _answer(_Echo echo, JsonObject bell) async {
         final like = echo.receiver.cardsLike(card, conversation: conversation);
         final editing = verb == 'edit';
         for (final other in editing ? like.where((c) => c == card) : like) {
-          final rung = _rungs[other];
+          final step = _steps[other];
           final target = echo.receiver.targetOf(other);
-          if (rung == null || target == null) continue;
+          if (step == null || target == null) continue;
           final stance = echo.receiver.stanceOf(by, target.exact);
           await connector.update(serviceUrl, conversation, other, {
             'type': 'message',
-            'attachments': [_card(rung, stance: stance, editing: editing)],
+            'attachments': [_card(step, stance: stance, editing: editing)],
           });
           stderr.writeln('echo: card $other edited, ${stance.name}');
         }
@@ -224,13 +225,13 @@ String _plain(String text) => text
 /// The first eight hex digits of [id], enough to tell nodes apart in a log.
 String _short(TurnId id) => id.hex.substring(0, 8);
 
-/// The card for [rung], as the presser's annotations of its version add up
+/// The card for [step], as the presser's annotations of its version add up
 /// ([stance]), and the actions that make sense from there (Nick,
 /// 2026-11-10). Approved offers only Edit, which writes nothing and reopens
 /// the choice on that card ([editing]); open, reopened or held off offers
 /// Approve and Not yet.
 Map<String, Object?> _card(
-  _Rung rung, {
+  _Step step, {
   required Stance stance,
   bool editing = false,
 }) => {
@@ -242,15 +243,11 @@ Map<String, Object?> _card(
     'body': [
       {
         'type': 'TextBlock',
-        'text': rung.failureMode,
+        'text': step.name,
         'weight': 'Bolder',
         'wrap': true,
       },
-      {
-        'type': 'TextBlock',
-        'text': 'Level: ${rung.verdict.level}',
-        'wrap': true,
-      },
+      {'type': 'TextBlock', 'text': 'Note: ${step.note.text}', 'wrap': true},
       if (!editing && stance != Stance.open)
         {
           'type': 'TextBlock',

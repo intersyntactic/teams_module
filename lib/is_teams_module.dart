@@ -1,5 +1,5 @@
-/// The Teams module: Peter's replies, approvals and corrections from
-/// Microsoft Teams, taken in as nodes on a journey path
+/// The Teams module: what people say and press in Microsoft Teams, taken in
+/// as nodes on a journey path, and the way back out to them
 /// (https://github.com/enspyrco/intersyntactic/issues/1089).
 ///
 /// So far, the way in: [TeamsRelay], the endpoint Teams posts to; [teamsGate],

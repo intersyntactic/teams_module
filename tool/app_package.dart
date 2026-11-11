@@ -38,7 +38,7 @@ Future<void> main(List<String> args) async {
     stderr.writeln('abort: "$appId" is not a GUID');
     exit(64);
   }
-  final name = args.length >= 2 ? args[1] : 'Hart Reports';
+  final name = args.length >= 2 ? args[1] : 'Intersyntactic';
   if (name.isEmpty || name.length > 30) {
     stderr.writeln('abort: a short name is 1 to 30 characters');
     exit(64);
@@ -91,11 +91,11 @@ Map<String, Object?> manifest(String appId, String name, String version) => {
   },
   'name': {'short': name, 'full': name},
   'description': {
-    'short': 'Review, correct and approve report drafts from Teams.',
+    'short': 'Take part in intersyntactic journeys from Teams.',
     'full':
-        'Shows each part of a report draft as a card. Approve it, say not '
-        'yet, propose a correction, or comment, and the report takes it in '
-        'on its next pass.',
+        'Shows what a journey asks of you as a card. Approve it, say not '
+        'yet, propose a correction, or comment, and the journey takes it in '
+        'as a node on its path.',
   },
   'icons': {'color': 'color.png', 'outline': 'outline.png'},
   'accentColor':
@@ -111,31 +111,26 @@ Map<String, Object?> manifest(String appId, String name, String version) => {
   'validDomains': <String>[],
 };
 
-/// A hart's antlers drawn as a tree of nodes: a root at the base, branches
-/// forking upward, a node at every tine's tip. Hart is a stag, and what the
-/// module feeds is a tree of nodes on journey paths, so the one shape is
-/// both.
+/// A journey path drawn as a transit map. The path runs in butter from its
+/// root up to its tip, and at two of its nodes a new path branches off in
+/// cream, as a branch is: a new path from a node, never a fork of the old.
+/// Every node is a station coloured by who wrote it, people in rose and
+/// periwinkle, agents in aqua and lavender, ringed in the background colour
+/// so it stands clear of its line.
 ///
-/// The colour icon reads like a transit map. A journey path runs in butter
-/// from the root up each beam to its top tip; the tines branch off it in
-/// cream. Every node is a station coloured by who wrote it, people in rose
-/// and periwinkle, agents in aqua and lavender, ringed in the background
-/// colour so it stands clear of its line. Left and right mirror each other,
-/// colours too.
-///
-/// The left antler is given in unit coordinates and mirrored for the right.
-const _beam = [(0.42, 0.70), (0.33, 0.52), (0.27, 0.34), (0.25, 0.17)];
-const _tines = [
-  ((0.37, 0.61), (0.17, 0.57)), // brow tine, out
-  ((0.30, 0.43), (0.13, 0.33)), // middle tine, out and up
-  ((0.27, 0.33), (0.39, 0.20)), // inner tine, in and up
+/// Points are in unit coordinates, on a transit map's right angles and
+/// diagonals.
+const _root = (0.28, 0.84);
+const _path = [_root, (0.28, 0.60), (0.50, 0.38), (0.50, 0.16)];
+const _branches = [
+  ((0.28, 0.60), (0.28, 0.16)), // straight up from the first node
+  ((0.50, 0.38), (0.72, 0.16)), // up and right from the second
 ];
-const _root = (0.5, 0.84);
 
-/// Who wrote each tine's tip, in [_tines] order, mirrored on the right; the
-/// path's top tips are the agent whose path it is.
-const _tineActors = [_rose, _periwinkle, _lavender];
-const _pathActor = _aqua;
+/// Who wrote each node, in [_path] order after the root, then each branch's
+/// tip in [_branches] order: the path's tip is the agent whose path it is.
+const _pathActors = [_rose, _periwinkle, _aqua];
+const _branchActors = [_lavender, _lavender];
 const _rose = (0xff, 0xc1, 0xc4); // a person, hue 15: green's complement
 const _periwinkle = (0xbc, 0xd4, 0xff); // another person, hue 265
 const _aqua = (0x98, 0xe4, 0xe8); // an agent, hue 200
@@ -145,25 +140,14 @@ typedef _Point = (double, double);
 typedef _Stroke = (_Point, _Point);
 typedef _Rgb = (int, int, int);
 
-/// Transit-map antlers on forest green for the colour icon; white on
-/// transparent for the outline icon, as Teams requires of each.
+/// The transit map on forest green for the colour icon; white on transparent
+/// for the outline icon, as Teams requires of each.
 Uint8List icon(int size, {required bool outline}) {
-  _Point mirror(_Point p) => (1 - p.$1, p.$2);
-  List<_Stroke> both(List<_Stroke> s) => [
-    ...s,
-    for (final (a, b) in s) (mirror(a), mirror(b)),
+  // The journey path, root to tip, and the paths branching off it.
+  final path = <_Stroke>[
+    for (var i = 0; i < _path.length - 1; i++) (_path[i], _path[i + 1]),
   ];
-  // At 32 pixels three tines a side crowd into a blob, so the outline icon
-  // keeps only the brow and inner tines.
-  final tines = outline ? [_tines.first, _tines.last] : _tines;
-  final actors = outline ? [_tineActors.first, _tineActors.last] : _tineActors;
-
-  // The journey path, root to each top tip, and the tines branching off it.
-  final path = both([
-    (_root, _beam.first),
-    for (var i = 0; i < _beam.length - 1; i++) (_beam[i], _beam[i + 1]),
-  ]);
-  final branches = both(tines);
+  const branches = _branches;
 
   // At 32 pixels a thin stroke vanishes, so the outline icon draws heavier,
   // with nodes only a little wider than the strokes. In colour the path is
@@ -174,12 +158,9 @@ Uint8List icon(int size, {required bool outline}) {
   final ring = outline ? 0.0 : 0.016 * size;
   final stations = <(_Point, _Rgb, double)>[
     (_root, _butter, dot * 1.25),
-    (_beam.last, _pathActor, dot),
-    (mirror(_beam.last), _pathActor, dot),
-    for (var i = 0; i < tines.length; i++) ...[
-      (tines[i].$2, actors[i], dot),
-      (mirror(tines[i].$2), actors[i], dot),
-    ],
+    for (var i = 1; i < _path.length; i++) (_path[i], _pathActors[i - 1], dot),
+    for (var i = 0; i < _branches.length; i++)
+      (_branches[i].$2, _branchActors[i], dot),
   ];
 
   final rgba = Uint8List(size * size * 4);

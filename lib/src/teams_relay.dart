@@ -127,7 +127,7 @@ final class TeamsRelay {
       maxBodyBytes: maxBodyBytes,
     );
     if (d.seenKey case final key?) _markSeen(key, now);
-    // The reason, never the content: the log is not a copy of Peter's words.
+    // The reason, never the content: the log is not a copy of anyone's words.
     log('teams relay: ${d.outcome.name} ${d.status}: ${d.reason}');
 
     req.response.statusCode = d.status;

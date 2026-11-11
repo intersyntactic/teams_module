@@ -5,8 +5,7 @@
 /// secret it asks Microsoft's sign-in service for a token that says "I am
 /// this bot", good for about an hour, and shows that token on every call.
 /// The relay never needs it: checking a delivery takes only public keys.
-/// So the secret lives wherever the sending side runs, which for Hart is
-/// inside custody, and nowhere else.
+/// So the secret lives wherever the sending side runs, and nowhere else.
 ///
 /// The Connector can write but not read: it has no call that fetches a
 /// message (https://github.com/intersyntactic/teams_module/issues/1, item 2).
