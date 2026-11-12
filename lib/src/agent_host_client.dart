@@ -34,18 +34,18 @@ abstract interface class Journeys {
   Future<JourneyPathList> list();
 
   /// Sends [text] into [journey] as the person's message. Null when it was
-  /// taken, else the host's reason, such as that a turn is still running.
-  Future<String?> say(JourneyPathId journey, String text);
+  /// taken, else the host's refusal, whose body is for the log only.
+  Future<HostError?> say(JourneyPathId journey, String text);
 
   /// Stops the turn [journey] is running. Null when stopped, else the host's
-  /// reason.
-  Future<String?> stop(JourneyPathId journey);
+  /// refusal.
+  Future<HostError?> stop(JourneyPathId journey);
 
   /// The repos a journey can start in, the most recently used first.
   Future<List<RepoChoice>> repos();
 
-  /// Starts a journey: the new one, or the host's reason it did not.
-  Future<({JourneyPathSummary? started, String? why})> start(
+  /// Starts a journey: the new one, or the host's refusal.
+  Future<({JourneyPathSummary? started, HostError? why})> start(
     StartJourneyPath run,
   );
 
@@ -101,18 +101,22 @@ final class AgentHostClient implements Journeys {
   }
 
   @override
-  Future<String?> say(JourneyPathId journey, String text) async {
+  Future<HostError?> say(JourneyPathId journey, String text) async {
     final r = await _send(
       JourneyPathMessageRoute(journey),
       SendMessage(text).toJson(),
     );
-    return r.status == 200 ? null : _reason(r.body);
+    return r.status == 200
+        ? null
+        : HostError('message', r.status, _reason(r.body));
   }
 
   @override
-  Future<String?> stop(JourneyPathId journey) async {
+  Future<HostError?> stop(JourneyPathId journey) async {
     final r = await _send(JourneyPathStopRoute(journey));
-    return r.status == 200 ? null : _reason(r.body);
+    return r.status == 200
+        ? null
+        : HostError('stop', r.status, _reason(r.body));
   }
 
   @override
@@ -123,7 +127,7 @@ final class AgentHostClient implements Journeys {
   }
 
   @override
-  Future<({JourneyPathSummary? started, String? why})> start(
+  Future<({JourneyPathSummary? started, HostError? why})> start(
     StartJourneyPath run,
   ) async {
     final r = await _send(const StartJourneyPathRoute(), run.toJson());
@@ -132,7 +136,7 @@ final class AgentHostClient implements Journeys {
             started: JourneyPathSummary.fromJson(JsonObject.decode(r.body)),
             why: null,
           )
-        : (started: null, why: _reason(r.body));
+        : (started: null, why: HostError('start', r.status, _reason(r.body)));
   }
 
   /// Cancelling closes the connection at once. A generator here (`async*`)

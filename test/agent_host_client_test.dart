@@ -89,14 +89,18 @@ void main() {
     expect(jsonDecode(body), {'text': 'hello'});
   });
 
-  test("passes on the host's reason for refusing", () async {
+  test("passes on the host's refusal, its reason for the log", () async {
     answering((req, _) async {
       req.response
         ..statusCode = 409
         ..write('{"error":"still working"}');
       await req.response.close();
     });
-    expect(await client.say(JourneyPathId('j1'), 'hello'), 'still working');
+    final why = await client.say(JourneyPathId('j1'), 'hello');
+    expect(
+      (why?.route, why?.status, why?.body),
+      ('message', 409, 'still working'),
+    );
   });
 
   group('events', () {

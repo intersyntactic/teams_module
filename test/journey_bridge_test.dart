@@ -123,15 +123,15 @@ final class FakeJourneys implements Journeys {
   }
 
   @override
-  Future<String?> say(JourneyPathId journey, String text) async {
-    if (refuse != null) return refuse;
+  Future<HostError?> say(JourneyPathId journey, String text) async {
+    if (refuse case final r?) return HostError('message', 409, r);
     said.add((journey, text));
     if (echoAt case final seq?) await feed(seq, [UserSaid(text)]);
     return null;
   }
 
   @override
-  Future<String?> stop(JourneyPathId journey) async {
+  Future<HostError?> stop(JourneyPathId journey) async {
     stopped.add(journey);
     return null;
   }
@@ -146,11 +146,13 @@ final class FakeJourneys implements Journeys {
   Future<List<RepoChoice>> repos() async => repoChoices;
 
   @override
-  Future<({JourneyPathSummary? started, String? why})> start(
+  Future<({JourneyPathSummary? started, HostError? why})> start(
     StartJourneyPath run,
   ) async {
     starts.add(run);
-    if (refuse != null) return (started: null, why: refuse);
+    if (refuse case final r?) {
+      return (started: null, why: HostError('start', 409, r));
+    }
     return (started: starting?.path, why: null);
   }
 
@@ -617,7 +619,9 @@ void main() {
       await offered();
       host.refuse = 'no credential for anthropic';
       await bridge.onDoorbell(press('start', card: 'act-0', repo: '/src/r0'));
-      expect(cardOf(updated.last.$2), contains('no credential for anthropic'));
+      expect(cardOf(updated.last.$2), contains('Not started in r0 (409).'));
+      expect(cardOf(updated.last.$2), isNot(contains('no credential')));
+      expect(logged.single, contains('no credential for anthropic'));
       expect(bridge.openIn(chat), isNull);
     });
 
@@ -650,7 +654,8 @@ void main() {
       await opened();
       host.refuse = 'still working -- wait for it to finish, or stop it';
       await bridge.onDoorbell(message('and another thing'));
-      expect(textOf(sent.single), contains('Not sent: still working'));
+      expect(textOf(sent.single), contains('Not sent (409).'));
+      expect(logged.single, contains('still working'));
     });
 
     test('"stop" stops it', () async {
@@ -1020,7 +1025,7 @@ void main() {
         host.refuse = 'still working';
         await bridge.onDoorbell(message('go'));
         await host.feed(7, [const UserSaid('go'), idle]);
-        expect(texts(), ['Not sent: still working', '_Said in the app:_ go']);
+        expect(texts(), ['Not sent (409).', '_Said in the app:_ go']);
       },
     );
 

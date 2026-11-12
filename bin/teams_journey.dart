@@ -137,20 +137,20 @@ final class _Traced implements Journeys {
   Future<JourneyPathList> list() => _inner.list();
 
   @override
-  Future<String?> say(JourneyPathId journey, String text) async {
+  Future<HostError?> say(JourneyPathId journey, String text) async {
     final why = await _inner.say(journey, text);
     stderr.writeln('trace: say: ${why ?? 'taken'}');
     return why;
   }
 
   @override
-  Future<String?> stop(JourneyPathId journey) => _inner.stop(journey);
+  Future<HostError?> stop(JourneyPathId journey) => _inner.stop(journey);
 
   @override
   Future<List<RepoChoice>> repos() => _inner.repos();
 
   @override
-  Future<({JourneyPathSummary? started, String? why})> start(
+  Future<({JourneyPathSummary? started, HostError? why})> start(
     StartJourneyPath run,
   ) async {
     final r = await _inner.start(run);

@@ -189,7 +189,7 @@ final class JourneyBridge {
         await _offerStart(at, text.substring(4).trim(), asked: activity);
       case 'stop' when chat != null:
         final why = await journeys.stop(chat.journey);
-        await _say(at, why == null ? 'Stopped.' : 'Not stopped: $why');
+        await _say(at, why == null ? 'Stopped.' : _refused('Not stopped', why));
       case _ when chat == null:
         await _say(at, 'Say "journeys" to open one.');
       case _:
@@ -200,7 +200,7 @@ final class JourneyBridge {
         final why = await journeys.say(chat.journey, text);
         if (why != null) {
           chat.said.remove(waiting);
-          await _say(at, 'Not sent: $why');
+          await _say(at, _refused('Not sent', why));
         }
     }
   }
@@ -238,7 +238,7 @@ final class JourneyBridge {
       case 'yes' || 'no'
           when chat != null && chat.asks.values.any((a) => a.card == card):
         final why = await journeys.say(chat.journey, verb == 'yes' ? '1' : '2');
-        if (why != null) await _say(at, 'Not answered: $why');
+        if (why != null) await _say(at, _refused('Not answered', why));
       default:
         log('teams journey: a press with verb $verb on card $card');
     }
@@ -354,7 +354,9 @@ final class JourneyBridge {
         name: _nameFor(offer.task),
       ),
     );
-    if (started == null) return say('Not started in $where: $why');
+    if (started == null) {
+      return say(_refused('Not started in $where', why!));
+    }
     await say('Started in $where.');
     await _chats.remove(at.conversation)?.close();
     // After its first event, which says it started: the task comes back
@@ -835,6 +837,13 @@ final class JourneyBridge {
       await chat.close();
     }
     _chats.clear();
+  }
+
+  /// What the chat hears of a refusal: [what] and the host's status. The
+  /// host's reason is its own text, so it goes to the log, never the chat.
+  String _refused(String what, HostError why) {
+    log('teams journey: refused: $why');
+    return '$what (${why.status}).';
   }
 
   /// A journey's name, else the first line of the task its path was given.
