@@ -165,8 +165,16 @@ final class JourneyBridge {
     } on Exception catch (e) {
       // The owner hears why, not silence: a host on another wire throws
       // here, where an empty answer would look like nothing open.
+      // What the host said is logged, never sent: its text is its own,
+      // unbounded, and nothing in the record holds it.
       log('teams journey: host: $e');
-      await _say(at, 'The agent host could not answer: $e');
+      await _say(at, switch (e) {
+        HostError(:final route, :final status) =>
+          'The agent host could not answer ($route: $status).',
+        FormatException() =>
+          'The agent host sent something the bridge cannot read.',
+        _ => 'The agent host could not answer.',
+      });
     }
   }
 

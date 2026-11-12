@@ -62,6 +62,21 @@ abstract interface class Journeys {
   });
 }
 
+/// The host answered [route] with [status], not 200. Its [body] is for the
+/// log only: it is the host's own text, unbounded, and nothing in the record
+/// holds it, so it never goes to a chat.
+final class HostError implements Exception {
+  const HostError(this.route, this.status, [this.body = '']);
+
+  /// Which call it was, such as `list`.
+  final String route;
+  final int status;
+  final String body;
+
+  @override
+  String toString() => 'HostError: $route: $status $body';
+}
+
 /// [Journeys] over HTTP, from the host's own machine: the host listens on
 /// loopback, and asks nothing of a caller there.
 final class AgentHostClient implements Journeys {
@@ -81,7 +96,7 @@ final class AgentHostClient implements Journeys {
   @override
   Future<JourneyPathList> list() async {
     final r = await _send(const ListJourneyPathsRoute());
-    if (r.status != 200) throw HttpException('list: ${r.status} ${r.body}');
+    if (r.status != 200) throw HostError('list', r.status, r.body);
     return JourneyPathList.fromJson(JsonObject.decode(r.body));
   }
 
@@ -103,7 +118,7 @@ final class AgentHostClient implements Journeys {
   @override
   Future<List<RepoChoice>> repos() async {
     final r = await _send(const ReposRoute());
-    if (r.status != 200) throw HttpException('repos: ${r.status} ${r.body}');
+    if (r.status != 200) throw HostError('repos', r.status, r.body);
     return RepoList.fromJson(JsonObject.decode(r.body)).repos;
   }
 
@@ -145,7 +160,7 @@ final class AgentHostClient implements Journeys {
           req.headers.set('accept', 'text/event-stream');
           final res = await req.close();
           if (res.statusCode != 200) {
-            throw HttpException('events: ${res.statusCode}');
+            throw HostError('events', res.statusCode);
           }
           frames = serverSentEvents(res).listen(
             (f) {

@@ -500,9 +500,16 @@ void main() {
       host.unreadable = const FormatException('no journey_paths');
       await bridge.onDoorbell(message('journeys'));
       expect(texts(), [
-        'The agent host could not answer: '
-            'FormatException: no journey_paths',
+        'The agent host sent something the bridge cannot read.',
       ]);
+      expect(logged.single, contains('no journey_paths'));
+    });
+
+    test('a host refusing says its status; its body is only logged', () async {
+      host.unreadable = HostError('list', 500, 'stack trace with secrets');
+      await bridge.onDoorbell(message('journeys'));
+      expect(texts(), ['The agent host could not answer (list: 500).']);
+      expect(logged.single, contains('stack trace with secrets'));
     });
 
     test('a journey that has ended is not opened', () async {
