@@ -34,7 +34,7 @@ import 'package:test/test.dart';
 
 const tenant = '09e0393f-03f1-4206-84f3-8b127b750a5d';
 const nick = 'cccccccc-0000-4000-8000-000000000003';
-const peter = 'aaaaaaaa-0000-4000-8000-000000000001';
+const bea = 'aaaaaaaa-0000-4000-8000-000000000001';
 const chat = 'a:nick';
 final serviceUrl = Uri.parse('https://smba.trafficmanager.net/au/');
 final owner = ActorId.parse('teams:$tenant/$nick')!;
@@ -435,15 +435,15 @@ void main() {
   group('who it answers', () {
     test('someone else is told no, and nothing reaches a journey', () async {
       await opened();
-      await bridge.onDoorbell(message('rm -rf ~', user: peter));
+      await bridge.onDoorbell(message('rm -rf ~', user: bea));
       expect(host.said, isEmpty);
       expect(textOf(sent.single), contains('only its owner'));
-      expect(logged.single, contains('teams:$tenant/$peter'));
+      expect(logged.single, contains('teams:$tenant/$bea'));
     });
 
     test("someone else's press reaches nothing either", () async {
       await opened();
-      await bridge.onDoorbell(press('yes', user: peter));
+      await bridge.onDoorbell(press('yes', user: bea));
       expect(host.said, isEmpty);
       expect(sent, isEmpty);
     });
