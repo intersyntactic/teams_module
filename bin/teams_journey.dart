@@ -30,6 +30,7 @@ import 'dart:io';
 import 'package:intersyntactic_protocol/intersyntactic_protocol.dart'
     show
         JourneyPathId,
+        JourneyPathList,
         JourneyPathSummary,
         LoggedEvent,
         ReplyText,
@@ -133,7 +134,7 @@ final class _Traced implements Journeys {
   final Journeys _inner;
 
   @override
-  Future<List<JourneyPathSummary>> list() => _inner.list();
+  Future<JourneyPathList> list() => _inner.list();
 
   @override
   Future<String?> say(JourneyPathId journey, String text) async {

@@ -6,9 +6,12 @@ import 'package:intersyntactic_protocol/intersyntactic_protocol.dart'
     show
         BranchName,
         JourneyPathEvent,
+        JourneyId,
         JourneyPathId,
+        JourneyPathList,
+        JourneyPathState,
         JourneyPathSummary,
-        JourneyState,
+        JourneySummary,
         LandsIn,
         LoggedEvent,
         MergeAnswered,
@@ -36,36 +39,59 @@ const chat = 'a:nick';
 final serviceUrl = Uri.parse('https://smba.trafficmanager.net/au/');
 final owner = ActorId.parse('teams:$tenant/$nick')!;
 
-JourneyPathSummary journey(
+/// A journey and its one journey path.
+typedef Listed = ({JourneySummary journey, JourneyPathSummary path});
+
+/// The id of the journey that the path [path] is in: the path's own id,
+/// filled out to a journey id's length.
+String journeyOf(String path) => path.padRight(JourneyId.length, '0');
+
+/// A journey whose journey path is [id], or with [inJourney], the journey
+/// that path [inJourney] is in. Its [name] and whether it has [ended] are the
+/// journey's; the rest is the path's.
+Listed journey(
   String id, {
-  JourneyState state = JourneyState.idle,
+  String? inJourney,
+  JourneyPathState state = JourneyPathState.idle,
+  bool ended = false,
   int events = 5,
   String? name,
   bool awaiting = false,
   DateTime? lastActiveAt,
   String provider = 'anthropic',
   String model = 'claude-opus-5-5',
-}) => JourneyPathSummary.fromJson(
-  JsonObject.of({
-    'id': id,
-    'provider': provider,
-    'model': model,
-    'state': state.name,
-    'events': events,
-    'task': 'Task of $id\nmore lines',
-    'started_at': '2026-11-10T00:00:00Z',
-    'last_active_at': (lastActiveAt ?? lastActive).toIso8601String(),
-    'messages': 1,
-    'name': ?name,
-    'continuable': true,
-    'awaiting': awaiting,
-  }),
+}) => (
+  journey: JourneySummary.fromJson(
+    JsonObject.of({
+      'id': journeyOf(inJourney ?? id),
+      'number': 1,
+      'name': ?name,
+      'ended': ended,
+      'tasks': <Object?>[],
+    }),
+  ),
+  path: JourneyPathSummary.fromJson(
+    JsonObject.of({
+      'id': id,
+      'journey': journeyOf(inJourney ?? id),
+      'provider': provider,
+      'model': model,
+      'state': state.name,
+      'events': events,
+      'task': 'Task of $id\nmore lines',
+      'started_at': '2026-11-10T00:00:00Z',
+      'last_active_at': (lastActiveAt ?? lastActive).toIso8601String(),
+      'messages': 1,
+      'continuable': true,
+      'awaiting': awaiting,
+    }),
+  ),
 );
 
 /// An agent host in memory: its journeys, what was said and stopped, and a
 /// stream of events per reading that the test feeds by hand.
 final class FakeJourneys implements Journeys {
-  final listed = <JourneyPathSummary>[];
+  final listed = <Listed>[];
   final said = <(JourneyPathId, String)>[];
   final stopped = <JourneyPathId>[];
   final streams =
@@ -87,9 +113,13 @@ final class FakeJourneys implements Journeys {
   int? echoAt;
 
   @override
-  Future<List<JourneyPathSummary>> list() async {
+  Future<JourneyPathList> list() async {
     if (unreadable case final e?) throw e;
-    return listed;
+    // One summary per journey, however many of its paths are listed.
+    return JourneyPathList(
+      {for (final l in listed) l.journey.id: l.journey}.values.toList(),
+      [for (final l in listed) l.path],
+    );
   }
 
   @override
@@ -110,7 +140,7 @@ final class FakeJourneys implements Journeys {
   final starts = <StartJourneyPath>[];
 
   /// The journey a start makes, or with [refuse] set, none.
-  JourneyPathSummary? starting;
+  Listed? starting;
 
   @override
   Future<List<RepoChoice>> repos() async => repoChoices;
@@ -121,7 +151,7 @@ final class FakeJourneys implements Journeys {
   ) async {
     starts.add(run);
     if (refuse != null) return (started: null, why: refuse);
-    return (started: starting, why: null);
+    return (started: starting?.path, why: null);
   }
 
   @override
@@ -397,7 +427,7 @@ void main() {
   /// Opens journey `j1` in this chat.
   Future<void> opened() async {
     host.listed.add(journey('j1', events: 7, name: 'teams-bridge'));
-    await bridge.onDoorbell(press('open', journey: 'j1'));
+    await bridge.onDoorbell(press('open', journey: journeyOf('j1')));
     sent.clear();
     ids.clear();
   }
@@ -430,14 +460,14 @@ void main() {
     test('"journeys" offers the active ones, newest first', () async {
       host.listed.addAll([
         journey('old', lastActiveAt: DateTime.utc(2026, 11, 1)),
-        journey('done', state: JourneyState.ended),
+        journey('done', ended: true),
         journey('new', name: 'newest', lastActiveAt: DateTime.utc(2026, 11, 9)),
       ]);
       await bridge.onDoorbell(message('journeys'));
       final card = cardOf(sent.single);
-      expect(card, isNot(contains('"done"')));
+      expect(card, isNot(contains(journeyOf('done'))));
       expect(card.indexOf('newest'), lessThan(card.indexOf('Task of old')));
-      expect(card, contains('"journey":"new"'));
+      expect(card, contains('"journey":"${journeyOf('new')}"'));
     });
 
     test('Open reads it from its newest event', () async {
@@ -446,6 +476,25 @@ void main() {
       expect(host.streams.single.after, 6);
       expect(host.streams.single.afterAt, lastActive);
     });
+
+    test(
+      'a journey of two paths is offered once, and opens its newest',
+      () async {
+        host.listed.addAll([
+          journey('p2', inJourney: 'p1', name: 'two paths'),
+          journey(
+            'p1',
+            name: 'two paths',
+            lastActiveAt: DateTime.utc(2026, 11, 1),
+          ),
+        ]);
+        await bridge.onDoorbell(message('journeys'));
+        final card = cardOf(sent.single);
+        expect('two paths'.allMatches(card), hasLength(1));
+        await bridge.onDoorbell(press('open', journey: journeyOf('p1')));
+        expect(bridge.openIn(chat), JourneyPathId('p2'));
+      },
+    );
 
     test('a host it cannot read is said, not silence', () async {
       host.unreadable = const FormatException('no journey_paths');
@@ -457,8 +506,8 @@ void main() {
     });
 
     test('a journey that has ended is not opened', () async {
-      host.listed.add(journey('j1', state: JourneyState.ended));
-      await bridge.onDoorbell(press('open', journey: 'j1'));
+      host.listed.add(journey('j1', ended: true));
+      await bridge.onDoorbell(press('open', journey: journeyOf('j1')));
       expect(bridge.openIn(chat), isNull);
       expect(textOf(sent.single), contains('has ended'));
     });
@@ -544,7 +593,7 @@ void main() {
         await host.feed(1, [
           const UserSaid(task),
           const ReplyText('On it.'),
-          const StatusChanged(JourneyState.idle),
+          const StatusChanged(JourneyPathState.idle),
         ]);
         expect(teams.shown, {
           'stream-0': ['Working…'],
@@ -621,7 +670,7 @@ void main() {
       ]);
       expect(texts(), ['_Said in the app:_ from the app']);
       expect(stepCards().single, contains('› ls'));
-      await host.feed(12, [const StatusChanged(JourneyState.idle)]);
+      await host.feed(12, [const StatusChanged(JourneyPathState.idle)]);
       expect(texts(), ['_Said in the app:_ from the app', 'Added one.']);
       expect(stepEdits().last, contains('Ran 1 tool'));
       expect(teams.dots, 3);
@@ -636,7 +685,7 @@ void main() {
         await host.feed(7, [
           const UserSaid('from teams'),
           const ReplyText('Heard.'),
-          const StatusChanged(JourneyState.idle),
+          const StatusChanged(JourneyPathState.idle),
           const UserSaid('from the app'),
         ]);
         expect(teams.finals.values, ['Heard.']);
@@ -648,7 +697,7 @@ void main() {
       await opened();
       await host.feed(7, [
         const ReplyText('Half'),
-        const StatusChanged(JourneyState.failed, detail: 'overloaded'),
+        const StatusChanged(JourneyPathState.failed, detail: 'overloaded'),
       ]);
       expect(texts(), ['Half', 'It failed: overloaded']);
     });
@@ -716,7 +765,7 @@ void main() {
     /// What the host does first when it takes what the owner said: it says
     /// it back. It never says a journey is running, only that it stopped.
     const begun = UserSaid('go');
-    const idle = StatusChanged(JourneyState.idle);
+    const idle = StatusChanged(JourneyPathState.idle);
 
     /// The owner says "go" here, into journey `j1`.
     Future<void> said() async {
@@ -905,7 +954,7 @@ void main() {
       await host.feed(7, [
         begun,
         const ReplyText('Half'),
-        const StatusChanged(JourneyState.failed, detail: 'overloaded'),
+        const StatusChanged(JourneyPathState.failed, detail: 'overloaded'),
       ]);
       expect(teams.finals, {'stream-0': 'Half'});
       expect(texts(), ['It failed: overloaded']);
@@ -915,7 +964,7 @@ void main() {
       await said();
       await host.feed(7, [
         begun,
-        const StatusChanged(JourneyState.failed, detail: 'overloaded'),
+        const StatusChanged(JourneyPathState.failed, detail: 'overloaded'),
       ]);
       expect(teams.finals, {'stream-0': 'It failed: overloaded'});
       expect(texts(), isEmpty);
@@ -934,7 +983,7 @@ void main() {
         await host.feed(7, [
           const UserSaid('from the app'),
           const ThinkingText('Hm.'),
-          const StatusChanged(JourneyState.idle),
+          const StatusChanged(JourneyPathState.idle),
         ]);
         expect(texts(), ['_Said in the app:_ from the app']);
       },
@@ -1042,13 +1091,13 @@ void main() {
       await host.feed(7, [
         begun,
         const ThinkingText('Hm.'),
-        const StatusChanged(JourneyState.running),
+        const StatusChanged(JourneyPathState.running),
         ToolCalled(
           id: 't',
           name: const ToolName('ls'),
           input: JsonObject.empty,
         ),
-        const StatusChanged(JourneyState.running),
+        const StatusChanged(JourneyPathState.running),
         const ReplyText('Still here.'),
         idle,
       ]);
@@ -1160,18 +1209,18 @@ void main() {
       // and here renumbered, as after a restart.
       await host.feed(0, [
         const ReplyText('an old reply'),
-        const StatusChanged(JourneyState.idle),
+        const StatusChanged(JourneyPathState.idle),
       ]);
       expect(sent, isEmpty);
       await host.feed(7, [
         const ReplyText('new'),
-        const StatusChanged(JourneyState.idle),
+        const StatusChanged(JourneyPathState.idle),
       ]);
       expect(texts(), ['new']);
       // And again, from the top, once it has moved on.
       await host.feed(0, [
         const ReplyText('older still'),
-        const StatusChanged(JourneyState.idle),
+        const StatusChanged(JourneyPathState.idle),
       ]);
       expect(texts(), ['new']);
     },
@@ -1183,7 +1232,7 @@ void main() {
     await host.feed(7, [
       const ReplyText('one '),
       const ReplyText('moment'),
-      const StatusChanged(JourneyState.idle),
+      const StatusChanged(JourneyPathState.idle),
     ], at: (_) => moment);
     expect(texts(), ['one moment']);
   });
@@ -1194,13 +1243,13 @@ void main() {
       await opened();
       await host.feed(7, [
         const ReplyText('before'),
-        const StatusChanged(JourneyState.idle),
+        const StatusChanged(JourneyPathState.idle),
       ]);
       // The restart lost events 7 and 8 from its log, so the next one it
       // writes takes seq 7 again: a seq already seen, at a time not yet seen.
       await host.feed(7, [
         const ReplyText('after'),
-        const StatusChanged(JourneyState.idle),
+        const StatusChanged(JourneyPathState.idle),
       ], at: (seq) => when(seq).add(const Duration(hours: 1)));
       expect(texts(), ['before', 'after']);
     },

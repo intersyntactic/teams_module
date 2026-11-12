@@ -4,10 +4,12 @@ import 'dart:convert';
 import 'package:checked_json/checked_json.dart';
 import 'package:intersyntactic_protocol/intersyntactic_protocol.dart'
     show
+        JourneyId,
         JourneyName,
         JourneyPathId,
+        JourneyPathState,
         JourneyPathSummary,
-        JourneyState,
+        JourneySummary,
         LoggedEvent,
         MemoryAnswered,
         MemoryAsked,
@@ -215,11 +217,13 @@ final class JourneyBridge {
         await _start(at, offer, RepoPath(repo));
       case 'open' when journey != null:
         final active = await _active();
-        final j = active.where((j) => j.id.value == journey).firstOrNull;
-        if (j == null) {
+        final a = active
+            .where((a) => a.journey.id.value == journey)
+            .firstOrNull;
+        if (a == null) {
           await _say(at, 'That journey has ended.');
         } else {
-          await _open(at, j);
+          await _open(at, a);
         }
       // Only on the card of a question still open: a bare 1 or 2 with no
       // question waiting is a message, and would start a turn.
@@ -232,13 +236,24 @@ final class JourneyBridge {
     }
   }
 
-  /// The journeys not yet ended, the most recently active first: "a journey
-  /// is active until its state is `ended`" (RULINGS).
-  Future<List<JourneyPathSummary>> _active() async =>
-      (await journeys.list())
-          .where((j) => j.state != JourneyState.ended)
-          .toList()
-        ..sort((a, b) => b.lastActiveAt.compareTo(a.lastActiveAt));
+  /// The journeys not yet ended, each with the journey path it was most
+  /// recently active on, the most recently active first. A journey ends as a
+  /// whole, so whether it has is its own `ended`, never a path's state.
+  Future<List<_Active>> _active() async {
+    final list = await journeys.list();
+    final newest = <JourneyId, JourneyPathSummary>{};
+    for (final p in list.journeyPaths) {
+      final n = newest[p.journey];
+      if (n == null || p.lastActiveAt.isAfter(n.lastActiveAt)) {
+        newest[p.journey] = p;
+      }
+    }
+    return [
+      for (final j in list.journeys)
+        if (!j.ended)
+          if (newest[j.id] case final path?) (journey: j, path: path),
+    ]..sort((a, b) => b.path.lastActiveAt.compareTo(a.path.lastActiveAt));
+  }
 
   /// A card of the active journeys, each with a button to open it.
   Future<void> _offer(_At at) async {
@@ -254,12 +269,12 @@ final class JourneyBridge {
             'weight': 'Bolder',
             'wrap': true,
           },
-          for (final j in active.take(10)) ...[
+          for (final a in active.take(10)) ...[
             {
               'type': 'TextBlock',
               'text':
-                  '${_title(j)} · ${j.state.name}'
-                  '${j.awaiting ? ' · waiting for you' : ''}',
+                  '${_title(a)} · ${a.path.state.name}'
+                  '${a.path.awaiting ? ' · waiting for you' : ''}',
               'wrap': true,
               'separator': true,
             },
@@ -270,7 +285,7 @@ final class JourneyBridge {
                   'type': 'Action.Execute',
                   'title': 'Open',
                   'verb': 'open',
-                  'data': {'journey': j.id.value},
+                  'data': {'journey': a.journey.id.value},
                 },
               ],
             },
@@ -317,7 +332,7 @@ final class JourneyBridge {
           'attachments': [_startCard(offer.task, line)],
         });
     await say('Starting in $where…');
-    final last = (await journeys.list()).fold<JourneyPathSummary?>(
+    final last = (await journeys.list()).journeyPaths.fold<JourneyPathSummary?>(
       null,
       (a, b) => a == null || b.lastActiveAt.isAfter(a.lastActiveAt) ? b : a,
     );
@@ -363,9 +378,10 @@ final class JourneyBridge {
     {'type': 'TextBlock', 'text': line, 'wrap': true, 'isSubtle': true},
   ], actions);
 
-  Future<void> _open(_At at, JourneyPathSummary j) async {
+  Future<void> _open(_At at, _Active a) async {
+    final j = a.path;
     await _chats.remove(at.conversation)?.close();
-    // A journey's summary says when its newest event happened.
+    // A journey path's summary says when its newest event happened.
     final chat = _Chat(
       at,
       j.id,
@@ -376,7 +392,7 @@ final class JourneyBridge {
     _listen(chat);
     await _say(
       at,
-      'Opened ${_title(j)}: ${j.state.name}.'
+      'Opened ${_title(a)}: ${j.state.name}.'
       '${j.awaiting ? ' It is waiting on a question asked before now: '
                 'answer it in the app.' : ''}',
     );
@@ -465,7 +481,7 @@ final class JourneyBridge {
           await _flush(
             chat,
             after: [
-              if (state == JourneyState.failed)
+              if (state == JourneyPathState.failed)
                 'It failed${detail == null ? '.' : ': $detail'}',
             ],
           );
@@ -813,10 +829,11 @@ final class JourneyBridge {
     _chats.clear();
   }
 
-  static String _title(JourneyPathSummary j) {
-    final name = j.name?.value;
+  /// A journey's name, else the first line of the task its path was given.
+  static String _title(_Active a) {
+    final name = a.journey.name?.value;
     if (name != null) return name;
-    final task = j.task.split('\n').first.trim();
+    final task = a.path.task.split('\n').first.trim();
     return task.length <= 60 ? task : '${task.substring(0, 59)}…';
   }
 
@@ -871,6 +888,9 @@ const _dots =
     'JsPKjoJkBJNMIMRQAAA7';
 
 typedef _At = ({Uri serviceUrl, String conversation});
+
+/// A journey not yet ended, and the journey path a chat that opens it reads.
+typedef _Active = ({JourneySummary journey, JourneyPathSummary path});
 
 /// Draws a question's card: open while the answer is null, then answered.
 typedef _Draw = Map<String, Object?> Function(bool? answer);

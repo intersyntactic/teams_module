@@ -17,7 +17,7 @@ dependencies:
     git:
       url: git@github.com:enspyrco/intersyntactic.git
       path: packages/intersyntactic_protocol
-      ref: ca1f01736f979d89bf414a0d74aa5ae52bc64f5f
+      ref: b20f95b4e42dc55f728711b17eef1133a7d9df42
   pointycastle: ^4.0.0
 
 dev_dependencies:
@@ -33,14 +33,14 @@ dependency_overrides:
     git:
       url: git@github.com:enspyrco/intersyntactic.git
       path: packages/anthropic_client
-      ref: ca1f01736f979d89bf414a0d74aa5ae52bc64f5f
+      ref: b20f95b4e42dc55f728711b17eef1133a7d9df42
   executor:
     git:
       url: git@github.com:enspyrco/intersyntactic.git
       path: packages/executor
-      ref: ca1f01736f979d89bf414a0d74aa5ae52bc64f5f
+      ref: b20f95b4e42dc55f728711b17eef1133a7d9df42
   path_confinement:
     git:
       url: git@github.com:enspyrco/intersyntactic.git
       path: packages/path_confinement
-      ref: ca1f01736f979d89bf414a0d74aa5ae52bc64f5f
+      ref: b20f95b4e42dc55f728711b17eef1133a7d9df42

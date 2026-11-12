@@ -27,10 +27,11 @@ import 'bot_connector.dart' show HttpCall, HttpResult, httpCall;
 
 /// What the bridge needs of intersyntactic's agent host: the journeys it
 /// holds, what happens in one as it happens, and the person's messages into
-/// one. A journey here is one journey path on the host.
+/// one. A journey holds one or more journey paths, and what is said, stopped
+/// or read is said, stopped or read on one of them.
 abstract interface class Journeys {
-  /// Every journey the host holds.
-  Future<List<JourneyPathSummary>> list();
+  /// Every journey the host holds, and every journey path in them.
+  Future<JourneyPathList> list();
 
   /// Sends [text] into [journey] as the person's message. Null when it was
   /// taken, else the host's reason, such as that a turn is still running.
@@ -78,10 +79,10 @@ final class AgentHostClient implements Journeys {
   );
 
   @override
-  Future<List<JourneyPathSummary>> list() async {
+  Future<JourneyPathList> list() async {
     final r = await _send(const ListJourneyPathsRoute());
     if (r.status != 200) throw HttpException('list: ${r.status} ${r.body}');
-    return JourneyPathList.fromJson(JsonObject.decode(r.body)).journeyPaths;
+    return JourneyPathList.fromJson(JsonObject.decode(r.body));
   }
 
   @override

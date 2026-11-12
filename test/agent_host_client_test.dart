@@ -5,18 +5,31 @@ import 'dart:io';
 import 'package:checked_json/checked_json.dart';
 import 'package:intersyntactic_protocol/intersyntactic_protocol.dart'
     show
+        JourneyId,
         JourneyPathFrame,
         JourneyPathId,
         JourneyPathList,
         JourneyPathSummary,
+        JourneySummary,
         LoggedEvent,
         ReplyText;
 import 'package:is_teams_module/is_teams_module.dart';
 import 'package:test/test.dart';
 
+final journey = JourneySummary.fromJson(
+  JsonObject.of({
+    'id': 'abcde12345',
+    'number': 242,
+    'name': 'teams-bridge',
+    'ended': false,
+    'tasks': <Object?>[],
+  }),
+);
+
 final summary = JourneyPathSummary.fromJson(
   JsonObject.of({
     'id': 'j1',
+    'journey': 'abcde12345',
     'provider': 'anthropic',
     'model': 'claude-opus-5-5',
     'state': 'idle',
@@ -51,13 +64,17 @@ void main() {
   });
   tearDown(() => host.close(force: true));
 
-  test('lists the journeys the host holds', () async {
+  test('lists the journeys the host holds, and their journey paths', () async {
     answering((req, _) async {
-      req.response.write(jsonEncode(JourneyPathList([summary]).toJson()));
+      req.response.write(
+        jsonEncode(JourneyPathList([journey], [summary]).toJson()),
+      );
       await req.response.close();
     });
     final listed = await client.list();
-    expect(listed.single.id, JourneyPathId('j1'));
+    expect(listed.journeys.single.name?.value, 'teams-bridge');
+    expect(listed.journeyPaths.single.id, JourneyPathId('j1'));
+    expect(listed.journeyPaths.single.journey, JourneyId.parse('abcde12345'));
     expect(requests.single.$2, '/agent');
   });
 
