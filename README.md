@@ -1,18 +1,20 @@
 # is_teams_module
 
-The Teams module for intersyntactic. Peter, Hart's expert, works in Microsoft
-Teams. This module lets him comment on Hart's report, correct it and approve
-it from there, and Hart takes each of those in as a node on a journey path
-without knowing Teams exists. The design is
-https://github.com/enspyrco/intersyntactic/issues/1089; the questions it left
-open are answered in https://github.com/intersyntactic/teams_module/issues/1.
+The Teams module for intersyntactic. It lets a journey take part in Microsoft
+Teams: what a journey shows a person arrives as a message or a card, and what
+they say and press there comes back as nodes on its journey path. The modules
+on that path never learn Teams exists; a module that wants a person's review
+or approval plugs into this one rather than speaking Teams itself. The design
+began in https://github.com/enspyrco/intersyntactic/issues/1089; the
+questions it left open are answered in
+https://github.com/intersyntactic/teams_module/issues/1.
 
 ## Shape
 
 ```
 Teams ──POST (Bot Framework JWT)──▶ Teams relay ──doorbell, with content──▶ receiver
                                      │  checks the token against            │  writes nodes,
-                                     │  Microsoft's public keys; answers    │  runs Hart's turn
+                                     │  Microsoft's public keys; answers    │  feeds the journey
                                      │  a card action with "Got it"         ▼
                                      │  at once; drops repeats       Bot Connector REST
                                      │  by activity id               (posts and edits cards)
@@ -31,17 +33,20 @@ It differs from the Slack module's shape in three ways, each forced by Teams:
 
 v1 mirrors what is addressed to the bot: card actions, form submissions and
 @-mentions, which in a one-to-one chat is every message. It asks for no Graph
-permissions, so Peter's IT has one thing to do: upload the app.
+permissions, so an organisation's IT has one thing to do: upload the app.
 
 ## Status
 
 The way in is here: the relay (`bin/teams_relay.dart`, `lib/src/teams_relay.dart`)
 serves `POST /api/messages`, fetches Microsoft's keys and refreshes them every
 12 hours (`lib/src/key_source.dart`), and passes each delivery through the gate
-(`lib/src/teams_gate.dart`). For now, a doorbell becomes a log line of ids.
-The way out is here too: `lib/src/bot_connector.dart` gets the bot's token and
-posts, replies to and edits messages. Still to come: handing doorbells to a
-receiver, the receiver itself, and cards drawn from a shape's fields.
+(`lib/src/teams_gate.dart`). The receiver (`lib/src/teams_receiver.dart`)
+reads each doorbell as the annotation shapes it writes: an approval, a
+holding off, a withdrawal. Until the module meets a real journey path it
+writes them to a stand-in (`lib/src/stand_in_journey_path.dart`). The way out
+is here too: `lib/src/bot_connector.dart` gets the bot's token and posts,
+replies to and edits messages. Still to come: cards drawn from a shape's
+fields.
 
 ## Testing on a test tenant
 
@@ -53,23 +58,22 @@ Approve and Not yet when told "card", and edits the card when one is pressed.
 env-run ENS_TEAMS_APP_ID:TEAMS_APP_ID ENS_TEAMS_APP_SECRET:TEAMS_APP_SECRET \
   ENS_TEAMS_TENANT_ID:TEAMS_TENANT_ID -- dart run bin/teams_echo.dart
 cloudflared tunnel --url http://127.0.0.1:8087   # a public https address
-dart run tool/app_package.dart <app id> "Hart Reports" 0.0.1   # build/appPackage.zip
+dart run tool/app_package.dart <app id> "Intersyntactic" 0.0.1   # build/appPackage.zip
 ```
 
-`ENS_TEAMS_*` is the bot in Enspyr's tenant; `HA_TEAMS_*` is Sian's, in Hart
-Aspects'. Set the bot's endpoint to the tunnel's address plus `/api/messages`,
+`ENS_TEAMS_*` is the bot in Enspyr's tenant. Set the bot's endpoint to the tunnel's address plus `/api/messages`,
 upload the zip in the test tenant's Teams, and message the bot. To replace a
 package already uploaded, build it with a higher version: Teams refuses one
 that isn't.
 
-The icon is a hart's antlers drawn as a tree of nodes, like a transit map: a
-journey path in gold from the root up each beam, tines branching off it, and
-every node a station coloured by who wrote it, people and agents alike.
+The icon is a journey path drawn as a transit map: the path in gold from its
+root to its tip, two new paths branching off it at its nodes, and every node
+a station coloured by who wrote it, people and agents alike.
 
 ## Running the relay
 
 ```
-TEAMS_APP_ID=<the bot's app id> TEAMS_TENANT_ALLOWLIST=<Peter's tenant id> \
+TEAMS_APP_ID=<the bot's app id> TEAMS_TENANT_ALLOWLIST=<tenant ids, comma-separated> \
   dart run bin/teams_relay.dart
 ```
 

@@ -24,8 +24,8 @@ void main() {
         'activity': '1730881234567',
         'service_url': serviceUrl,
         'timestamp': '2026-11-06T10:00:00.000Z',
-        'from': '29:1peter',
-        'from_aad_object_id': 'oid-peter',
+        'from': '29:1ada',
+        'from_aad_object_id': 'oid-ada',
         'recipient': '28:$appId',
         'text': 'Looks right to me',
       });
@@ -100,14 +100,14 @@ void main() {
       final entities = [
         {
           'type': 'mention',
-          'mentioned': {'id': '28:$appId', 'name': 'Hart'},
-          'text': '<at>Hart</at>',
+          'mentioned': {'id': '28:$appId', 'name': 'Bot'},
+          'text': '<at>Bot</at>',
         },
         {'type': 'quotedReply', 'messageId': '1730881000000'},
       ];
       final d = _gate({
         ...message(
-          text: '<quoted messageId="1730881000000"/> <at>Hart</at> not quite',
+          text: '<quoted messageId="1730881000000"/> <at>Bot</at> not quite',
         ),
         'entities': entities,
       });
@@ -364,9 +364,9 @@ void main() {
     // The token is valid; the body is not the one Microsoft sent with it.
     // Nothing the gate can check catches that, because no documented check
     // of the token covers the body (see the library comment, point 2).
-    final d = _gate(message(text: 'words Peter never typed'));
+    final d = _gate(message(text: 'words Ada never typed'));
     expect(d.outcome, TeamsGateOutcome.trigger);
-    expect(d.doorbell!.string('text'), 'words Peter never typed');
+    expect(d.doorbell!.string('text'), 'words Ada never typed');
   });
 
   group('the key set', () {

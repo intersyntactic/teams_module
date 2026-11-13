@@ -17,7 +17,7 @@ import 'package:pointycastle/random/fortuna_random.dart';
 import 'package:pointycastle/signers/rsa_signer.dart';
 
 const appId = '00000000-0000-0000-0000-00000000b07a';
-const tenant = 'tenant-peter';
+const tenant = 'tenant-ada';
 const serviceUrl = 'https://smba.trafficmanager.net/amer/';
 final now = DateTime.utc(2026, 11, 6, 10);
 final nowSeconds = now.millisecondsSinceEpoch ~/ 1000;
@@ -56,8 +56,8 @@ Map<String, Object?> message({
   'channelId': 'msteams',
   'serviceUrl': serviceUrl,
   'timestamp': '2026-11-06T10:00:00.000Z',
-  'from': {'id': '29:1peter', 'aadObjectId': 'oid-peter', 'name': 'Peter'},
-  'recipient': {'id': '28:$appId', 'name': 'Hart'},
+  'from': {'id': '29:1ada', 'aadObjectId': 'oid-ada', 'name': 'Ada'},
+  'recipient': {'id': '28:$appId', 'name': 'Bot'},
   'conversation': {
     'id': 'a:1personal',
     'conversationType': 'personal',
@@ -78,7 +78,7 @@ Map<String, Object?> cardAction() => {
     'action': {
       'type': 'Action.Execute',
       'verb': 'approve',
-      'data': {'node': 'rung-3'},
+      'data': {'node': 'example-3'},
     },
     'trigger': 'manual',
   },
