@@ -47,7 +47,8 @@ jobs:
 
       - name: Read version from pubspec.yaml
         id: version
-        run: echo "value=$(sed -n 's/^version: *//p' pubspec.yaml)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "value=$(sed -n 's/^version: *//p' pubspec.yaml)" >> "$GITHUB_OUTPUT"
 
       - uses: docker/login-action@v3
         with:
@@ -60,15 +61,33 @@ jobs:
       # wrong build. Overwriting is the default registry behaviour, so
       # refuse explicitly: merging without bumping the version is the
       # mistake this catches.
+      #
+      # `docker manifest inspect` fails closed on a real "not found" but
+      # ALSO on a network blip, an auth failure or a media-type mismatch —
+      # every non-zero exit reads as "tag unused" and a retry then
+      # overwrites a real version (enspyrco/infra#166). `imagetools inspect`
+      # fails the same ways, so the fix is to read what it actually says:
+      # a true miss ends its error with "not found"; anything else
+      # (confirmed locally against an auth failure and a DNS failure,
+      # both worded differently) must fail the job, not be read as "unused".
       - name: Refuse to overwrite an existing version tag
         env:
           TAG: ${{ env.IMAGE }}:${{ steps.version.outputs.value }}
         run: |
-          if docker manifest inspect "$TAG" >/dev/null 2>&1; then
+          set +e
+          out=$(docker buildx imagetools inspect "$TAG" 2>&1)
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
             echo "::error::$TAG already exists. Bump \"version\" in pubspec.yaml." >&2
             exit 1
           fi
-          echo "$TAG is unused — ok to publish."
+          if echo "$out" | grep -q ': not found$'; then
+            echo "$TAG is unused — ok to publish."
+          else
+            echo "::error::could not tell whether $TAG exists (imagetools inspect did not say \"not found\"): $out" >&2
+            exit 1
+          fi
 
       # The box is aarch64 while the runner is amd64. A single-arch image
       # pulls fine here and fails on the box with "no matching manifest".
