@@ -153,6 +153,15 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.1.0"
+  is_agent_shapes:
+    dependency: "direct main"
+    description:
+      path: "."
+      ref: bddc4cef70326b8ead79b2ac59d15fb673949006
+      resolved-ref: bddc4cef70326b8ead79b2ac59d15fb673949006
+      url: "git@github.com:intersyntactic/agent_shapes.git"
+    source: git
+    version: "0.1.0"
   is_annotation_shapes:
     dependency: "direct main"
     description:

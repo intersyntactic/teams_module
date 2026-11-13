@@ -11,6 +11,10 @@ environment:
 
 dependencies:
   checked_json: ^0.2.1
+  is_agent_shapes:
+    git:
+      url: git@github.com:intersyntactic/agent_shapes.git
+      ref: bddc4cef70326b8ead79b2ac59d15fb673949006
   is_annotation_shapes:
     git:
       url: git@github.com:intersyntactic/annotation_shapes.git
