@@ -2,6 +2,7 @@ import 'package:checked_json/checked_json.dart';
 import 'package:is_agent_shapes/is_agent_shapes.dart';
 import 'package:is_shapes/is_shapes.dart';
 
+import 'teams_conversation.dart';
 import 'teams_post.dart';
 import 'teams_receiver.dart' show teamsActor;
 
@@ -13,29 +14,34 @@ typedef _Where = ({String conversation, String activity});
 /// [ReplyText]s that answer them, described as [TeamsPost]s.
 ///
 /// It describes and never acts: what [said] returns is for the journey path
-/// to append, and what [answer] returns is for the airlock to decide. Where
-/// a reply goes is read from what it [ReplyText.answers], so a reply never
+/// to append, and what [answer] returns is for the airlock to decide. All
+/// it remembers comes back to it from the journey path, through [joined]
+/// and [heard], so a restart that replays the path loses nothing. Where a
+/// reply goes is read from what it [ReplyText.answers], so a reply never
 /// lands in whichever chat spoke last.
 ///
-/// The journey path delivers to it in the order it appends, so a [UserSaid]
-/// reaches [heard] before any [ReplyText] to it reaches [answer].
+/// The journey path delivers to it in the order it appends, so a
+/// [TeamsConversation] reaches [joined] before a [UserSaid] from it reaches
+/// [heard], and that before any [ReplyText] to it reaches [answer].
 final class TeamsMessages {
   TeamsMessages({required this.log});
 
   final void Function(String) log;
 
-  /// The Bot Connector endpoint for each conversation, from its doorbells.
+  /// The Bot Connector endpoint for each conversation joined.
   final _serviceUrls = <String, Uri>{};
 
   /// Where each [UserSaid] heard here was said, by its id.
   final _heard = <TurnId, _Where>{};
 
-  /// A `teams_message` doorbell as [UserSaid]. Null for any other doorbell,
+  /// A `teams_message` doorbell as [UserSaid], after a [TeamsConversation]
+  /// when the conversation is new or Teams has moved it; both are for the
+  /// journey path to append, in that order. Null for any other doorbell,
   /// one with no sender Teams names, or one with no words.
   ///
   /// Its [UserSaid.source] is the conversation and the activity, which
   /// together name one Teams message.
-  UserSaid? said(JsonObject bell) {
+  ({TeamsConversation? joined, UserSaid said})? said(JsonObject bell) {
     if (bell.stringOrNull('event') != 'teams_message') return null;
     final author = teamsActor(bell);
     if (author == null) {
@@ -51,17 +57,31 @@ final class TeamsMessages {
       log('teams messages: a message from "$conversation" "$activity"');
       return null;
     }
-    _serviceUrls[conversation] = Uri.parse(bell.string('service_url'));
-    return UserSaid(author: author, source: source, text: text);
+    final serviceUrl = Uri.parse(bell.string('service_url'));
+    return (
+      joined: _serviceUrls[conversation] == serviceUrl
+          ? null
+          : TeamsConversation(
+              conversation: conversation,
+              serviceUrl: serviceUrl,
+            ),
+      said: UserSaid(author: author, source: source, text: text),
+    );
   }
 
-  /// Notes [id] as [said], if it was said in a Teams conversation this
-  /// module has heard from.
+  /// Notes where [conversation] is reached.
+  void joined(TeamsConversation conversation) =>
+      _serviceUrls[conversation.conversation] = conversation.serviceUrl;
+
+  /// Notes [id] as [said], if a Teams user said it.
   void heard(TurnId id, UserSaid said) {
+    if (!said.author.value.startsWith('teams:')) return;
     final where = _where(said.source);
-    if (where != null && _serviceUrls.containsKey(where.conversation)) {
-      _heard[id] = where;
+    if (where == null || !_serviceUrls.containsKey(where.conversation)) {
+      log('teams messages: $id was said in a conversation never joined');
+      return;
     }
+    _heard[id] = where;
   }
 
   /// [reply] as a post under what it answers. Null when that was said

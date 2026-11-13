@@ -18,6 +18,7 @@ export 'src/key_source.dart';
 export 'src/stand_in_journey_path.dart';
 export 'src/teams_event.dart';
 export 'src/teams_gate.dart';
+export 'src/teams_conversation.dart';
 export 'src/teams_messages.dart';
 export 'src/teams_post.dart';
 export 'src/teams_receiver.dart';

@@ -8,11 +8,15 @@ import 'package:test/test.dart';
 
 import 'support/fixtures.dart';
 
-/// The doorbell the gate makes of [activity], as the relay hands it on.
+/// The doorbell the gate makes of [activity], as the relay hands it on,
+/// under a token that names the activity's service URL, as Microsoft's do.
 JsonObject bellOf(Map<String, Object?> activity) => teamsGate(
   spec: const TeamsSourceSpec(appId: appId, tenantAllowlist: {tenant}),
   keys: keys,
-  headers: {'Authorization': 'Bearer ${signedToken()}'},
+  headers: {
+    'Authorization':
+        'Bearer ${signedToken(claims: {...tokenClaims(), 'serviceurl': activity['serviceUrl']})}',
+  },
   body: utf8.encode(jsonEncode(activity)),
   now: now,
   hasSeen: (_) => false,
@@ -30,6 +34,10 @@ Map<String, Object?> inConversation(
   return activity;
 }
 
+/// [activity] arriving through the Bot Connector at [url].
+Map<String, Object?> through(String url, Map<String, Object?> activity) =>
+    activity..['serviceUrl'] = url;
+
 void main() {
   setUpAll(setUpKeys);
 
@@ -38,34 +46,53 @@ void main() {
   late List<TeamsPost> posted;
   late List<String> logged;
 
+  /// Every node appended, in order, as a journey path's store keeps them.
+  late List<(TurnId, Object)> stored;
+
   /// What the agent does when a [UserSaid] reaches it, if anything.
   void Function(TurnId id, UserSaid said)? agent;
 
   /// What the composition does with a doorbell: the module reads it, and
-  /// the journey path appends what it read.
+  /// the journey path appends what it read, the conversation first.
   TurnId? say(Map<String, Object?> activity) {
-    final said = teams.said(bellOf(activity));
-    return said == null ? null : journeyPath.append(said);
+    final read = teams.said(bellOf(activity));
+    if (read == null) return null;
+    if (read.joined case final joined?) journeyPath.append(joined);
+    return journeyPath.append(read.said);
+  }
+
+  /// The composition delivering [node] to the module's acceptors.
+  void deliverTo(TeamsMessages module, TurnId id, Object node) {
+    switch (node) {
+      case TeamsConversation joined:
+        module.joined(joined);
+      case UserSaid said:
+        module.heard(id, said);
+      case ReplyText reply:
+        if (module.answer(reply) case final post?) posted.add(post);
+    }
   }
 
   setUp(() {
     posted = [];
     logged = [];
+    stored = [];
     agent = null;
     teams = TeamsMessages(log: logged.add);
     // The composition: each node goes to the acceptor bound to its shape,
     // and a post the module describes goes to the airlock (here, a list).
     journeyPath = StandInJourneyPath(
       deliver: (id, node) {
-        switch (node) {
-          case UserSaid said:
-            teams.heard(id, said);
-            agent?.call(id, said);
-          case ReplyText reply:
-            if (teams.answer(reply) case final post?) posted.add(post);
-        }
+        stored.add((id, node));
+        deliverTo(teams, id, node);
+        if (node case UserSaid said) agent?.call(id, said);
       },
       encodeOther: (node) => switch (node) {
+        TeamsConversation(:final conversation, :final serviceUrl) => {
+          'shape': 'TeamsConversation',
+          'conversation': conversation,
+          'service_url': '$serviceUrl',
+        },
         UserSaid(:final author, :final source, :final text) => {
           'shape': 'UserSaid',
           'author': '$author',
@@ -87,16 +114,16 @@ void main() {
       final got = teams.said(
         bellOf(message(id: 'act-1', text: 'Is the draft ready?')),
       );
-      expect(got?.author, ada);
-      expect(got?.source.value, 'a:1personal|act-1');
-      expect(got?.text, 'Is the draft ready?');
+      expect(got?.said.author, ada);
+      expect(got?.said.source.value, 'a:1personal|act-1');
+      expect(got?.said.text, 'Is the draft ready?');
     });
 
     test('loses the @-mention of the bot, which is how a group says it', () {
       final got = teams.said(
         bellOf(message(text: '<at>Bot</at> Is the draft ready?')),
       );
-      expect(got?.text, 'Is the draft ready?');
+      expect(got?.said.text, 'Is the draft ready?');
     });
 
     test('from someone Teams does not name reads as nothing', () {
@@ -111,6 +138,31 @@ void main() {
 
     test('a card press is not a message', () {
       expect(teams.said(bellOf(cardAction())), isNull);
+    });
+  });
+
+  group('a conversation', () {
+    test('is offered the first time it is heard from', () {
+      final got = teams.said(bellOf(message()));
+      expect(got?.joined?.conversation, 'a:1personal');
+      expect(got?.joined?.serviceUrl, Uri.parse(serviceUrl));
+    });
+
+    test('is not offered again once joined', () {
+      say(message(id: 'act-1'));
+      expect(teams.said(bellOf(message(id: 'act-2')))?.joined, isNull);
+    });
+
+    test('is offered again when Teams moves it', () {
+      say(message(id: 'act-1'));
+      final moved = 'https://smba.trafficmanager.net/emea/';
+      final got = teams.said(bellOf(through(moved, message(id: 'act-2'))));
+      expect(got?.joined?.serviceUrl, Uri.parse(moved));
+    });
+
+    test('is joined only when the journey path delivers it', () {
+      teams.said(bellOf(message(id: 'act-1')));
+      expect(teams.said(bellOf(message(id: 'act-2')))?.joined, isNotNull);
     });
   });
 
@@ -137,30 +189,50 @@ void main() {
       expect(posted.single.activity['text'], 'At once.');
     });
 
-    test('is found by what was said, not by the very object', () {
-      // A journey path that stores what it appends delivers a copy read
-      // back from the store, not the node the module returned.
-      final said = teams.said(bellOf(message(id: 'act-3')))!;
-      final store = StandInJourneyPath(
-        deliver: (_, _) {},
-        encodeOther: (_) => {'shape': 'UserSaid', 'source': 'act-3'},
+    test('after a restart is posted, from what the journey path replays', () {
+      final asked = say(message(id: 'act-3'))!;
+      // A new module, knowing only what the journey path hands it back:
+      // copies, as a store would read them, not the nodes appended.
+      final restarted = TeamsMessages(log: logged.add);
+      for (final (id, node) in stored) {
+        deliverTo(restarted, id, switch (node) {
+          TeamsConversation(:final conversation, :final serviceUrl) =>
+            TeamsConversation(
+              conversation: conversation,
+              serviceUrl: serviceUrl,
+            ),
+          UserSaid(:final author, :final source, :final text) => UserSaid(
+            author: author,
+            source: source,
+            text: text,
+          ),
+          _ => node,
+        });
+      }
+      deliverTo(
+        restarted,
+        asked,
+        ReplyText(by: agentId, answers: asked, text: 'Back again.'),
       );
-      final id = store.append(said);
-      teams.heard(
-        id,
-        UserSaid(author: said.author, source: said.source, text: said.text),
-      );
-      final post = teams.answer(
-        ReplyText(by: agentId, answers: id, text: 'From the store.'),
-      );
-      expect(post?.replyToId, 'act-3');
+      expect(posted.single.replyToId, 'act-3');
+      expect(posted.single.serviceUrl, Uri.parse(serviceUrl));
     });
 
-    test('to what was not said here is not posted', () {
+    test('goes through where Teams moved the conversation since', () {
+      final asked = say(message(id: 'act-1'))!;
+      final moved = 'https://smba.trafficmanager.net/emea/';
+      say(through(moved, message(id: 'act-2')));
+      journeyPath.append(
+        ReplyText(by: agentId, answers: asked, text: 'Moved.'),
+      );
+      expect(posted.single.serviceUrl, Uri.parse(moved));
+    });
+
+    test('to what was said by someone not in Teams is not posted', () {
       final elsewhere = journeyPath.append(
         UserSaid(
-          author: ada,
-          source: SourceMessageId.parse('slack-1')!,
+          author: ActorId.parse('slack:T1/U1')!,
+          source: SourceMessageId.parse('C0123|1731456789.000100')!,
           text: 'hello',
         ),
       );
@@ -168,24 +240,23 @@ void main() {
         ReplyText(by: agentId, answers: elsewhere, text: 'Hi.'),
       );
       expect(posted, isEmpty);
+      expect(logged, isEmpty);
     });
 
-    test(
-      'to a source shaped like ours from a chat never heard is not posted',
-      () {
-        final elsewhere = journeyPath.append(
-          UserSaid(
-            author: ada,
-            source: SourceMessageId.parse('C0123|1731456789.000100')!,
-            text: 'hello',
-          ),
-        );
-        journeyPath.append(
-          ReplyText(by: agentId, answers: elsewhere, text: 'Hi.'),
-        );
-        expect(posted, isEmpty);
-      },
-    );
+    test('to a Teams message from a chat never joined says so', () {
+      final unjoined = journeyPath.append(
+        UserSaid(
+          author: ada,
+          source: SourceMessageId.parse('a:9never|act-1')!,
+          text: 'hello',
+        ),
+      );
+      journeyPath.append(
+        ReplyText(by: agentId, answers: unjoined, text: 'Hi.'),
+      );
+      expect(posted, isEmpty);
+      expect(logged.single, contains('never joined'));
+    });
 
     test('goes to the conversation of what it answers, not the newest', () {
       final first = say(message(id: 'act-1'))!;
