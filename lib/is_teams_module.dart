@@ -6,9 +6,9 @@
 /// against, [BotFrameworkKeys], fetched by [BotFrameworkKeySource]. Then
 /// [TeamsReceiver], which reads each event as the annotation shapes it
 /// writes, and a [StandInJourneyPath] to write them to until the module meets
-/// a real journey path; and [TeamsMessages], which writes what people say as
+/// a real journey path; and [TeamsMessages], which reads what people say as
 /// a `UserSaid` and describes each `ReplyText` to it as a [TeamsPost] (both
-/// from is_agent_shapes). And the way out: [BotConnector], which holds the
+/// from is_agent_shapes), appending and sending neither. And the way out: [BotConnector], which holds the
 /// bot's secret and speaks as it.
 library;
 

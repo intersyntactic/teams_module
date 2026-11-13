@@ -5,38 +5,37 @@ import 'package:is_shapes/is_shapes.dart';
 import 'teams_post.dart';
 import 'teams_receiver.dart' show teamsActor;
 
-/// Where something was said in Teams: what a reply needs to go back there.
-typedef _Origin = ({Uri serviceUrl, String conversation, String activity});
+/// A Teams message by where it was said: an activity id names a message only
+/// within its conversation.
+typedef _Where = ({String conversation, String activity});
 
-/// What people say to the bot in Teams, written as [UserSaid], and the
+/// What people say to the bot in Teams, read as [UserSaid], and the
 /// [ReplyText]s that answer them, described as [TeamsPost]s.
 ///
-/// It never sends. What it offers goes to [append], the journey path; what
-/// would leave goes to [post], which hands it to the airlock. Where a reply
-/// goes is read from what it [ReplyText.answers], so a reply never lands in
-/// whichever chat spoke last.
+/// It describes and never acts: what [said] returns is for the journey path
+/// to append, and what [answer] returns is for the airlock to decide. Where
+/// a reply goes is read from what it [ReplyText.answers], so a reply never
+/// lands in whichever chat spoke last.
+///
+/// The journey path delivers to it in the order it appends, so a [UserSaid]
+/// reaches [heard] before any [ReplyText] to it reaches [answer].
 final class TeamsMessages {
-  TeamsMessages({required this.append, required this.post, required this.log});
-
-  /// Appends a node to the journey path and returns its id.
-  final TurnId Function(Object node) append;
-
-  /// A post for the airlock to decide.
-  final void Function(TeamsPost post) post;
+  TeamsMessages({required this.log});
 
   final void Function(String) log;
 
-  final _origins = <TurnId, _Origin>{};
+  /// The Bot Connector endpoint for each conversation, from its doorbells.
+  final _serviceUrls = <String, Uri>{};
 
-  /// What was said and where, by the very node, while its append runs: the
-  /// journey path can deliver it, and an agent answer it, before append
-  /// returns its id.
-  final _saying = Map<UserSaid, _Origin>.identity();
+  /// Where each [UserSaid] heard here was said, by its id.
+  final _heard = <TurnId, _Where>{};
 
-  /// Writes a `teams_message` doorbell as [UserSaid] and returns its id.
-  /// Null for any other doorbell, one with no sender Teams names, or one
-  /// with no words.
-  TurnId? said(JsonObject bell) {
+  /// A `teams_message` doorbell as [UserSaid]. Null for any other doorbell,
+  /// one with no sender Teams names, or one with no words.
+  ///
+  /// Its [UserSaid.source] is the conversation and the activity, which
+  /// together name one Teams message.
+  UserSaid? said(JsonObject bell) {
     if (bell.stringOrNull('event') != 'teams_message') return null;
     final author = teamsActor(bell);
     if (author == null) {
@@ -45,41 +44,51 @@ final class TeamsMessages {
     }
     final text = _plain(bell.stringOrNull('text') ?? '');
     if (text.isEmpty) return null;
+    final conversation = bell.string('conversation');
     final activity = bell.string('activity');
-    final source = SourceMessageId.parse(activity);
+    final source = SourceMessageId.parse(_source(conversation, activity));
     if (source == null) {
-      log('teams messages: a message whose activity id is "$activity"');
+      log('teams messages: a message from "$conversation" "$activity"');
       return null;
     }
-    final node = UserSaid(author: author, source: source, text: text);
-    _saying[node] = (
-      serviceUrl: Uri.parse(bell.string('service_url')),
-      conversation: bell.string('conversation'),
-      activity: activity,
-    );
-    final id = append(node);
-    if (_saying.remove(node) case final origin?) _origins[id] = origin;
-    return id;
+    _serviceUrls[conversation] = Uri.parse(bell.string('service_url'));
+    return UserSaid(author: author, source: source, text: text);
   }
 
-  /// A node the journey path delivers: a [UserSaid] of ours is noted by its
-  /// id, and a [ReplyText] to one becomes a post under it.
-  void delivered(TurnId id, Object node) {
-    switch (node) {
-      case UserSaid():
-        if (_saying.remove(node) case final origin?) _origins[id] = origin;
-      case ReplyText(:final answers, :final text):
-        final origin = _origins[answers];
-        if (origin == null) return; // Said somewhere other than Teams.
-        post(
-          TeamsPost(
-            serviceUrl: origin.serviceUrl,
-            conversation: origin.conversation,
-            replyToId: origin.activity,
-            activity: {'type': 'message', 'text': text},
-          ),
-        );
+  /// Notes [id] as [said], if it was said in a Teams conversation this
+  /// module has heard from.
+  void heard(TurnId id, UserSaid said) {
+    final where = _where(said.source);
+    if (where != null && _serviceUrls.containsKey(where.conversation)) {
+      _heard[id] = where;
     }
+  }
+
+  /// [reply] as a post under what it answers. Null when that was said
+  /// somewhere other than Teams.
+  TeamsPost? answer(ReplyText reply) {
+    final where = _heard[reply.answers];
+    if (where == null) return null;
+    return TeamsPost(
+      serviceUrl: _serviceUrls[where.conversation]!,
+      conversation: where.conversation,
+      replyToId: where.activity,
+      activity: {'type': 'message', 'text': reply.text},
+    );
+  }
+
+  /// A Teams message's source id: its conversation, then `|` and its
+  /// activity. It is split at the last `|`, so only the activity id has to
+  /// be free of one; Teams' are the millisecond they were sent, in digits,
+  /// which is also why one alone can name two messages in two chats.
+  static String _source(String conversation, String activity) =>
+      '$conversation|$activity';
+
+  static _Where? _where(SourceMessageId source) {
+    final s = source.value;
+    final bar = s.lastIndexOf('|');
+    if (bar <= 0 || bar == s.length - 1) return null;
+    return (conversation: s.substring(0, bar), activity: s.substring(bar + 1));
   }
 
   /// Text without Teams' `<at>…</at>` mentions and quote tags.
