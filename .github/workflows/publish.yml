@@ -20,6 +20,21 @@ on:
       - 'pubspec.lock'
       - 'Dockerfile'
   workflow_dispatch:
+    inputs:
+      skip_version_guard:
+        description: >-
+          Skip the "refuse to overwrite" check. For the one-time FIRST
+          publish only: ghcr.io/intersyntactic/teams_module has no package
+          yet, and an inspect of a package that has never been pushed may
+          come back "denied" rather than "not found" — indistinguishable
+          from a real failure, so the guard fails closed rather than
+          guessing. Confirmed anonymously (403/"failed to authorize", not
+          "not found"); unconfirmed for the authenticated GITHUB_TOKEN this
+          job actually uses. If that also says "denied", use this input
+          once and never again — it skips the only thing stopping an
+          accidental overwrite.
+        type: boolean
+        default: false
 
 env:
   IMAGE: ghcr.io/${{ github.repository }}
@@ -71,6 +86,7 @@ jobs:
       # (confirmed locally against an auth failure and a DNS failure,
       # both worded differently) must fail the job, not be read as "unused".
       - name: Refuse to overwrite an existing version tag
+        if: ${{ github.event.inputs.skip_version_guard != 'true' }}
         env:
           TAG: ${{ env.IMAGE }}:${{ steps.version.outputs.value }}
         run: |
@@ -88,6 +104,16 @@ jobs:
             echo "::error::could not tell whether $TAG exists (imagetools inspect did not say \"not found\"): $out" >&2
             exit 1
           fi
+
+      # Recorded in the run, not silent: a skip here is a one-time escape
+      # hatch, not routine behaviour, so it must be loud in the log and in
+      # the summary every time it fires.
+      - name: Record a skipped version-tag guard
+        if: ${{ github.event.inputs.skip_version_guard == 'true' }}
+        run: |
+          echo "::warning::version-tag guard SKIPPED via workflow_dispatch input skip_version_guard=true"
+          echo "### ⚠️ Version-tag guard SKIPPED" >> "$GITHUB_STEP_SUMMARY"
+          echo "Triggered manually with \`skip_version_guard: true\` — not a push to main." >> "$GITHUB_STEP_SUMMARY"
 
       # The box is aarch64 while the runner is amd64. A single-arch image
       # pulls fine here and fails on the box with "no matching manifest".
