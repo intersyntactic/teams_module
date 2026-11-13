@@ -6,18 +6,18 @@ import 'package:is_shapes/is_shapes.dart';
 import 'package:is_teams_module/is_teams_module.dart';
 import 'package:test/test.dart';
 
-/// A step's note, the value a later pass may change.
-final class Note extends Value {
-  const Note(this.text);
+/// An example's wording, the value a later pass may change.
+final class Wording extends Value {
+  const Wording(this.text);
   final String text;
 }
 
 /// A node a card shows, as a module's nodes are.
-final class Step {
-  const Step(this.name, this.note);
+final class Example {
+  const Example(this.key, this.wording);
   @identity
-  final String name;
-  final Note note;
+  final String key;
+  final Wording wording;
 }
 
 const tenant = '09e0393f-03f1-4206-84f3-8b127b750a5d';
@@ -63,10 +63,10 @@ void main() {
         receiver.delivered(id, node);
       },
       encodeOther: (node) => switch (node) {
-        Step(:final name, :final note) => {
-          'shape': 'Step',
-          'name': name,
-          'note': note.text,
+        Example(:final key, :final wording) => {
+          'shape': 'Example',
+          'key': key,
+          'wording': wording.text,
         },
         _ => throw ArgumentError.value(node, 'node', 'no encoding'),
       },
@@ -75,11 +75,11 @@ void main() {
 
   ActorId actor(String user) => ActorId.parse('teams:$tenant/$user')!;
 
-  /// Appends [step] as one pass would, and shows it on [card].
-  Target shown(String card, Step step, {String conversation = chat}) {
+  /// Appends [example] as one pass would, and shows it on [card].
+  Target shown(String card, Example example, {String conversation = chat}) {
     final target = Target(
-      exact: journeyPath.append(step),
-      anchor: SemanticAnchor.of(utf8.encode(step.name)),
+      exact: journeyPath.append(example),
+      anchor: SemanticAnchor.of(utf8.encode(example.key)),
     );
     receiver.show(card, target, conversation: conversation);
     return target;
@@ -92,7 +92,7 @@ void main() {
     return written;
   }
 
-  const planned = Step('step-3', Note('as planned'));
+  const planned = Example('example-3', Wording('as planned'));
 
   test('Approve on a shown card writes an Approve of its node', () {
     final target = shown('card-1', planned);
@@ -178,7 +178,7 @@ void main() {
   test('Not yet leaves his approvals of what an earlier pass said', () {
     shown('card-1', planned);
     write(press('card-1', 'approve'));
-    shown('card-2', const Step('step-3', Note('done')));
+    shown('card-2', const Example('example-3', Wording('done')));
     final written = write(press('card-2', 'notyet'));
     expect(written.seen, isNotNull);
     expect(written.withdrawn, isEmpty);
@@ -232,7 +232,7 @@ void main() {
     test('is open on a later pass that says something new', () {
       shown('card-1', planned);
       write(press('card-1', 'approve'));
-      final done = shown('card-2', const Step('step-3', Note('done')));
+      final done = shown('card-2', const Example('example-3', Wording('done')));
       expect(receiver.stanceOf(actor(ada), done.exact), Stance.open);
     });
 
@@ -255,7 +255,7 @@ void main() {
   group('the cards a press may change', () {
     test('are the cards in its conversation showing the same version', () {
       shown('card-1', planned);
-      shown('card-2', const Step('step-3', Note('done')));
+      shown('card-2', const Example('example-3', Wording('done')));
       shown('card-3', planned);
       shown('card-4', planned, conversation: 'a:bea');
       expect(
@@ -285,7 +285,7 @@ void main() {
 
     test('tells apart two nodes that say different things', () {
       final a = journeyPath.append(planned);
-      final b = journeyPath.append(const Step('step-3', Note('done')));
+      final b = journeyPath.append(const Example('example-3', Wording('done')));
       expect(journeyPath.sameVersion(a, b), isFalse);
     });
 

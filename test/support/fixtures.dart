@@ -78,7 +78,7 @@ Map<String, Object?> cardAction() => {
     'action': {
       'type': 'Action.Execute',
       'verb': 'approve',
-      'data': {'node': 'step-3'},
+      'data': {'node': 'example-3'},
     },
     'trigger': 'manual',
   },

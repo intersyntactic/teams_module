@@ -19,7 +19,7 @@
 /// with Approve and Not yet; press one and the card is edited to say so.
 /// Adding the bot to a chat gets a hello, sent without being asked.
 ///
-/// Each "card" appends a step to a [StandInJourneyPath], as a module's pass
+/// Each "card" appends an example to a [StandInJourneyPath], as a module's pass
 /// would, and the card shows it: "card" again is a later pass saying the
 /// same, and "card done" one saying something new. Each press writes what
 /// [TeamsReceiver] reads it as to that journey path, and the log names each
@@ -35,17 +35,17 @@ import 'package:is_annotation_shapes/is_annotation_shapes.dart';
 import 'package:is_shapes/is_shapes.dart';
 import 'package:is_teams_module/is_teams_module.dart';
 
-/// A stand-in for what a module shows on a card: a step, the same step on
-/// every pass, and a note on it that a later pass may change.
-final class _Step {
-  const _Step(this.name, this.note);
+/// An example of what a module shows on a card: its key, the same on every
+/// pass, and wording that a later pass may change.
+final class _Example {
+  const _Example(this.key, this.wording);
   @identity
-  final String name;
-  final _Note note;
+  final String key;
+  final _Wording wording;
 }
 
-final class _Note extends Value {
-  const _Note(this.text);
+final class _Wording extends Value {
+  const _Wording(this.text);
   final String text;
 }
 
@@ -99,10 +99,10 @@ Future<void> main() async {
       stderr.writeln('echo: appended ${_short(id)} ${node.runtimeType}$of');
     },
     encodeOther: (node) => switch (node) {
-      _Step(:final name, :final note) => {
-        'shape': 'Step',
-        'name': name,
-        'note': note.text,
+      _Example(:final key, :final wording) => {
+        'shape': 'Example',
+        'key': key,
+        'wording': wording.text,
       },
       _ => throw ArgumentError.value(node, 'node', 'no encoding'),
     },
@@ -132,7 +132,7 @@ typedef _Echo = ({
 });
 
 /// What each card shows, by its activity id, to draw it again when edited.
-final _steps = <String, _Step>{};
+final _examples = <String, _Example>{};
 
 Future<void> _answer(_Echo echo, JsonObject bell) async {
   final connector = echo.connector;
@@ -144,14 +144,14 @@ Future<void> _answer(_Echo echo, JsonObject bell) async {
     switch (bell.string('event')) {
       case 'teams_message':
         final said = _plain(bell.stringOrNull('text') ?? '');
-        if (said.toLowerCase().split(' ') case ['card', ...final note]) {
-          final step = _Step(
-            'Step 3: tidy the README',
-            _Note(note.isEmpty ? 'as planned' : note.join(' ')),
+        if (said.toLowerCase().split(' ') case ['card', ...final words]) {
+          final example = _Example(
+            'Example 3: tidy the README',
+            _Wording(words.isEmpty ? 'as planned' : words.join(' ')),
           );
           final target = Target(
-            exact: echo.journeyPath.append(step),
-            anchor: SemanticAnchor.of(utf8.encode('Step:${step.name}')),
+            exact: echo.journeyPath.append(example),
+            anchor: SemanticAnchor.of(utf8.encode('Example:${example.key}')),
           );
           // A later pass that says the same arrives already approved.
           final by = teamsActor(bell);
@@ -160,9 +160,9 @@ Future<void> _answer(_Echo echo, JsonObject bell) async {
               : echo.receiver.stanceOf(by, target.exact);
           final id = await connector.send(serviceUrl, conversation, {
             'type': 'message',
-            'attachments': [_card(step, stance: stance)],
+            'attachments': [_card(example, stance: stance)],
           });
-          _steps[id] = step;
+          _examples[id] = example;
           echo.receiver.show(id, target, conversation: conversation);
           stderr.writeln(
             'echo: card $id shows ${_short(target.exact)}, ${stance.name}',
@@ -185,13 +185,13 @@ Future<void> _answer(_Echo echo, JsonObject bell) async {
         final like = echo.receiver.cardsLike(card, conversation: conversation);
         final editing = verb == 'edit';
         for (final other in editing ? like.where((c) => c == card) : like) {
-          final step = _steps[other];
+          final example = _examples[other];
           final target = echo.receiver.targetOf(other);
-          if (step == null || target == null) continue;
+          if (example == null || target == null) continue;
           final stance = echo.receiver.stanceOf(by, target.exact);
           await connector.update(serviceUrl, conversation, other, {
             'type': 'message',
-            'attachments': [_card(step, stance: stance, editing: editing)],
+            'attachments': [_card(example, stance: stance, editing: editing)],
           });
           stderr.writeln('echo: card $other edited, ${stance.name}');
         }
@@ -225,13 +225,13 @@ String _plain(String text) => text
 /// The first eight hex digits of [id], enough to tell nodes apart in a log.
 String _short(TurnId id) => id.hex.substring(0, 8);
 
-/// The card for [step], as the presser's annotations of its version add up
+/// The card for [example], as the presser's annotations of its version add up
 /// ([stance]), and the actions that make sense from there (Nick,
 /// 2026-11-10). Approved offers only Edit, which writes nothing and reopens
 /// the choice on that card ([editing]); open, reopened or held off offers
 /// Approve and Not yet.
 Map<String, Object?> _card(
-  _Step step, {
+  _Example example, {
   required Stance stance,
   bool editing = false,
 }) => {
@@ -243,11 +243,15 @@ Map<String, Object?> _card(
     'body': [
       {
         'type': 'TextBlock',
-        'text': step.name,
+        'text': example.key,
         'weight': 'Bolder',
         'wrap': true,
       },
-      {'type': 'TextBlock', 'text': 'Note: ${step.note.text}', 'wrap': true},
+      {
+        'type': 'TextBlock',
+        'text': 'Wording: ${example.wording.text}',
+        'wrap': true,
+      },
       if (!editing && stance != Stance.open)
         {
           'type': 'TextBlock',
