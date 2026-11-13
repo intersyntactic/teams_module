@@ -21,18 +21,17 @@ on:
       - 'Dockerfile'
   workflow_dispatch:
     inputs:
-      skip_version_guard:
+      allow_unverified_first_publish:
         description: >-
-          Skip the "refuse to overwrite" check. For the one-time FIRST
-          publish only: ghcr.io/intersyntactic/teams_module has no package
-          yet, and an inspect of a package that has never been pushed may
-          come back "denied" rather than "not found" — indistinguishable
-          from a real failure, so the guard fails closed rather than
-          guessing. Confirmed anonymously (403/"failed to authorize", not
-          "not found"); unconfirmed for the authenticated GITHUB_TOKEN this
-          job actually uses. If that also says "denied", use this input
-          once and never again — it skips the only thing stopping an
-          accidental overwrite.
+          For the one-time FIRST publish only: ghcr.io/intersyntactic/teams_module
+          has no package yet, and an inspect of a package that has never been
+          pushed may come back "denied" rather than "not found" —
+          indistinguishable from a real failure, so the guard fails closed
+          rather than guessing. Confirmed anonymously (403/"failed to
+          authorize", not "not found"); unconfirmed for the authenticated
+          GITHUB_TOKEN this job actually uses. This does NOT weaken the
+          "tag already exists" check — that always refuses — it only lets
+          the unknown-error branch proceed instead of failing the job.
         type: boolean
         default: false
 
@@ -86,34 +85,30 @@ jobs:
       # (confirmed locally against an auth failure and a DNS failure,
       # both worded differently) must fail the job, not be read as "unused".
       - name: Refuse to overwrite an existing version tag
-        if: ${{ github.event.inputs.skip_version_guard != 'true' }}
         env:
           TAG: ${{ env.IMAGE }}:${{ steps.version.outputs.value }}
+          ALLOW_UNVERIFIED: ${{ github.event.inputs.allow_unverified_first_publish }}
         run: |
           set +e
           out=$(docker buildx imagetools inspect "$TAG" 2>&1)
           status=$?
           set -e
+          # exit 0 → the tag exists → always refuse. Nothing — not even the
+          # first-publish input — may overwrite a real version.
           if [ "$status" -eq 0 ]; then
             echo "::error::$TAG already exists. Bump \"version\" in pubspec.yaml." >&2
             exit 1
           fi
           if echo "$out" | grep -q ': not found$'; then
             echo "$TAG is unused — ok to publish."
+          elif [ "$ALLOW_UNVERIFIED" = "true" ]; then
+            echo "::warning::could not confirm $TAG is unused (imagetools inspect said: $out) — proceeding because allow_unverified_first_publish=true"
+            echo "### ⚠️ Version-tag guard could not verify $TAG" >> "$GITHUB_STEP_SUMMARY"
+            echo "Proceeded anyway via \`allow_unverified_first_publish: true\`. inspect said: \`$out\`" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "::error::could not tell whether $TAG exists (imagetools inspect did not say \"not found\"): $out" >&2
             exit 1
           fi
-
-      # Recorded in the run, not silent: a skip here is a one-time escape
-      # hatch, not routine behaviour, so it must be loud in the log and in
-      # the summary every time it fires.
-      - name: Record a skipped version-tag guard
-        if: ${{ github.event.inputs.skip_version_guard == 'true' }}
-        run: |
-          echo "::warning::version-tag guard SKIPPED via workflow_dispatch input skip_version_guard=true"
-          echo "### ⚠️ Version-tag guard SKIPPED" >> "$GITHUB_STEP_SUMMARY"
-          echo "Triggered manually with \`skip_version_guard: true\` — not a push to main." >> "$GITHUB_STEP_SUMMARY"
 
       # The box is aarch64 while the runner is amd64. A single-arch image
       # pulls fine here and fails on the box with "no matching manifest".
