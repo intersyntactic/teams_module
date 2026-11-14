@@ -4,10 +4,7 @@ The Teams module for intersyntactic. It lets a journey take part in Microsoft
 Teams: what a journey shows a person arrives as a message or a card, and what
 they say and press there comes back as nodes on its journey path. The modules
 on that path never learn Teams exists; a module that wants a person's review
-or approval plugs into this one rather than speaking Teams itself. The design
-began in https://github.com/enspyrco/intersyntactic/issues/1089; the
-questions it left open are answered in
-https://github.com/intersyntactic/teams_module/issues/1.
+or approval plugs into this one rather than speaking Teams itself.
 
 ## Shape
 
@@ -55,14 +52,16 @@ handler that answers through the Connector. It echoes text, sends a card with
 Approve and Not yet when told "card", and edits the card when one is pressed.
 
 ```
-env-run ENS_TEAMS_APP_ID:TEAMS_APP_ID ENS_TEAMS_APP_SECRET:TEAMS_APP_SECRET \
-  ENS_TEAMS_TENANT_ID:TEAMS_TENANT_ID -- dart run bin/teams_echo.dart
+TEAMS_APP_ID=<the bot's app id> TEAMS_APP_SECRET=<its client secret> \
+  TEAMS_TENANT_ID=<the tenant it is registered in> dart run bin/teams_echo.dart
 cloudflared tunnel --url http://127.0.0.1:8087   # a public https address
 dart run tool/app_package.dart <app id> "Intersyntactic" 0.0.1   # build/appPackage.zip
 ```
 
-`ENS_TEAMS_*` is the bot in Enspyr's tenant. Set the bot's endpoint to the tunnel's address plus `/api/messages`,
-upload the zip in the test tenant's Teams, and message the bot. To replace a
+Hand the secret over from wherever you keep secrets rather than typing it,
+so it stays out of your shell's history. Set the bot's endpoint to the
+tunnel's address plus `/api/messages`, upload the zip in the test tenant's
+Teams, and message the bot. To replace a
 package already uploaded, build it with a higher version: Teams refuses one
 that isn't.
 

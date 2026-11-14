@@ -9,11 +9,8 @@
 ///                           the only tenant whose activities are taken
 ///   PORT=8087, HOST=127.0.0.1 as for the relay
 ///
-/// Run it through env-run so the secret never touches a shell history:
-///
-///   env-run TEAMS_TEST_APP_ID:TEAMS_APP_ID \
-///     TEAMS_TEST_APP_SECRET:TEAMS_APP_SECRET \
-///     TEAMS_TEST_TENANT_ID:TEAMS_TENANT_ID -- dart run bin/teams_echo.dart
+/// Hand the secret over from wherever you keep secrets rather than typing
+/// it, so it never touches a shell history.
 ///
 /// In Teams: say anything and it echoes; say "card" and it sends a card
 /// with Approve and Not yet; press one and the card is edited to say so.

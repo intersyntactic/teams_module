@@ -24,8 +24,8 @@ final class Annotations {
 }
 
 /// Turns Teams doorbells into annotation shapes: Approve on a card becomes an
-/// [Approve], and Not yet a [Seen] and the withdrawals it asks for
-/// (https://github.com/intersyntactic/teams_module/issues/1#issuecomment-6681468624).
+/// [Approve], and Not yet a [Seen] and the withdrawals it asks for: having
+/// looked and held off is not the same as not having looked yet.
 ///
 /// It knows two things, each from its source. Which node a card shows, and in
 /// which conversation, from the cards it was told it [show]s: a press names

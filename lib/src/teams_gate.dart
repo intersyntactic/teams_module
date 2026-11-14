@@ -4,7 +4,7 @@
 /// A sibling of the Slack module's `slack_gate.dart`, and pure like it: the
 /// key set and the seen set are the caller's, so every case is testable
 /// without a clock, a socket, or Microsoft. Four things differ from Slack,
-/// each forced by Teams (https://github.com/intersyntactic/teams_module/issues/1):
+/// each forced by Teams:
 ///
 /// 1. AUTHENTICATION is a JWT that Microsoft signs with a private key and the
 ///    gate checks against Microsoft's published public keys. The gate holds

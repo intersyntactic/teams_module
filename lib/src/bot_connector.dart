@@ -8,7 +8,7 @@
 /// So the secret lives wherever the sending side runs, and nowhere else.
 ///
 /// The Connector can write but not read: it has no call that fetches a
-/// message (https://github.com/intersyntactic/teams_module/issues/1, item 2).
+/// message.
 library;
 
 import 'dart:async';
