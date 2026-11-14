@@ -102,7 +102,7 @@ final class TeamsRelay {
         }
       }().timeout(bodyTimeout);
     } on TimeoutException {
-      log('teams relay: body too slow');
+      log('teams relay: ${HttpStatus.requestTimeout} body too slow');
       return _end(req, HttpStatus.requestTimeout);
     }
     if (tooLarge) return _end(req, HttpStatus.requestEntityTooLarge);
@@ -111,7 +111,7 @@ final class TeamsRelay {
     if (keySet == null) {
       // Not the sender's fault: no key set has arrived from Microsoft yet.
       // A 503 says "try again", and Teams will.
-      log('teams relay: no keys yet');
+      log('teams relay: ${HttpStatus.serviceUnavailable} no keys yet');
       return _end(req, HttpStatus.serviceUnavailable);
     }
 
@@ -130,9 +130,10 @@ final class TeamsRelay {
       maxBodyBytes: maxBodyBytes,
     );
     if (d.seenKey case final key?) _markSeen(key, now);
-    // The reason, never the content: the log is not a copy of anyone's words.
-    log('teams relay: ${d.outcome.name} ${d.status}: ${d.reason}');
 
+    // One line per request, written once its status is decided, so it says
+    // what Teams was sent. The reason, never the content: the log is not a
+    // copy of anyone's words.
     if (d.event != null && witness != null) {
       try {
         witness!(Uint8List.fromList(body));
@@ -140,10 +141,14 @@ final class TeamsRelay {
         // Unrecorded is not taken: forget it was seen, so the retry Teams
         // sends for a 500 is taken and recorded then.
         if (d.seenKey case final key?) _seen.remove(key);
-        log('teams relay: witness failed: ${e.runtimeType}');
+        log(
+          'teams relay: ${HttpStatus.internalServerError} ${d.reason}: '
+          'witness failed: ${e.runtimeType}',
+        );
         return _end(req, HttpStatus.internalServerError);
       }
     }
+    log('teams relay: ${d.status} ${d.reason}');
 
     req.response.statusCode = d.status;
     if (d.invokeResponse case final body?) {

@@ -81,6 +81,7 @@ void main() {
     expect(status, 200);
     expect(body, isEmpty);
     expect((events.single as TeamsMessage).text, 'Looks right to me');
+    expect(logged, ['teams relay: 200 message']);
   });
 
   test('responds to a card action with the acknowledgement, as JSON', () async {
@@ -192,8 +193,10 @@ void main() {
       final (status, _, _) = await post(message());
       expect(status, 500);
       expect(events, isEmpty);
-      expect(logged.last, contains('witness failed'));
-      expect(logged.last, isNot(contains('Looks right')));
+      // One line, saying the status sent: a watcher keyed on "500" fires.
+      expect(logged, [
+        'teams relay: 500 message: witness failed: FileSystemException',
+      ]);
     });
 
     test(
