@@ -11,6 +11,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'key_source.dart';
 import 'teams_event.dart';
@@ -21,6 +22,7 @@ final class TeamsRelay {
     required this.spec,
     required this.keys,
     this.onEvent = _logEvent,
+    this.witness,
     DateTime Function()? now,
     this.bodyTimeout = const Duration(seconds: 10),
     this.maxBodyBytes = 1024 * 1024,
@@ -38,6 +40,12 @@ final class TeamsRelay {
   /// What becomes of an event once Teams has its response. Defaults to a log
   /// line, so the relay runs end to end before a receiver is wired in.
   final Future<void> Function(TeamsEvent event) onEvent;
+
+  /// Records the body of each accepted request, its bytes exactly as they
+  /// came, before Teams gets a response and before anything downstream reads
+  /// it. A 200 then means "recorded": if this throws, Teams gets a 500 and
+  /// the activity is not marked seen, so its retry is taken. None in tests.
+  final void Function(Uint8List body)? witness;
 
   final Duration bodyTimeout;
   final int maxBodyBytes;
@@ -124,6 +132,18 @@ final class TeamsRelay {
     if (d.seenKey case final key?) _markSeen(key, now);
     // The reason, never the content: the log is not a copy of anyone's words.
     log('teams relay: ${d.outcome.name} ${d.status}: ${d.reason}');
+
+    if (d.event != null && witness != null) {
+      try {
+        witness!(Uint8List.fromList(body));
+      } on Object catch (e) {
+        // Unrecorded is not taken: forget it was seen, so the retry Teams
+        // sends for a 500 is taken and recorded then.
+        if (d.seenKey case final key?) _seen.remove(key);
+        log('teams relay: witness failed: ${e.runtimeType}');
+        return _end(req, HttpStatus.internalServerError);
+      }
+    }
 
     req.response.statusCode = d.status;
     if (d.invokeResponse case final body?) {

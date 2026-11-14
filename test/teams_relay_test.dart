@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:is_teams_module/is_teams_module.dart';
 import 'package:test/test.dart';
@@ -15,11 +16,15 @@ void main() {
   late List<TeamsEvent> events;
   late List<String> logged;
   late bool keysServed;
+  late List<Uint8List> witnessed;
+  late bool witnessFails;
 
   setUp(() async {
     events = [];
     logged = [];
     keysServed = true;
+    witnessed = [];
+    witnessFails = false;
     final relay = TeamsRelay(
       spec: const TeamsSourceSpec(appId: appId, tenantAllowlist: {tenant}),
       keys: BotFrameworkKeySource(
@@ -31,6 +36,10 @@ void main() {
         now: () => now,
       ),
       onEvent: (event) async => events.add(event),
+      witness: (body) {
+        if (witnessFails) throw const FileSystemException('disk full');
+        witnessed.add(body);
+      },
       now: () => now,
       log: logged.add,
       maxBodyBytes: 64 * 1024,
@@ -149,5 +158,55 @@ void main() {
     keysServed = false;
     expect((await post(message())).$1, 503);
     expect(events, isEmpty);
+  });
+
+  group('the witness', () {
+    test('records the body byte for byte, before responding', () async {
+      // Spacing and key order no re-encoding would keep.
+      final raw = utf8.encode(
+        '{  "text":"Looks right to me" ,${jsonEncode(message()).substring(1)}',
+      );
+      final (status, _, _) = await post(null, body: raw);
+      expect(status, 200);
+      expect(witnessed.single, raw);
+    });
+
+    test('records nothing a token does not vouch for', () async {
+      await post(message(), token: 'nope');
+      expect(witnessed, isEmpty);
+    });
+
+    test('records a repeat once', () async {
+      await post(message());
+      await post(message());
+      expect(witnessed, hasLength(1));
+    });
+
+    test('records nothing it does not hand on', () async {
+      await post({...message(), 'type': 'typing'});
+      expect(witnessed, isEmpty);
+    });
+
+    test('unrecorded is a 500 and handed on to no one', () async {
+      witnessFails = true;
+      final (status, _, _) = await post(message());
+      expect(status, 500);
+      expect(events, isEmpty);
+      expect(logged.last, contains('witness failed'));
+      expect(logged.last, isNot(contains('Looks right')));
+    });
+
+    test(
+      "Teams' retry of an unrecorded message is taken and recorded",
+      () async {
+        witnessFails = true;
+        await post(message());
+        witnessFails = false;
+        final (status, _, _) = await post(message());
+        expect(status, 200);
+        expect(witnessed, hasLength(1));
+        expect(events, hasLength(1));
+      },
+    );
   });
 }
