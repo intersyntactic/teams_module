@@ -1,4 +1,4 @@
-/// A TEST bot: the relay, with an arrival handler that answers through the
+/// A TEST bot: the relay, with an event handler that answers through the
 /// Bot Connector. It proves the round trip on a test tenant before any real
 /// content goes near it, and it is not the module's shape: in the module
 /// the relay never holds the secret, and the sender runs beside the agent.
@@ -112,7 +112,7 @@ Future<void> main() async {
   final relay = TeamsRelay(
     spec: TeamsSourceSpec(appId: appId, tenantAllowlist: {tenantId}),
     keys: keys,
-    onArrival: (arrival) => _answer(echo, arrival),
+    onEvent: (event) => _answer(echo, event),
   );
   final server = await HttpServer.bind(address, port);
   stdout.writeln('teams echo listening on ${address.address}:${server.port}');
@@ -130,13 +130,13 @@ typedef _Echo = ({
 /// What each card shows, by its activity id, to draw it again when edited.
 final _examples = <String, _Example>{};
 
-Future<void> _answer(_Echo echo, TeamsArrival arrival) async {
+Future<void> _answer(_Echo echo, TeamsEvent event) async {
   final connector = echo.connector;
-  final serviceUrl = arrival.serviceUrl;
-  final conversation = arrival.conversation;
-  stderr.writeln('echo: ${arrival.event} in $conversation');
+  final serviceUrl = event.serviceUrl;
+  final conversation = event.conversation;
+  stderr.writeln('echo: ${event.runtimeType} in $conversation');
   try {
-    switch (arrival) {
+    switch (event) {
       case TeamsSaid(:final text):
         final said = _plain(text ?? '');
         if (said.toLowerCase().split(' ') case ['card', ...final words]) {
@@ -149,7 +149,7 @@ Future<void> _answer(_Echo echo, TeamsArrival arrival) async {
             anchor: SemanticAnchor.of(utf8.encode('Example:${example.key}')),
           );
           // A later pass that says the same arrives already approved.
-          final by = arrival.actor;
+          final by = event.actor;
           final stance = by == null
               ? Stance.open
               : echo.receiver.stanceOf(by, target.exact);
@@ -163,14 +163,14 @@ Future<void> _answer(_Echo echo, TeamsArrival arrival) async {
             'echo: card $id shows ${_short(target.exact)}, ${stance.name}',
           );
         } else {
-          await connector.reply(serviceUrl, conversation, arrival.id, {
+          await connector.reply(serviceUrl, conversation, event.id, {
             'type': 'message',
             'text': 'echo: $said',
           });
         }
       case TeamsPressed(:final verb, :final card?):
-        echo.receiver.read(arrival).inOrder.forEach(echo.journeyPath.append);
-        final by = arrival.actor;
+        echo.receiver.read(event).inOrder.forEach(echo.journeyPath.append);
+        final by = event.actor;
         if (by == null) return;
         // The card's own id: what the button was pressed on. Edit reopens
         // the choice on that card alone; any other press may change what

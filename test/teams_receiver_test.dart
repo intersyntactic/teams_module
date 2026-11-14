@@ -86,9 +86,9 @@ void main() {
     return target;
   }
 
-  /// Reads [arrival] and appends what it writes, as the module does.
-  Annotations write(TeamsArrival arrival) {
-    final written = receiver.read(arrival);
+  /// Reads [event] and appends what it writes, as the module does.
+  Annotations write(TeamsEvent event) {
+    final written = receiver.read(event);
     written.inOrder.forEach(journeyPath.append);
     return written;
   }

@@ -1,7 +1,7 @@
 /// The HTTP front of the Teams module: the one endpoint Teams posts to.
 ///
 /// It reads the body under a cap and a deadline, asks [teamsGate], answers
-/// at once, and only then hands the [TeamsArrival] to [TeamsRelay.onArrival],
+/// at once, and only then hands the [TeamsEvent] to [TeamsRelay.onEvent],
 /// so nothing the receiver does
 /// can make Teams wait past its 15 seconds and send again. It holds no
 /// Microsoft credential: the gate needs only the app id and the public keys.
@@ -13,14 +13,14 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'key_source.dart';
-import 'teams_arrival.dart';
+import 'teams_event.dart';
 import 'teams_gate.dart';
 
 final class TeamsRelay {
   TeamsRelay({
     required this.spec,
     required this.keys,
-    this.onArrival = _logArrival,
+    this.onEvent = _logEvent,
     DateTime Function()? now,
     this.bodyTimeout = const Duration(seconds: 10),
     this.maxBodyBytes = 1024 * 1024,
@@ -35,9 +35,9 @@ final class TeamsRelay {
   final TeamsSourceSpec spec;
   final BotFrameworkKeySource keys;
 
-  /// What becomes of an arrival once Teams has its answer. Defaults to a log
+  /// What becomes of an event once Teams has its answer. Defaults to a log
   /// line, so the relay runs end to end before a receiver is wired in.
-  final Future<void> Function(TeamsArrival arrival) onArrival;
+  final Future<void> Function(TeamsEvent event) onEvent;
 
   final Duration bodyTimeout;
   final int maxBodyBytes;
@@ -131,14 +131,14 @@ final class TeamsRelay {
       req.response.write(jsonEncode(answer));
     }
     await req.response.close();
-    if (d.arrival case final arrival?) unawaited(_dispatch(arrival));
+    if (d.event case final event?) unawaited(_dispatch(event));
   }
 
-  Future<void> _dispatch(TeamsArrival arrival) async {
+  Future<void> _dispatch(TeamsEvent event) async {
     try {
-      await onArrival(arrival);
+      await onEvent(event);
     } on Exception catch (e) {
-      log('teams relay: arrival handler: $e');
+      log('teams relay: event handler: $e');
     }
   }
 
@@ -172,10 +172,10 @@ final class TeamsRelay {
   static void _stderr(String line) => stderr.writeln(line);
 
   /// Ids only: which conversation, which activity, what kind. Not the text.
-  static Future<void> _logArrival(TeamsArrival arrival) async {
+  static Future<void> _logEvent(TeamsEvent event) async {
     stderr.writeln(
-      'teams relay: arrival ${arrival.event} '
-      '${arrival.conversation} ${arrival.id}',
+      'teams relay: event ${event.runtimeType} '
+      '${event.conversation} ${event.id}',
     );
   }
 }

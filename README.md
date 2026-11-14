@@ -9,7 +9,7 @@ or approval plugs into this one rather than speaking Teams itself.
 ## Shape
 
 ```
-Teams ──POST (Bot Framework JWT)──▶ Teams relay ──arrival, with content──▶ receiver
+Teams ──POST (Bot Framework JWT)──▶ Teams relay ──event, with content────▶ receiver
                                      │  checks the token against            │  writes nodes,
                                      │  Microsoft's public keys; answers    │  feeds the journey
                                      │  a card action with "Got it"         ▼
@@ -22,7 +22,7 @@ Three things about it are forced by Teams:
 - **The relay holds no secret.** Microsoft signs with a private key and the
   relay checks against the published public keys, so all it needs is the
   bot's app id.
-- **An arrival carries the message and what was submitted.** A card
+- **An event carries the message and what was submitted.** A card
   submission exists nowhere but the request that delivers it, and the bot
   can't read a chat back, so there is nothing to fetch later.
 - **Repeats are dropped by activity id.** Teams re-sends anything not
@@ -38,7 +38,7 @@ The way in is here: the relay (`bin/teams_relay.dart`, `lib/src/teams_relay.dart
 serves `POST /api/messages`, fetches Microsoft's keys and refreshes them every
 12 hours (`lib/src/key_source.dart`), and passes each delivery through the gate
 (`lib/src/teams_gate.dart`). The receiver (`lib/src/teams_receiver.dart`)
-reads each arrival as the annotation shapes it writes: an approval, a
+reads each event as the annotation shapes it writes: an approval, a
 holding off, a withdrawal. Until the module meets a real journey path it
 writes them to a stand-in (`lib/src/stand_in_journey_path.dart`). The way out
 is here too: `lib/src/bot_connector.dart` gets the bot's token and posts,

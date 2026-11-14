@@ -12,12 +12,12 @@ void main() {
 
   late HttpServer server;
   late HttpClient client;
-  late List<TeamsArrival> arrivals;
+  late List<TeamsEvent> events;
   late List<String> logged;
   late bool keysServed;
 
   setUp(() async {
-    arrivals = [];
+    events = [];
     logged = [];
     keysServed = true;
     final relay = TeamsRelay(
@@ -30,7 +30,7 @@ void main() {
             : jwksJson,
         now: () => now,
       ),
-      onArrival: (arrival) async => arrivals.add(arrival),
+      onEvent: (event) async => events.add(event),
       now: () => now,
       log: logged.add,
       maxBodyBytes: 64 * 1024,
@@ -62,16 +62,16 @@ void main() {
     req.add(body ?? utf8.encode(jsonEncode(activity)));
     final res = await req.close();
     final text = await res.transform(utf8.decoder).join();
-    // Let the arrival, handed on after the response, land.
+    // Let the event, handed on after the response, land.
     await pumpEventQueue();
     return (res.statusCode, text, res.headers.contentType);
   }
 
-  test('takes a message: 200 with no body, then the arrival', () async {
+  test('takes a message: 200 with no body, then the event', () async {
     final (status, body, _) = await post(message());
     expect(status, 200);
     expect(body, isEmpty);
-    expect(arrivals.single.toJson().string('text'), 'Looks right to me');
+    expect((events.single as TeamsSaid).text, 'Looks right to me');
   });
 
   test('answers a card action with the acknowledgement, as JSON', () async {
@@ -83,7 +83,7 @@ void main() {
       'type': 'application/vnd.microsoft.activity.message',
       'value': 'Got it',
     });
-    expect(arrivals.single.toJson().string('event'), 'teams_card_action');
+    expect(events.single, isA<TeamsPressed>());
   });
 
   test(
@@ -93,15 +93,15 @@ void main() {
       final (status, again, _) = await post(cardAction());
       expect(status, 200);
       expect(again, first);
-      expect(arrivals, hasLength(1));
+      expect(events, hasLength(1));
     },
   );
 
-  test('refuses a bad token with a bare 401 and no arrival', () async {
+  test('refuses a bad token with a bare 401 and no event', () async {
     final (status, body, _) = await post(message(), token: 'not.a.token');
     expect(status, 401);
     expect(body, isEmpty);
-    expect(arrivals, isEmpty);
+    expect(events, isEmpty);
   });
 
   test('logs the reason, never the text', () async {
@@ -118,7 +118,7 @@ void main() {
   test('refuses a body over the cap', () async {
     final big = List.filled(64 * 1024 + 1, 0x20);
     expect((await post(null, body: big)).$1, 413);
-    expect(arrivals, isEmpty);
+    expect(events, isEmpty);
   });
 
   test('gives a body one deadline, not one per chunk', () async {
@@ -142,12 +142,12 @@ void main() {
     }());
     final res = await response.timeout(const Duration(seconds: 5));
     expect(res.statusCode, 408);
-    expect(arrivals, isEmpty);
+    expect(events, isEmpty);
   });
 
   test('says "try again" while it has no keys', () async {
     keysServed = false;
     expect((await post(message())).$1, 503);
-    expect(arrivals, isEmpty);
+    expect(events, isEmpty);
   });
 }

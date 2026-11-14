@@ -1,14 +1,14 @@
 import 'package:is_annotation_shapes/is_annotation_shapes.dart';
 import 'package:is_shapes/is_shapes.dart';
 
-import 'teams_arrival.dart';
+import 'teams_event.dart';
 
-/// What one arrival writes, in the order the journey path takes it: a [seen], then
+/// What one event writes, in the order the journey path takes it: a [seen], then
 /// the approvals [withdrawn], then an [approve].
 final class Annotations {
   const Annotations({this.seen, this.withdrawn = const [], this.approve});
 
-  /// An arrival that writes nothing.
+  /// An event that writes nothing.
   static const none = Annotations();
 
   /// The mark that the presser considered the version on the card.
@@ -24,7 +24,7 @@ final class Annotations {
   List<Object> get inOrder => [?seen, ...withdrawn, ?approve];
 }
 
-/// Turns Teams arrivals into annotation shapes: Approve on a card becomes an
+/// Turns Teams events into annotation shapes: Approve on a card becomes an
 /// [Approve], and Not yet a [Seen] and the withdrawals it asks for: having
 /// looked and held off is not the same as not having looked yet.
 ///
@@ -46,7 +46,7 @@ final class TeamsReceiver {
   /// with the same fields, wherever each sits in the tree.
   final bool Function(TurnId a, TurnId b) sameVersion;
 
-  /// Where an arrival that writes nothing says why. The reason, never the
+  /// Where an event that writes nothing says why. The reason, never the
   /// content.
   final void Function(String) log;
 
@@ -102,27 +102,27 @@ final class TeamsReceiver {
     ];
   }
 
-  /// What [arrival] writes. Nothing, unless it is a press on a card this
+  /// What [event] writes. Nothing, unless it is a press on a card this
   /// receiver shows, by an actor Teams named.
-  Annotations read(TeamsArrival arrival) {
-    if (arrival is! TeamsPressed) return Annotations.none;
-    final by = arrival.actor;
+  Annotations read(TeamsEvent event) {
+    if (event is! TeamsPressed) return Annotations.none;
+    final by = event.actor;
     if (by == null) {
       log('teams receiver: a press with no tenant or Entra user');
       return Annotations.none;
     }
-    final card = arrival.card;
+    final card = event.card;
     final shown = card == null ? null : _showing[card];
     if (shown == null) {
       log('teams receiver: a press on card $card, which shows no node');
       return Annotations.none;
     }
-    if (shown.conversation != arrival.conversation) {
+    if (shown.conversation != event.conversation) {
       log('teams receiver: a press on card $card from another conversation');
       return Annotations.none;
     }
     final target = shown.target;
-    final verb = arrival.verb;
+    final verb = event.verb;
     switch (verb) {
       case 'approve':
         return Annotations(

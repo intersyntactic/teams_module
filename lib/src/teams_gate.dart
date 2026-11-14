@@ -14,11 +14,11 @@
 ///    activity is the only thing tying the two together. So whoever runs the
 ///    relay is trusted with content, in any design.
 ///
-/// 3. AN ARRIVAL CARRIES CONTENT (Nick, 2026-11-06). A card submission
+/// 3. AN EVENT CARRIES CONTENT (Nick, 2026-11-06). A card submission
 ///    exists nowhere but this request, and nothing can read a one-to-one
 ///    chat back short of permission over every chat in the tenant, so there
 ///    is nothing to fetch later. Text and submitted values ride in the
-///    [TeamsArrival].
+///    [TeamsEvent].
 ///
 /// 4. REPEATS ARE KEYED BY ACTIVITY. What arrives is acted on, so the same
 ///    activity must not be acted on twice. The signature can't be the key:
@@ -38,14 +38,14 @@ import 'package:pointycastle/digests/sha256.dart';
 import 'package:pointycastle/signers/rsa_signer.dart';
 
 import 'bot_framework_keys.dart';
-import 'teams_arrival.dart';
+import 'teams_event.dart';
 
 /// The issuer of every token the Bot Connector sends to a bot.
 const botFrameworkIssuer = 'https://api.botframework.com';
 
 /// What the caller should do.
 enum TeamsGateOutcome {
-  /// Hand [TeamsGateDecision.arrival] on; answer 200, with
+  /// Hand [TeamsGateDecision.event] on; answer 200, with
   /// [TeamsGateDecision.invokeResponse] as the body when there is one.
   trigger,
 
@@ -65,7 +65,7 @@ final class TeamsGateDecision {
     this.outcome,
     this.reason, {
     this.status = 200,
-    this.arrival,
+    this.event,
     this.invokeResponse,
     this.seenKey,
   });
@@ -85,8 +85,8 @@ final class TeamsGateDecision {
   /// authentic activity that isn't one.
   final int status;
 
-  /// What arrived, present iff [outcome] is [TeamsGateOutcome.trigger].
-  final TeamsArrival? arrival;
+  /// What happened, present iff [outcome] is [TeamsGateOutcome.trigger].
+  final TeamsEvent? event;
 
   /// The body to answer an invoke with. Teams waits for it before showing
   /// the person anything, and the agent is too far away to answer in time,
@@ -273,13 +273,11 @@ TeamsGateDecision _decide(
       seenKey: seenKey,
     );
   }
-  final arrival = TeamsArrival.fromJson(
-    _wire(a, type, name, tenant, conversation),
-  );
-  if (arrival == null) {
+  final event = _read(a, type, name, tenant, conversation);
+  if (event == null) {
     return TeamsGateDecision._(
       TeamsGateOutcome.ignore,
-      'no arrival is read from $type',
+      'no event is read from $type',
       invokeResponse: invokeResponse,
       seenKey: seenKey,
     );
@@ -287,59 +285,137 @@ TeamsGateDecision _decide(
   return TeamsGateDecision._(
     TeamsGateOutcome.trigger,
     type == 'invoke' ? 'invoke $name' : type,
-    arrival: arrival,
+    event: event,
     invokeResponse: invokeResponse,
     seenKey: seenKey,
   );
 }
 
-/// The activity in its wire form, as [TeamsArrival.toJson] writes it.
-JsonObject _wire(
+/// The activity read into what happened. Null for an activity type no event
+/// is read as.
+TeamsEvent? _read(
   JsonObject a,
   String type,
   String? name,
   String? tenant,
   JsonObject conversation,
 ) {
+  final id = a.string('id');
+  final conversationId = conversation.string('id');
+  final serviceUrl = Uri.parse(a.string('serviceUrl'));
+  final conversationType = conversation.stringOrNull('conversationType');
+  final timestamp = a.stringOrNull('timestamp');
   final from = a.objectOrNull('from');
-  List<String>? ids(String k) =>
-      a.objectsOrNull(k)?.map((m) => m.string('id')).toList();
-  return JsonObject.of({
-    'event': _event(type, name),
-    'tenant': ?tenant,
-    'conversation': conversation.string('id'),
-    'conversation_type': ?conversation.stringOrNull('conversationType'),
-    'activity': a.string('id'),
-    'reply_to': ?a.stringOrNull('replyToId'),
-    'service_url': a.string('serviceUrl'),
-    'timestamp': ?a.stringOrNull('timestamp'),
-    'from': ?from?.stringOrNull('id'),
-    'from_aad_object_id': ?from?.stringOrNull('aadObjectId'),
-    'recipient': ?a.objectOrNull('recipient')?.stringOrNull('id'),
-    'text': ?a.stringOrNull('text'),
-    'value': ?a.objectOrNull('value'),
-    // As they came: @-mentions, and the quoted-reply entity that says which
-    // earlier message a reply quotes. That is how a free-text reply in a
-    // chat names the node it is about. Its JSON is described only in a
-    // Teams SDK blog post, not on Learn, so it is passed on unread rather
-    // than projected from a guess.
-    'entities': ?a.objectsOrNull('entities'),
-    if (type == 'invoke') 'name': ?name,
-    'event_type': ?a.objectOrNull('channelData')?.stringOrNull('eventType'),
-    'action': ?a.stringOrNull('action'),
-    'members_added': ?ids('membersAdded'),
-    'members_removed': ?ids('membersRemoved'),
-  });
+  final fromId = from?.stringOrNull('id');
+  final fromAadObjectId = from?.stringOrNull('aadObjectId');
+  final recipient = a.objectOrNull('recipient')?.stringOrNull('id');
+  final text = a.stringOrNull('text');
+  // As they came: @-mentions, and the quoted-reply entity that says which
+  // earlier message a reply quotes. That is how a free-text reply in a chat
+  // names the node it is about. Its JSON is described only in a Teams SDK
+  // blog post, not on Learn, so it is passed on unread rather than projected
+  // from a guess.
+  final entities = a.objectsOrNull('entities');
+  final channelEventType = a
+      .objectOrNull('channelData')
+      ?.stringOrNull('eventType');
+  List<String> ids(String k) =>
+      a.objectsOrNull(k)?.map((m) => m.string('id')).toList() ?? const [];
+  return switch (type) {
+    'message' => TeamsSaid(
+      conversation: conversationId,
+      id: id,
+      serviceUrl: serviceUrl,
+      tenant: tenant,
+      conversationType: conversationType,
+      timestamp: timestamp,
+      from: fromId,
+      fromAadObjectId: fromAadObjectId,
+      recipient: recipient,
+      text: text,
+      entities: entities,
+      replyTo: a.stringOrNull('replyToId'),
+    ),
+    'messageUpdate' => TeamsEdited(
+      conversation: conversationId,
+      id: id,
+      serviceUrl: serviceUrl,
+      tenant: tenant,
+      conversationType: conversationType,
+      timestamp: timestamp,
+      from: fromId,
+      fromAadObjectId: fromAadObjectId,
+      recipient: recipient,
+      text: text,
+      entities: entities,
+      channelEventType: channelEventType,
+    ),
+    'messageDelete' => TeamsDeleted(
+      conversation: conversationId,
+      id: id,
+      serviceUrl: serviceUrl,
+      tenant: tenant,
+      conversationType: conversationType,
+      timestamp: timestamp,
+      from: fromId,
+      fromAadObjectId: fromAadObjectId,
+      recipient: recipient,
+      channelEventType: channelEventType,
+    ),
+    'invoke' when name == 'adaptiveCard/action' => TeamsPressed(
+      conversation: conversationId,
+      id: id,
+      serviceUrl: serviceUrl,
+      tenant: tenant,
+      conversationType: conversationType,
+      timestamp: timestamp,
+      from: fromId,
+      fromAadObjectId: fromAadObjectId,
+      recipient: recipient,
+      card: a.stringOrNull('replyToId'),
+      value: a.objectOrNull('value'),
+    ),
+    'invoke' => TeamsInvoked(
+      conversation: conversationId,
+      id: id,
+      serviceUrl: serviceUrl,
+      tenant: tenant,
+      conversationType: conversationType,
+      timestamp: timestamp,
+      from: fromId,
+      fromAadObjectId: fromAadObjectId,
+      recipient: recipient,
+      name: name,
+      value: a.objectOrNull('value'),
+    ),
+    'conversationUpdate' => TeamsMembersChanged(
+      conversation: conversationId,
+      id: id,
+      serviceUrl: serviceUrl,
+      tenant: tenant,
+      conversationType: conversationType,
+      timestamp: timestamp,
+      from: fromId,
+      fromAadObjectId: fromAadObjectId,
+      recipient: recipient,
+      added: ids('membersAdded'),
+      removed: ids('membersRemoved'),
+    ),
+    'installationUpdate' => TeamsInstallChanged(
+      conversation: conversationId,
+      id: id,
+      serviceUrl: serviceUrl,
+      tenant: tenant,
+      conversationType: conversationType,
+      timestamp: timestamp,
+      from: fromId,
+      fromAadObjectId: fromAadObjectId,
+      recipient: recipient,
+      action: a.stringOrNull('action'),
+    ),
+    _ => null,
+  };
 }
-
-/// `teams_` and the activity type in snake case; a card action by its own
-/// name, since it is the one invoke the module is built around.
-String _event(String type, String? name) => switch (type) {
-  'invoke' when name == 'adaptiveCard/action' => 'teams_card_action',
-  'invoke' => 'teams_invoke',
-  _ =>
-    'teams_${type.replaceAllMapped(RegExp('[A-Z]'), (m) => '_${m[0]!.toLowerCase()}')}',
-};
 
 sealed class _Check {}
 
