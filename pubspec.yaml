@@ -24,7 +24,7 @@ dependencies:
       url: git@github.com:intersyntactic/annotation_shapes.git
       ref: 0749035bc332ec4a3071434952a388db1922d643
   is_journal: ^0.2.0
-  is_shapes: ^0.3.0
+  is_shapes: ^0.3.2
   pointycastle: ^4.0.0
 
 dev_dependencies:
@@ -32,11 +32,6 @@ dev_dependencies:
   test: ^1.33.0
 
 dependency_overrides:
-  # Every is_shapes up to 0.3.1 asks for is_content_id ^0.1.0 and is_journal
-  # 0.2.0 asks for ^0.2.0. 0.2.0 only adds FileSetId and ListedPath to
-  # 0.1.0, so is_shapes runs on it unchanged. Remove once is_shapes widens
-  # its range.
-  is_content_id: ^0.2.0
   # is_airlock's own override, repeated here because overrides apply only
   # in the root package: is_effects 0.1.0 on pub.dev predates what
   # is_airlock_api 0.2.0 needs.
