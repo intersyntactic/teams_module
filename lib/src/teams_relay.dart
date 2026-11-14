@@ -1,13 +1,9 @@
 /// The HTTP front of the Teams module: the one endpoint Teams posts to.
 ///
-/// A relay in the sense of `intersyntactic_relay`, the one GitHub posts to:
-/// it checks a delivery and passes a doorbell on. That relay hands its
-/// doorbells to servers that dial in over a websocket; this one, so far,
-/// hands them to [TeamsRelay.onDoorbell].
-///
-/// It reads the body under a cap and a deadline, asks [teamsGate], answers
-/// at once, and only then hands a doorbell on, so nothing the receiver does
-/// can make Teams wait past its 15 seconds and send again. It holds no
+/// It reads the body under a cap and a deadline, asks [teamsGate], responds
+/// at once, and only then hands the [TeamsEvent] to [TeamsRelay.onEvent],
+/// so nothing done with it can make Teams wait past its 15 seconds and send
+/// again. It holds no
 /// Microsoft credential: the gate needs only the app id and the public keys.
 library;
 
@@ -16,16 +12,15 @@ import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:checked_json/checked_json.dart';
-
 import 'key_source.dart';
+import 'teams_event.dart';
 import 'teams_gate.dart';
 
 final class TeamsRelay {
   TeamsRelay({
     required this.spec,
     required this.keys,
-    this.onDoorbell = _logDoorbell,
+    this.onEvent = _logEvent,
     DateTime Function()? now,
     this.bodyTimeout = const Duration(seconds: 10),
     this.maxBodyBytes = 1024 * 1024,
@@ -40,9 +35,9 @@ final class TeamsRelay {
   final TeamsSourceSpec spec;
   final BotFrameworkKeySource keys;
 
-  /// What becomes of a doorbell once Teams has its answer. Defaults to a log
+  /// What becomes of an event once Teams has its response. Defaults to a log
   /// line, so the relay runs end to end before a receiver is wired in.
-  final Future<void> Function(JsonObject doorbell) onDoorbell;
+  final Future<void> Function(TeamsEvent event) onEvent;
 
   final Duration bodyTimeout;
   final int maxBodyBytes;
@@ -131,19 +126,19 @@ final class TeamsRelay {
     log('teams relay: ${d.outcome.name} ${d.status}: ${d.reason}');
 
     req.response.statusCode = d.status;
-    if (d.invokeResponse case final answer?) {
+    if (d.invokeResponse case final body?) {
       req.response.headers.contentType = ContentType.json;
-      req.response.write(jsonEncode(answer));
+      req.response.write(jsonEncode(body));
     }
     await req.response.close();
-    if (d.doorbell case final bell?) unawaited(_dispatch(bell));
+    if (d.event case final event?) unawaited(_dispatch(event));
   }
 
-  Future<void> _dispatch(JsonObject doorbell) async {
+  Future<void> _dispatch(TeamsEvent event) async {
     try {
-      await onDoorbell(doorbell);
+      await onEvent(event);
     } on Exception catch (e) {
-      log('teams relay: doorbell handler: $e');
+      log('teams relay: event handler: $e');
     }
   }
 
@@ -177,10 +172,10 @@ final class TeamsRelay {
   static void _stderr(String line) => stderr.writeln(line);
 
   /// Ids only: which conversation, which activity, what kind. Not the text.
-  static Future<void> _logDoorbell(JsonObject bell) async {
+  static Future<void> _logEvent(TeamsEvent event) async {
     stderr.writeln(
-      'teams relay: doorbell ${bell.string('event')} '
-      '${bell.string('conversation')} ${bell.string('activity')}',
+      'teams relay: event ${event.runtimeType} '
+      '${event.conversation} ${event.id}',
     );
   }
 }

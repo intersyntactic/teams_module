@@ -9,24 +9,24 @@ or approval plugs into this one rather than speaking Teams itself.
 ## Shape
 
 ```
-Teams ──POST (Bot Framework JWT)──▶ Teams relay ──doorbell, with content──▶ receiver
+Teams ──POST (Bot Framework JWT)──▶ Teams relay ──event, with content────▶ receiver
                                      │  checks the token against            │  writes nodes,
-                                     │  Microsoft's public keys; answers    │  feeds the journey
+                                     │  Microsoft's public keys; responds   │  feeds the journey
                                      │  a card action with "Got it"         ▼
                                      │  at once; drops repeats       Bot Connector REST
                                      │  by activity id               (posts and edits cards)
 ```
 
-It differs from the Slack module's shape in three ways, each forced by Teams:
+Three things about it are forced by Teams:
 
 - **The relay holds no secret.** Microsoft signs with a private key and the
   relay checks against the published public keys, so all it needs is the
   bot's app id.
-- **The doorbell carries the message and what was submitted.** A card
-  submission exists nowhere but the request that delivers it, so a doorbell
-  that only said "something happened" would lose it.
-- **Repeats are dropped by activity id.** Teams re-sends anything not
-  answered within 15 seconds, so duplicates are ordinary traffic.
+- **An event carries the message and what was submitted.** A card
+  submission exists nowhere but the request that delivers it, and the bot
+  can't read a chat back, so there is nothing to fetch later.
+- **Repeats are dropped by activity id.** Teams re-sends anything it gets
+  no response to within 15 seconds, so duplicates are ordinary traffic.
 
 v1 mirrors what is addressed to the bot: card actions, form submissions and
 @-mentions, which in a one-to-one chat is every message. It asks for no Graph
@@ -38,7 +38,7 @@ The way in is here: the relay (`bin/teams_relay.dart`, `lib/src/teams_relay.dart
 serves `POST /api/messages`, fetches Microsoft's keys and refreshes them every
 12 hours (`lib/src/key_source.dart`), and passes each delivery through the gate
 (`lib/src/teams_gate.dart`). The receiver (`lib/src/teams_receiver.dart`)
-reads each doorbell as the annotation shapes it writes: an approval, a
+reads each event as the annotation shapes it writes: an approval, a
 holding off, a withdrawal. Until the module meets a real journey path it
 writes them to a stand-in (`lib/src/stand_in_journey_path.dart`). The way out
 is here too: `lib/src/bot_connector.dart` gets the bot's token and posts,
@@ -48,7 +48,7 @@ fields.
 ## Testing on a test tenant
 
 `bin/teams_echo.dart` is a test bot, not the module's shape: the relay with a
-handler that answers through the Connector. It echoes text, sends a card with
+handler that responds through the Connector. It echoes text, sends a card with
 Approve and Not yet when told "card", and edits the card when one is pressed.
 
 ```

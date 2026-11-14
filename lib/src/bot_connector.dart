@@ -164,7 +164,7 @@ final class BotConnector {
   /// Refuses a service URL that is not https: the token rides on every
   /// call, and must never travel in the clear. Where the URL came from is
   /// the gate's business: it matched the activity's service URL against
-  /// the signed token's own claim before any doorbell rang.
+  /// the signed token's own claim before anything arrived.
   static Uri _url(Uri serviceUrl, String conversation, String? activityId) {
     if (serviceUrl.scheme != 'https') {
       throw ArgumentError.value(serviceUrl, 'serviceUrl', 'is not https');

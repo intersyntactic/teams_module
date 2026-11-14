@@ -1,4 +1,4 @@
-/// A TEST bot: the relay, with a doorbell handler that answers through the
+/// A TEST bot: the relay, with an event handler that responds through the
 /// Bot Connector. It proves the round trip on a test tenant before any real
 /// content goes near it, and it is not the module's shape: in the module
 /// the relay never holds the secret, and the sender runs beside the agent.
@@ -27,7 +27,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:checked_json/checked_json.dart';
 import 'package:is_annotation_shapes/is_annotation_shapes.dart';
 import 'package:is_shapes/is_shapes.dart';
 import 'package:is_teams_module/is_teams_module.dart';
@@ -113,7 +112,7 @@ Future<void> main() async {
   final relay = TeamsRelay(
     spec: TeamsSourceSpec(appId: appId, tenantAllowlist: {tenantId}),
     keys: keys,
-    onDoorbell: (bell) => _answer(echo, bell),
+    onEvent: (event) => _respond(echo, event),
   );
   final server = await HttpServer.bind(address, port);
   stdout.writeln('teams echo listening on ${address.address}:${server.port}');
@@ -131,16 +130,15 @@ typedef _Echo = ({
 /// What each card shows, by its activity id, to draw it again when edited.
 final _examples = <String, _Example>{};
 
-Future<void> _answer(_Echo echo, JsonObject bell) async {
+Future<void> _respond(_Echo echo, TeamsEvent event) async {
   final connector = echo.connector;
-  final serviceUrl = Uri.parse(bell.string('service_url'));
-  final conversation = bell.string('conversation');
-  final activity = bell.string('activity');
-  stderr.writeln('echo: ${bell.string('event')} in $conversation');
+  final serviceUrl = event.serviceUrl;
+  final conversation = event.conversation;
+  stderr.writeln('echo: ${event.runtimeType} in $conversation');
   try {
-    switch (bell.string('event')) {
-      case 'teams_message':
-        final said = _plain(bell.stringOrNull('text') ?? '');
+    switch (event) {
+      case TeamsMessage(:final text):
+        final said = _plain(text ?? '');
         if (said.toLowerCase().split(' ') case ['card', ...final words]) {
           final example = _Example(
             'Example 3: tidy the README',
@@ -151,7 +149,7 @@ Future<void> _answer(_Echo echo, JsonObject bell) async {
             anchor: SemanticAnchor.of(utf8.encode('Example:${example.key}')),
           );
           // A later pass that says the same arrives already approved.
-          final by = teamsActor(bell);
+          final by = event.actor;
           final stance = by == null
               ? Stance.open
               : echo.receiver.stanceOf(by, target.exact);
@@ -165,20 +163,18 @@ Future<void> _answer(_Echo echo, JsonObject bell) async {
             'echo: card $id shows ${_short(target.exact)}, ${stance.name}',
           );
         } else {
-          await connector.reply(serviceUrl, conversation, activity, {
+          await connector.reply(serviceUrl, conversation, event.id, {
             'type': 'message',
             'text': 'echo: $said',
           });
         }
-      case 'teams_card_action':
-        final verb = bell.object('value').object('action').stringOrNull('verb');
-        echo.receiver.read(bell).inOrder.forEach(echo.journeyPath.append);
-        final by = teamsActor(bell);
+      case TeamsCardAction(:final verb, :final card?):
+        echo.receiver.read(event).inOrder.forEach(echo.journeyPath.append);
+        final by = event.actor;
         if (by == null) return;
         // The card's own id: what the button was pressed on. Edit reopens
         // the choice on that card alone; any other press may change what
         // every card showing the same version says.
-        final card = bell.string('reply_to');
         final like = echo.receiver.cardsLike(card, conversation: conversation);
         final editing = verb == 'edit';
         for (final other in editing ? like.where((c) => c == card) : like) {
@@ -192,26 +188,28 @@ Future<void> _answer(_Echo echo, JsonObject bell) async {
           });
           stderr.writeln('echo: card $other edited, ${stance.name}');
         }
-      case 'teams_installation_update' || 'teams_conversation_update':
-        if (bell.stringOrNull('action') == 'remove') return;
-        final added = bell.stringsOrNull('members_added') ?? const [];
-        final recipient = bell.stringOrNull('recipient');
-        final botJoined =
-            bell.string('event') == 'teams_installation_update' ||
-            added.contains(recipient);
-        if (botJoined) {
-          await connector.send(serviceUrl, conversation, {
-            'type': 'message',
-            'text':
-                'Hello: this is a test bot. Say anything and I echo it; '
-                'say "card" for a card with buttons.',
-          });
-        }
+      case TeamsInstallationUpdate(:final action) when action != 'remove':
+        await _hello(connector, serviceUrl, conversation);
+      case TeamsConversationUpdate(:final added, :final recipient)
+          when added.contains(recipient):
+        await _hello(connector, serviceUrl, conversation);
+      default:
     }
   } on BotConnectorException catch (e) {
     stderr.writeln('echo: $e');
   }
 }
+
+Future<void> _hello(
+  BotConnector connector,
+  Uri serviceUrl,
+  String conversation,
+) => connector.send(serviceUrl, conversation, {
+  'type': 'message',
+  'text':
+      'Hello: this is a test bot. Say anything and I echo it; '
+      'say "card" for a card with buttons.',
+});
 
 /// Text with Teams' `<at>…</at>` mention markup and quote tags taken out.
 String _plain(String text) => text

@@ -2,10 +2,8 @@
 /// Set that the Bot Connector's OpenID document points at
 /// (`https://login.botframework.com/v1/.well-known/keys`).
 ///
-/// They are PUBLIC keys. That is the difference from Slack, whose gate has to
-/// hold a signing secret it shares with Slack: a Teams gate holds nothing a
-/// leak would hurt, only the bot's app id, which is printed in the app's own
-/// manifest. Fetching and refreshing the set (Microsoft asks for at least once
+/// They are PUBLIC keys, so the gate holds nothing a leak would hurt, only
+/// the bot's app id, which is printed in the app's own manifest. Fetching and refreshing the set (Microsoft asks for at least once
 /// a day) is the caller's, so the gate that reads it stays pure.
 library;
 

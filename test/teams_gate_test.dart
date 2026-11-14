@@ -16,22 +16,71 @@ void main() {
       expect(d.status, 200);
       expect(d.invokeResponse, isNull);
       expect(d.seenKey, jsonEncode(['a:1personal', '1730881234567']));
-      expect(d.doorbell!.asUncheckedMap(), {
-        'event': 'teams_message',
-        'tenant': tenant,
-        'conversation': 'a:1personal',
-        'conversation_type': 'personal',
-        'activity': '1730881234567',
-        'service_url': serviceUrl,
-        'timestamp': '2026-11-06T10:00:00.000Z',
-        'from': '29:1ada',
-        'from_aad_object_id': 'oid-ada',
-        'recipient': '28:$appId',
-        'text': 'Looks right to me',
-      });
+      final said = d.event! as TeamsMessage;
+      expect(said.tenant, tenant);
+      expect(said.conversation, 'a:1personal');
+      expect(said.conversationType, 'personal');
+      expect(said.id, '1730881234567');
+      expect(said.serviceUrl, Uri.parse(serviceUrl));
+      expect(said.timestamp, '2026-11-06T10:00:00.000Z');
+      expect(said.from, '29:1ada');
+      expect(said.fromAadObjectId, 'oid-ada');
+      expect(said.recipient, '28:$appId');
+      expect(said.text, 'Looks right to me');
+      expect(said.entities, isNull);
+      expect(said.replyTo, isNull);
     });
 
-    test('a card action, answered with the acknowledgement', () {
+    test('a message in a channel, with what it replies under', () {
+      final d = _gate({...message(), 'replyToId': '1730881000000'});
+      expect((d.event! as TeamsMessage).replyTo, '1730881000000');
+    });
+
+    test('an edit, with what Teams calls the change', () {
+      final d = _gate({
+        ...message(text: 'Looks right to me now'),
+        'type': 'messageUpdate',
+        'channelData': {
+          'tenant': {'id': tenant},
+          'eventType': 'editMessage',
+        },
+      });
+      final edited = d.event! as TeamsMessageUpdate;
+      expect(edited.text, 'Looks right to me now');
+      expect(edited.channelEventType, 'editMessage');
+    });
+
+    test('a delete, with what Teams calls the change', () {
+      final d = _gate(
+        {
+          ...message(),
+          'type': 'messageDelete',
+          'channelData': {
+            'tenant': {'id': tenant},
+            'eventType': 'softDeleteMessage',
+          },
+        }..remove('text'),
+      );
+      final deleted = d.event! as TeamsMessageDelete;
+      expect(deleted.id, '1730881234567');
+      expect(deleted.channelEventType, 'softDeleteMessage');
+    });
+
+    test('another invoke it was told to take, by its name', () {
+      final d = _gate(
+        {...cardAction(), 'name': 'task/fetch'},
+        spec: const TeamsSourceSpec(
+          appId: appId,
+          tenantAllowlist: {tenant},
+          wakeInvokes: {'task/fetch'},
+        ),
+      );
+      final invoked = d.event! as TeamsInvoke;
+      expect(invoked.name, 'task/fetch');
+      expect(invoked.value!.object('action').string('verb'), 'approve');
+    });
+
+    test('a card action, responded to with the acknowledgement', () {
       final d = _gate(cardAction());
       expect(d.outcome, TeamsGateOutcome.trigger);
       expect(d.invokeResponse!.asUncheckedMap(), {
@@ -39,11 +88,9 @@ void main() {
         'type': 'application/vnd.microsoft.activity.message',
         'value': 'Got it',
       });
-      final bell = d.doorbell!;
-      expect(bell.string('event'), 'teams_card_action');
-      expect(bell.string('name'), 'adaptiveCard/action');
-      expect(bell.string('reply_to'), '1730881000000');
-      expect(bell.object('value').object('action').string('verb'), 'approve');
+      final pressed = d.event! as TeamsCardAction;
+      expect(pressed.card, '1730881000000');
+      expect(pressed.verb, 'approve');
     });
 
     test('an audience given as a list', () {
@@ -88,22 +135,31 @@ void main() {
           ..remove('text'),
       );
       expect(d.outcome, TeamsGateOutcome.trigger);
-      expect(d.doorbell!.string('event'), 'teams_installation_update');
-      expect(d.doorbell!.string('action'), 'add');
-      expect(d.doorbell!.string('service_url'), serviceUrl);
+      final installed = d.event! as TeamsInstallationUpdate;
+      expect(installed.action, 'add');
+      expect(installed.serviceUrl, Uri.parse(serviceUrl));
     });
 
     test('a quoted reply, with the entities that say what it quotes', () {
-      // The quotedReply entity's fields here are illustrative, not
-      // Microsoft's schema: the gate passes entities on unread, which is
-      // what this proves.
+      // The quotedReply entity as a Reply in a one-to-one chat carried it,
+      // seen in a witnessed body on 2026-11-14. The gate passes entities on
+      // unread, which is what this proves.
       final entities = [
         {
           'type': 'mention',
           'mentioned': {'id': '28:$appId', 'name': 'Bot'},
           'text': '<at>Bot</at>',
         },
-        {'type': 'quotedReply', 'messageId': '1730881000000'},
+        {
+          'type': 'quotedReply',
+          'quotedReply': {
+            'messageId': '1730881000000',
+            'senderId': '29:1ada',
+            'senderName': 'Ada',
+            'preview': 'Looks right to me',
+            'validatedMessageReference': true,
+          },
+        },
       ];
       final d = _gate({
         ...message(
@@ -112,8 +168,12 @@ void main() {
         'entities': entities,
       });
       expect(d.outcome, TeamsGateOutcome.trigger);
-      expect(jsonEncode(d.doorbell!.raw('entities')), jsonEncode(entities));
-      expect(d.doorbell!.string('text'), startsWith('<quoted messageId='));
+      final said = d.event! as TeamsMessage;
+      expect(
+        jsonEncode([for (final e in said.entities!) e.asUncheckedMap()]),
+        jsonEncode(entities),
+      );
+      expect(said.text, startsWith('<quoted messageId='));
     });
 
     test('a tenant in upper case, matched and passed on in lower', () {
@@ -125,7 +185,7 @@ void main() {
         },
       }, spec: TeamsSourceSpec(appId: appId, tenantAllowlist: {upper}));
       expect(d.outcome, TeamsGateOutcome.trigger);
-      expect(d.doorbell!.string('tenant'), tenant);
+      expect(d.event!.tenant, tenant);
     });
 
     test('a conversation update, with who joined', () {
@@ -138,8 +198,9 @@ void main() {
           ],
         }..remove('text'),
       );
-      expect(d.doorbell!.string('event'), 'teams_conversation_update');
-      expect(d.doorbell!.strings('members_added'), ['28:$appId']);
+      final changed = d.event! as TeamsConversationUpdate;
+      expect(changed.added, ['28:$appId']);
+      expect(changed.removed, isEmpty);
     });
   });
 
@@ -148,11 +209,26 @@ void main() {
       final d = _gate({...message(), 'type': 'typing'}..remove('text'));
       expect(d.outcome, TeamsGateOutcome.ignore);
       expect(d.status, 200);
-      expect(d.doorbell, isNull);
+      expect(d.event, isNull);
       expect(d.seenKey, isNotNull);
     });
 
-    test('an invoke it was not built for, with no answer to give', () {
+    test('a type it was told to wake on that no event is read as', () {
+      final d = _gate(
+        {...message(), 'type': 'typing'}..remove('text'),
+        spec: const TeamsSourceSpec(
+          appId: appId,
+          tenantAllowlist: {tenant},
+          wakeActivityTypes: {'typing'},
+        ),
+      );
+      expect(d.outcome, TeamsGateOutcome.ignore);
+      expect(d.reason, 'no event is read from typing');
+      expect(d.event, isNull);
+      expect(d.seenKey, isNotNull);
+    });
+
+    test('an invoke it was not built for, with no response to give', () {
       final d = _gate({...cardAction(), 'name': 'composeExtension/query'});
       expect(d.outcome, TeamsGateOutcome.ignore);
       expect(d.invokeResponse, isNull);
@@ -164,10 +240,10 @@ void main() {
       seen.add(first.seenKey!);
       final again = _gate(message(), hasSeen: seen.contains);
       expect(again.outcome, TeamsGateOutcome.ignore);
-      expect(again.doorbell, isNull);
+      expect(again.event, isNull);
     });
 
-    test('a card action re-sent, still answered as the first was', () {
+    test('a card action re-sent, still responded to as the first was', () {
       final seen = {_gate(cardAction()).seenKey!};
       final again = _gate(cardAction(), hasSeen: seen.contains);
       expect(again.outcome, TeamsGateOutcome.ignore);
@@ -192,7 +268,7 @@ void main() {
       expect(d.outcome, TeamsGateOutcome.reject);
       expect(d.status, status);
       expect(d.reason, reason);
-      expect(d.doorbell, isNull);
+      expect(d.event, isNull);
       expect(d.invokeResponse, isNull);
       // An unauthenticated request never reaches the seen set.
       expect(d.seenKey, isNull);
@@ -366,7 +442,7 @@ void main() {
     // of the token covers the body (see the library comment, point 2).
     final d = _gate(message(text: 'words Ada never typed'));
     expect(d.outcome, TeamsGateOutcome.trigger);
-    expect(d.doorbell!.string('text'), 'words Ada never typed');
+    expect((d.event! as TeamsMessage).text, 'words Ada never typed');
   });
 
   group('the key set', () {

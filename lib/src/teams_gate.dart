@@ -1,36 +1,31 @@
 /// Decides whether an inbound Teams delivery is authentic, and what the relay
 /// should do with it.
 ///
-/// A sibling of the Slack module's `slack_gate.dart`, and pure like it: the
-/// key set and the seen set are the caller's, so every case is testable
-/// without a clock, a socket, or Microsoft. Four things differ from Slack,
-/// each forced by Teams:
+/// It is pure: the key set and the seen set are the caller's, so every case
+/// is testable without a clock, a socket, or Microsoft. Four things about it
+/// are forced by Teams:
 ///
 /// 1. AUTHENTICATION is a JWT that Microsoft signs with a private key and the
 ///    gate checks against Microsoft's published public keys. The gate holds
 ///    no secret, only the bot's app id, which is the token's audience.
 ///
-/// 2. THE TOKEN VOUCHES FOR THE SENDER, NOT THE BODY. Slack's and GitHub's
-///    HMACs are computed over the body; no documented check of this token
-///    touches it. The `serviceurl` claim matched against the activity is the
-///    only thing tying the two together. So whoever runs the relay is trusted
-///    with content, in any design.
+/// 2. THE TOKEN VOUCHES FOR THE SENDER, NOT THE BODY. No documented check of
+///    it touches the body. The `serviceurl` claim matched against the
+///    activity is the only thing tying the two together. So whoever runs the
+///    relay is trusted with content, in any design.
 ///
-/// 3. THE DOORBELL CARRIES CONTENT (Nick, 2026-11-06). A card submission
+/// 3. AN EVENT CARRIES CONTENT (Nick, 2026-11-06). A card submission
 ///    exists nowhere but this request, and nothing can read a one-to-one
-///    chat back short of permission over every chat in the tenant, so a
-///    doorbell that only said "something happened" would lose both. Text
-///    and submitted values ride in the doorbell.
+///    chat back short of permission over every chat in the tenant, so there
+///    is nothing to fetch later. Text and submitted values ride in the
+///    [TeamsEvent].
 ///
-/// 4. REPLAYS ARE KEYED BY ACTIVITY, NOT SIGNATURE. Because the doorbell
-///    carries content, the receiver acts on it, which is the condition
-///    the GitHub relay's `relay.dart` names for needing a seen set.
-///    Slack's gate keys its seen set by signature digest; that cannot work
-///    here, because the Bot Connector reuses one token across many
-///    deliveries until it expires.
-///    The key is the conversation id with the activity id. Teams also
-///    re-sends anything not answered within 15 seconds, so duplicates are
-///    ordinary traffic, not only attacks.
+/// 4. REPEATS ARE KEYED BY ACTIVITY. What arrives is acted on, so the same
+///    activity must not be acted on twice. The signature can't be the key:
+///    the Bot Connector reuses one token across many deliveries until it
+///    expires. The key is the conversation id with the activity id. Teams
+///    also re-sends anything it gets no response to within 15 seconds, so
+///    duplicates are ordinary traffic, not only attacks.
 library;
 
 import 'dart:convert';
@@ -43,24 +38,25 @@ import 'package:pointycastle/digests/sha256.dart';
 import 'package:pointycastle/signers/rsa_signer.dart';
 
 import 'bot_framework_keys.dart';
+import 'teams_event.dart';
 
 /// The issuer of every token the Bot Connector sends to a bot.
 const botFrameworkIssuer = 'https://api.botframework.com';
 
 /// What the caller should do.
 enum TeamsGateOutcome {
-  /// Hand [TeamsGateDecision.doorbell] on; answer 200, with
+  /// Hand [TeamsGateDecision.event] on; respond with 200, with
   /// [TeamsGateDecision.invokeResponse] as the body when there is one.
   trigger,
 
   /// Authentic but not for waking anyone: a quiet activity type, or one
-  /// already seen. Answer 200, still with [TeamsGateDecision.invokeResponse]
-  /// when there is one, since a re-sent card action wants the same answer
-  /// the first one got.
+  /// already seen. Respond with 200, still with
+  /// [TeamsGateDecision.invokeResponse] as the body when there is one, since
+  /// a re-sent card action wants the same response the first one got.
   ignore,
 
-  /// Refused. Answer [TeamsGateDecision.status] and never say why in the
-  /// body; the log may.
+  /// Refused. Respond with [TeamsGateDecision.status] and never say why in
+  /// the body; the log may.
   reject,
 }
 
@@ -69,7 +65,7 @@ final class TeamsGateDecision {
     this.outcome,
     this.reason, {
     this.status = 200,
-    this.doorbell,
+    this.event,
     this.invokeResponse,
     this.seenKey,
   });
@@ -83,45 +79,20 @@ final class TeamsGateDecision {
   /// hint to whoever is guessing.
   final String reason;
 
-  /// The HTTP status to answer: 200 unless refused. 401 for a request that
-  /// is not from the Bot Connector, 403 for an authentic one this bot won't
-  /// take (a key not endorsed for Teams, a tenant not allowed), 400 for an
-  /// authentic activity that isn't one.
+  /// The HTTP status to respond with: 200 unless refused. 401 for a request
+  /// that is not from the Bot Connector, 403 for an authentic one this bot
+  /// won't take (a key not endorsed for Teams, a tenant not allowed), 400 for
+  /// an authentic activity that isn't one.
   final int status;
 
-  /// What the receiver is told, present iff [outcome] is
-  /// [TeamsGateOutcome.trigger]. Absent fields are left out:
-  /// ```
-  /// {
-  ///   "event": "teams_message" | "teams_card_action"
-  ///          | "teams_conversation_update" | "teams_installation_update"
-  ///          | "teams_message_update" | "teams_message_delete" | ...,
-  ///   "tenant": "...",               // the Entra tenant id
-  ///   "conversation": "...",         // the conversation id
-  ///   "conversation_type": "personal" | "groupChat" | "channel",
-  ///   "activity": "...",             // the activity id
-  ///   "reply_to": "...",             // a card action: the card's own id
-  ///   "service_url": "https://smba.trafficmanager.net/...",
-  ///   "timestamp": "...",
-  ///   "from": "29:...",              // the channel's id for the sender
-  ///   "from_aad_object_id": "...",   // the sender's Entra object id
-  ///   "recipient": "28:...",         // the bot's id in this conversation
-  ///   "text": "...",                 // a message, or an edit
-  ///   "value": {...},                // a card action: what was submitted
-  ///   "entities": [{...}],           // mentions, quoted replies: as sent
-  ///   "name": "adaptiveCard/action", // an invoke
-  ///   "event_type": "editMessage",   // channelData.eventType, when given
-  ///   "action": "add",               // an installation update
-  ///   "members_added": ["..."],
-  ///   "members_removed": ["..."]
-  /// }
-  /// ```
-  final JsonObject? doorbell;
+  /// What happened, present iff [outcome] is [TeamsGateOutcome.trigger].
+  final TeamsEvent? event;
 
-  /// The body to answer an invoke with. Teams waits for it before showing
-  /// the person anything, and the agent is too far away to answer in time,
-  /// so the gate answers with a fixed acknowledgement and the agent edits
-  /// the card afterwards. Present for a card action, seen or not.
+  /// The body of the response to an invoke. Teams waits for it before
+  /// showing the person anything, and the agent is too far away to respond
+  /// in time, so the gate responds with a fixed acknowledgement and the
+  /// agent edits the card afterwards. Present for a card action, seen or
+  /// not.
   final JsonObject? invokeResponse;
 
   /// What the caller adds to its seen set: the conversation id and activity
@@ -161,7 +132,7 @@ final class TeamsSourceSpec {
   /// needs to message a conversation first: its service URL, id and tenant.
   final Set<String> wakeActivityTypes;
 
-  /// Invoke names that wake the receiver. Each is answered with
+  /// Invoke names that wake the receiver. Each is responded to with
   /// [acknowledgement].
   final Set<String> wakeInvokes;
 
@@ -179,8 +150,8 @@ TeamsGateDecision teamsGate({
   Duration maxClockSkew = const Duration(minutes: 5),
   int maxBodyBytes = 1024 * 1024,
 }) {
-  // FAIL CLOSED on a missing app id, as the Slack gate does on a missing
-  // secret: a deploy that forgot an env var becomes a refuser.
+  // FAIL CLOSED on a missing app id: a deploy that forgot an env var
+  // becomes a refuser.
   if (spec.appId.isEmpty) {
     return const TeamsGateDecision._reject(401, 'app id not configured');
   }
@@ -303,61 +274,149 @@ TeamsGateDecision _decide(
       seenKey: seenKey,
     );
   }
+  final event = _read(a, type, name, tenant, conversation);
+  if (event == null) {
+    return TeamsGateDecision._(
+      TeamsGateOutcome.ignore,
+      'no event is read from $type',
+      invokeResponse: invokeResponse,
+      seenKey: seenKey,
+    );
+  }
   return TeamsGateDecision._(
     TeamsGateOutcome.trigger,
     type == 'invoke' ? 'invoke $name' : type,
-    doorbell: _doorbell(a, type, name, tenant, conversation),
+    event: event,
     invokeResponse: invokeResponse,
     seenKey: seenKey,
   );
 }
 
-JsonObject _doorbell(
+/// The activity read into what happened. Null for an activity type no event
+/// is read as.
+TeamsEvent? _read(
   JsonObject a,
   String type,
   String? name,
   String? tenant,
   JsonObject conversation,
 ) {
+  final id = a.string('id');
+  final conversationId = conversation.string('id');
+  final serviceUrl = Uri.parse(a.string('serviceUrl'));
+  final conversationType = conversation.stringOrNull('conversationType');
+  final timestamp = a.stringOrNull('timestamp');
   final from = a.objectOrNull('from');
-  List<String>? ids(String k) =>
-      a.objectsOrNull(k)?.map((m) => m.string('id')).toList();
-  return JsonObject.of({
-    'event': _event(type, name),
-    'tenant': ?tenant,
-    'conversation': conversation.string('id'),
-    'conversation_type': ?conversation.stringOrNull('conversationType'),
-    'activity': a.string('id'),
-    'reply_to': ?a.stringOrNull('replyToId'),
-    'service_url': a.string('serviceUrl'),
-    'timestamp': ?a.stringOrNull('timestamp'),
-    'from': ?from?.stringOrNull('id'),
-    'from_aad_object_id': ?from?.stringOrNull('aadObjectId'),
-    'recipient': ?a.objectOrNull('recipient')?.stringOrNull('id'),
-    'text': ?a.stringOrNull('text'),
-    'value': ?a.objectOrNull('value'),
-    // As they came: @-mentions, and the quoted-reply entity that says which
-    // earlier message a reply quotes. That is how a free-text reply in a
-    // chat names the node it is about. Its JSON is described only in a
-    // Teams SDK blog post, not on Learn, so it is passed on unread rather
-    // than projected from a guess.
-    'entities': ?a.objectsOrNull('entities'),
-    if (type == 'invoke') 'name': ?name,
-    'event_type': ?a.objectOrNull('channelData')?.stringOrNull('eventType'),
-    'action': ?a.stringOrNull('action'),
-    'members_added': ?ids('membersAdded'),
-    'members_removed': ?ids('membersRemoved'),
-  });
+  final fromId = from?.stringOrNull('id');
+  final fromAadObjectId = from?.stringOrNull('aadObjectId');
+  final recipient = a.objectOrNull('recipient')?.stringOrNull('id');
+  final text = a.stringOrNull('text');
+  // As they came: @-mentions, and the quoted-reply entity that says which
+  // earlier message a reply quotes. That is how a free-text reply in a chat
+  // names the node it is about. Its JSON is described only in a Teams SDK
+  // blog post, not on Learn, so it is passed on unread rather than projected
+  // from a guess.
+  final entities = a.objectsOrNull('entities');
+  final channelEventType = a
+      .objectOrNull('channelData')
+      ?.stringOrNull('eventType');
+  List<String> ids(String k) =>
+      a.objectsOrNull(k)?.map((m) => m.string('id')).toList() ?? const [];
+  return switch (type) {
+    'message' => TeamsMessage(
+      conversation: conversationId,
+      id: id,
+      serviceUrl: serviceUrl,
+      tenant: tenant,
+      conversationType: conversationType,
+      timestamp: timestamp,
+      from: fromId,
+      fromAadObjectId: fromAadObjectId,
+      recipient: recipient,
+      text: text,
+      entities: entities,
+      replyTo: a.stringOrNull('replyToId'),
+    ),
+    'messageUpdate' => TeamsMessageUpdate(
+      conversation: conversationId,
+      id: id,
+      serviceUrl: serviceUrl,
+      tenant: tenant,
+      conversationType: conversationType,
+      timestamp: timestamp,
+      from: fromId,
+      fromAadObjectId: fromAadObjectId,
+      recipient: recipient,
+      text: text,
+      entities: entities,
+      channelEventType: channelEventType,
+    ),
+    'messageDelete' => TeamsMessageDelete(
+      conversation: conversationId,
+      id: id,
+      serviceUrl: serviceUrl,
+      tenant: tenant,
+      conversationType: conversationType,
+      timestamp: timestamp,
+      from: fromId,
+      fromAadObjectId: fromAadObjectId,
+      recipient: recipient,
+      channelEventType: channelEventType,
+    ),
+    'invoke' when name == 'adaptiveCard/action' => TeamsCardAction(
+      conversation: conversationId,
+      id: id,
+      serviceUrl: serviceUrl,
+      tenant: tenant,
+      conversationType: conversationType,
+      timestamp: timestamp,
+      from: fromId,
+      fromAadObjectId: fromAadObjectId,
+      recipient: recipient,
+      card: a.stringOrNull('replyToId'),
+      value: a.objectOrNull('value'),
+    ),
+    'invoke' => TeamsInvoke(
+      conversation: conversationId,
+      id: id,
+      serviceUrl: serviceUrl,
+      tenant: tenant,
+      conversationType: conversationType,
+      timestamp: timestamp,
+      from: fromId,
+      fromAadObjectId: fromAadObjectId,
+      recipient: recipient,
+      name: name,
+      value: a.objectOrNull('value'),
+    ),
+    'conversationUpdate' => TeamsConversationUpdate(
+      conversation: conversationId,
+      id: id,
+      serviceUrl: serviceUrl,
+      tenant: tenant,
+      conversationType: conversationType,
+      timestamp: timestamp,
+      from: fromId,
+      fromAadObjectId: fromAadObjectId,
+      recipient: recipient,
+      added: ids('membersAdded'),
+      removed: ids('membersRemoved'),
+    ),
+    'installationUpdate' => TeamsInstallationUpdate(
+      conversation: conversationId,
+      id: id,
+      serviceUrl: serviceUrl,
+      tenant: tenant,
+      conversationType: conversationType,
+      timestamp: timestamp,
+      from: fromId,
+      fromAadObjectId: fromAadObjectId,
+      recipient: recipient,
+      action: a.stringOrNull('action'),
+    ),
+    _ => null,
+  };
 }
-
-/// `teams_` and the activity type in snake case; a card action by its own
-/// name, since it is the one invoke the module is built around.
-String _event(String type, String? name) => switch (type) {
-  'invoke' when name == 'adaptiveCard/action' => 'teams_card_action',
-  'invoke' => 'teams_invoke',
-  _ =>
-    'teams_${type.replaceAllMapped(RegExp('[A-Z]'), (m) => '_${m[0]!.toLowerCase()}')}',
-};
 
 sealed class _Check {}
 

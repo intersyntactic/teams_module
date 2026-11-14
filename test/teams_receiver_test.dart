@@ -27,22 +27,23 @@ const bea = 'bbbbbbbb-0000-4000-8000-000000000002';
 /// Ada's one-to-one chat with the bot.
 const chat = 'a:ada';
 
-JsonObject press(
+TeamsCardAction press(
   String card,
   String? verb, {
   String? user = ada,
   String? tenantId = tenant,
   String conversation = chat,
-}) => JsonObject.of({
-  'event': 'teams_card_action',
-  'tenant': ?tenantId,
-  'conversation': conversation,
-  'reply_to': card,
-  'from_aad_object_id': ?user,
-  'value': {
+}) => TeamsCardAction(
+  conversation: conversation,
+  id: 'press-of-$card',
+  serviceUrl: Uri.parse('https://smba.trafficmanager.net/amer/'),
+  tenant: tenantId,
+  fromAadObjectId: user,
+  card: card,
+  value: JsonObject.of({
     'action': {'verb': ?verb},
-  },
-});
+  }),
+);
 
 void main() {
   late StandInJourneyPath journeyPath;
@@ -85,9 +86,9 @@ void main() {
     return target;
   }
 
-  /// Reads [bell] and appends what it writes, as the module does.
-  Annotations write(JsonObject bell) {
-    final written = receiver.read(bell);
+  /// Reads [event] and appends what it writes, as the module does.
+  Annotations write(TeamsEvent event) {
+    final written = receiver.read(event);
     written.inOrder.forEach(journeyPath.append);
     return written;
   }
@@ -144,7 +145,14 @@ void main() {
     expect(write(press('card-1', 'edit')).inOrder, isEmpty);
     expect(write(press('card-1', 'shrug')).inOrder, isEmpty);
     expect(write(press('card-1', null)).inOrder, isEmpty);
-    final message = JsonObject.of({'event': 'teams_message', 'text': 'hi'});
+    final message = TeamsMessage(
+      conversation: chat,
+      id: 'act-1',
+      serviceUrl: Uri.parse('https://smba.trafficmanager.net/amer/'),
+      tenant: tenant,
+      fromAadObjectId: ada,
+      text: 'hi',
+    );
     expect(write(message).inOrder, isEmpty);
   });
 

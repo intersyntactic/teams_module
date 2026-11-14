@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:checked_json/checked_json.dart';
 import 'package:is_teams_module/is_teams_module.dart';
 import 'package:test/test.dart';
 
@@ -13,12 +12,12 @@ void main() {
 
   late HttpServer server;
   late HttpClient client;
-  late List<JsonObject> doorbells;
+  late List<TeamsEvent> events;
   late List<String> logged;
   late bool keysServed;
 
   setUp(() async {
-    doorbells = [];
+    events = [];
     logged = [];
     keysServed = true;
     final relay = TeamsRelay(
@@ -31,7 +30,7 @@ void main() {
             : jwksJson,
         now: () => now,
       ),
-      onDoorbell: (bell) async => doorbells.add(bell),
+      onEvent: (event) async => events.add(event),
       now: () => now,
       log: logged.add,
       maxBodyBytes: 64 * 1024,
@@ -63,19 +62,19 @@ void main() {
     req.add(body ?? utf8.encode(jsonEncode(activity)));
     final res = await req.close();
     final text = await res.transform(utf8.decoder).join();
-    // Let the doorbell, handed on after the response, land.
+    // Let the event, handed on after the response, land.
     await pumpEventQueue();
     return (res.statusCode, text, res.headers.contentType);
   }
 
-  test('takes a message: 200 with no body, then the doorbell', () async {
+  test('takes a message: 200 with no body, then the event', () async {
     final (status, body, _) = await post(message());
     expect(status, 200);
     expect(body, isEmpty);
-    expect(doorbells.single.string('text'), 'Looks right to me');
+    expect((events.single as TeamsMessage).text, 'Looks right to me');
   });
 
-  test('answers a card action with the acknowledgement, as JSON', () async {
+  test('responds to a card action with the acknowledgement, as JSON', () async {
     final (status, body, type) = await post(cardAction());
     expect(status, 200);
     expect(type?.mimeType, 'application/json');
@@ -84,22 +83,25 @@ void main() {
       'type': 'application/vnd.microsoft.activity.message',
       'value': 'Got it',
     });
-    expect(doorbells.single.string('event'), 'teams_card_action');
+    expect(events.single, isA<TeamsCardAction>());
   });
 
-  test('answers a re-sent card action the same, and rings once', () async {
-    final (_, first, _) = await post(cardAction());
-    final (status, again, _) = await post(cardAction());
-    expect(status, 200);
-    expect(again, first);
-    expect(doorbells, hasLength(1));
-  });
+  test(
+    'responds to a re-sent card action the same, and hands it on once',
+    () async {
+      final (_, first, _) = await post(cardAction());
+      final (status, again, _) = await post(cardAction());
+      expect(status, 200);
+      expect(again, first);
+      expect(events, hasLength(1));
+    },
+  );
 
-  test('refuses a bad token with a bare 401 and no doorbell', () async {
+  test('refuses a bad token with a bare 401 and no event', () async {
     final (status, body, _) = await post(message(), token: 'not.a.token');
     expect(status, 401);
     expect(body, isEmpty);
-    expect(doorbells, isEmpty);
+    expect(events, isEmpty);
   });
 
   test('logs the reason, never the text', () async {
@@ -116,7 +118,7 @@ void main() {
   test('refuses a body over the cap', () async {
     final big = List.filled(64 * 1024 + 1, 0x20);
     expect((await post(null, body: big)).$1, 413);
-    expect(doorbells, isEmpty);
+    expect(events, isEmpty);
   });
 
   test('gives a body one deadline, not one per chunk', () async {
@@ -135,17 +137,17 @@ void main() {
         }
         await req.close();
       } on Exception {
-        // The relay has answered and closed; the rest has nowhere to go.
+        // The relay has responded and closed; the rest has nowhere to go.
       }
     }());
     final res = await response.timeout(const Duration(seconds: 5));
     expect(res.statusCode, 408);
-    expect(doorbells, isEmpty);
+    expect(events, isEmpty);
   });
 
   test('says "try again" while it has no keys', () async {
     keysServed = false;
     expect((await post(message())).$1, 503);
-    expect(doorbells, isEmpty);
+    expect(events, isEmpty);
   });
 }

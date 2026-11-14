@@ -1,13 +1,14 @@
-import 'package:checked_json/checked_json.dart';
 import 'package:is_annotation_shapes/is_annotation_shapes.dart';
 import 'package:is_shapes/is_shapes.dart';
 
-/// What one doorbell writes, in the order the journey path takes it: a [seen], then
+import 'teams_event.dart';
+
+/// What one event writes, in the order the journey path takes it: a [seen], then
 /// the approvals [withdrawn], then an [approve].
 final class Annotations {
   const Annotations({this.seen, this.withdrawn = const [], this.approve});
 
-  /// A doorbell that writes nothing.
+  /// An event that writes nothing.
   static const none = Annotations();
 
   /// The mark that the presser considered the version on the card.
@@ -23,7 +24,7 @@ final class Annotations {
   List<Object> get inOrder => [?seen, ...withdrawn, ?approve];
 }
 
-/// Turns Teams doorbells into annotation shapes: Approve on a card becomes an
+/// Turns Teams events into annotation shapes: Approve on a card becomes an
 /// [Approve], and Not yet a [Seen] and the withdrawals it asks for: having
 /// looked and held off is not the same as not having looked yet.
 ///
@@ -45,7 +46,7 @@ final class TeamsReceiver {
   /// with the same fields, wherever each sits in the tree.
   final bool Function(TurnId a, TurnId b) sameVersion;
 
-  /// Where a doorbell that writes nothing says why. The reason, never the
+  /// Where an event that writes nothing says why. The reason, never the
   /// content.
   final void Function(String) log;
 
@@ -101,30 +102,27 @@ final class TeamsReceiver {
     ];
   }
 
-  /// What [bell] writes. Nothing, unless it is a press on a card this
+  /// What [event] writes. Nothing, unless it is a press on a card this
   /// receiver shows, by an actor Teams named.
-  Annotations read(JsonObject bell) {
-    if (bell.string('event') != 'teams_card_action') return Annotations.none;
-    final by = teamsActor(bell);
+  Annotations read(TeamsEvent event) {
+    if (event is! TeamsCardAction) return Annotations.none;
+    final by = event.actor;
     if (by == null) {
-      log('teams receiver: a press with no tenant or Entra user');
+      log('teams receiver: a press by no one Teams named');
       return Annotations.none;
     }
-    final card = bell.stringOrNull('reply_to');
+    final card = event.card;
     final shown = card == null ? null : _showing[card];
     if (shown == null) {
       log('teams receiver: a press on card $card, which shows no node');
       return Annotations.none;
     }
-    if (shown.conversation != bell.stringOrNull('conversation')) {
+    if (shown.conversation != event.conversation) {
       log('teams receiver: a press on card $card from another conversation');
       return Annotations.none;
     }
     final target = shown.target;
-    final verb = bell
-        .objectOrNull('value')
-        ?.objectOrNull('action')
-        ?.stringOrNull('verb');
+    final verb = event.verb;
     switch (verb) {
       case 'approve':
         return Annotations(
@@ -163,14 +161,4 @@ enum Stance {
   /// They have seen it and no approval of theirs stands: Not yet noted, and
   /// Approve and Not yet.
   heldOff,
-}
-
-/// Who rang [bell]: `teams:<tenant>/<Entra object id>`, both GUIDs in lower
-/// case. Null when Teams named no tenant or no Entra user, as for another
-/// bot.
-ActorId? teamsActor(JsonObject bell) {
-  final tenant = bell.stringOrNull('tenant');
-  final user = bell.stringOrNull('from_aad_object_id');
-  if (tenant == null || user == null) return null;
-  return ActorId.parse('teams:${tenant.toLowerCase()}/${user.toLowerCase()}');
 }
