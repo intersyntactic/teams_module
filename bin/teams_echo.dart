@@ -87,9 +87,9 @@ Future<void> main() async {
     deliver: (id, node) {
       receiver.delivered(id, node);
       final of = switch (node) {
-        Approve(:final target) ||
+        Approval(:final target) ||
         Seen(:final target) => ' of ${_short(target.exact)}',
-        Withdraw<Approve>(:final target) => ' of ${_short(target)}',
+        Withdrawal<Approval>(:final target) => ' of ${_short(target)}',
         _ => '',
       };
       stderr.writeln('echo: appended ${_short(id)} ${node.runtimeType}$of');

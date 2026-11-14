@@ -95,12 +95,12 @@ void main() {
 
   const planned = Example('example-3', Wording('as planned'));
 
-  test('Approve on a shown card writes an Approve of its node', () {
+  test('Approve on a shown card writes an Approval of its node', () {
     final target = shown('card-1', planned);
     final written = write(press('card-1', 'approve'));
     expect(written.inOrder, hasLength(1));
-    expect(written.approve!.target, target);
-    expect(written.approve!.by, actor(ada));
+    expect(written.approval!.target, target);
+    expect(written.approval!.by, actor(ada));
   });
 
   test('the actor id is lower case, whatever case Teams sends', () {
@@ -113,7 +113,7 @@ void main() {
         tenantId: tenant.toUpperCase(),
       ),
     );
-    expect('${written.approve!.by}', 'teams:$tenant/$ada');
+    expect('${written.approval!.by}', 'teams:$tenant/$ada');
   });
 
   test('a press on a card that shows no node writes nothing', () {
@@ -179,7 +179,7 @@ void main() {
     expect(written.withdrawn.map((w) => w.by).toSet(), {actor(ada)});
     expect(
       written.withdrawn.map((w) => w.target),
-      unorderedEquals([first, second, third].map((w) => ids[w.approve]!)),
+      unorderedEquals([first, second, third].map((w) => ids[w.approval]!)),
     );
   });
 
@@ -215,9 +215,9 @@ void main() {
 
   test("a withdrawal by anyone but the author doesn't take it back", () {
     shown('card-1', planned);
-    final approval = ids[write(press('card-1', 'approve')).approve]!;
+    final approval = ids[write(press('card-1', 'approve')).approval]!;
     // Bea names Ada's approval: it counts for nothing.
-    journeyPath.append(Withdraw<Approve>(target: approval, by: actor(bea)));
+    journeyPath.append(Withdrawal<Approval>(target: approval, by: actor(bea)));
     expect(write(press('card-1', 'notyet')).withdrawn.map((w) => w.target), [
       approval,
     ]);

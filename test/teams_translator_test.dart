@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:is_agent_shapes/is_agent_shapes.dart';
+import 'package:is_conversation_shapes/is_conversation_shapes.dart';
 import 'package:is_shapes/is_shapes.dart';
 import 'package:is_teams_module/is_teams_module.dart';
 import 'package:test/test.dart';

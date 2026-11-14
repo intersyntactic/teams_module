@@ -45,8 +45,8 @@ final class StandInJourneyPath {
 
   /// The shape and fields of an annotation shape, or null for any other.
   static Map<String, Object?>? encode(Object node) => switch (node) {
-    Approve(:final target, :final by) => {
-      'shape': 'Approve',
+    Approval(:final target, :final by) => {
+      'shape': 'Approval',
       'target': _target(target),
       'by': '$by',
     },
@@ -55,8 +55,8 @@ final class StandInJourneyPath {
       'target': _target(target),
       'by': '$by',
     },
-    Withdraw<Approve>(:final target, :final by) => {
-      'shape': 'Withdraw<Approve>',
+    Withdrawal<Approval>(:final target, :final by) => {
+      'shape': 'Withdrawal<Approval>',
       'target': '$target',
       'by': '$by',
     },

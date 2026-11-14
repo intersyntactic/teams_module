@@ -1,4 +1,4 @@
-import 'package:is_agent_shapes/is_agent_shapes.dart';
+import 'package:is_conversation_shapes/is_conversation_shapes.dart';
 import 'package:is_shapes/is_shapes.dart';
 
 import 'teams_event.dart';

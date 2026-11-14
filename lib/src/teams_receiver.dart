@@ -4,9 +4,9 @@ import 'package:is_shapes/is_shapes.dart';
 import 'teams_event.dart';
 
 /// What one event writes, in the order the journey path takes it: a [seen], then
-/// the approvals [withdrawn], then an [approve].
+/// the approvals [withdrawn], then an [approval].
 final class Annotations {
-  const Annotations({this.seen, this.withdrawn = const [], this.approve});
+  const Annotations({this.seen, this.withdrawn = const [], this.approval});
 
   /// An event that writes nothing.
   static const none = Annotations();
@@ -15,17 +15,17 @@ final class Annotations {
   final Seen? seen;
 
   /// The presser's standing approvals of that version, taken back.
-  final List<Withdraw<Approve>> withdrawn;
+  final List<Withdrawal<Approval>> withdrawn;
 
   /// An approval of the version on the card.
-  final Approve? approve;
+  final Approval? approval;
 
   /// Every node to append, in order.
-  List<Object> get inOrder => [?seen, ...withdrawn, ?approve];
+  List<Object> get inOrder => [?seen, ...withdrawn, ?approval];
 }
 
 /// Turns Teams events into annotation shapes: Approve on a card becomes an
-/// [Approve], and Not yet a [Seen] and the withdrawals it asks for: having
+/// [Approval], and Not yet a [Seen] and the withdrawals it asks for: having
 /// looked and held off is not the same as not having looked yet.
 ///
 /// It knows two things, each from its source. Which node a card shows, and in
@@ -51,7 +51,7 @@ final class TeamsReceiver {
   final void Function(String) log;
 
   final _showing = <String, ({String conversation, Target target})>{};
-  final _standing = <TurnId, Approve>{};
+  final _standing = <TurnId, Approval>{};
   final _seen = <Seen>[];
 
   /// The card with activity id [card], sent to [conversation], now shows the
@@ -65,9 +65,9 @@ final class TeamsReceiver {
   /// Takes in a node the journey path delivered, named by its exact [id].
   void delivered(TurnId id, Object node) {
     switch (node) {
-      case Approve():
+      case Approval():
         _standing[id] = node;
-      case Withdraw<Approve>(:final target, :final by):
+      case Withdrawal<Approval>(:final target, :final by):
         // A withdrawal counts only from the approval's own author.
         if (_standing[target]?.by == by) _standing.remove(target);
       case Seen():
@@ -126,7 +126,7 @@ final class TeamsReceiver {
     switch (verb) {
       case 'approve':
         return Annotations(
-          approve: Approve(target: target, by: by),
+          approval: Approval(target: target, by: by),
         );
       case 'notyet':
         // The Seen is written even when nothing is withdrawn: when a pass
@@ -137,7 +137,7 @@ final class TeamsReceiver {
             for (final MapEntry(key: id, value: approval) in _standing.entries)
               if (approval.by == by &&
                   sameVersion(approval.target.exact, target.exact))
-                Withdraw<Approve>(target: id, by: by),
+                Withdrawal<Approval>(target: id, by: by),
           ],
         );
       case 'edit':
