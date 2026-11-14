@@ -1,6 +1,5 @@
 /// The Teams module: what people say and press in Microsoft Teams, taken in
-/// as nodes on a journey path, and the way back out to them
-/// (https://github.com/enspyrco/intersyntactic/issues/1089).
+/// as nodes on a journey path, and the way back out to them.
 ///
 /// So far, the way in: [TeamsRelay], the endpoint Teams posts to; [teamsGate],
 /// which every delivery passes first; and the keys it checks signatures

@@ -12,9 +12,8 @@ import 'package:is_shapes/is_shapes.dart';
 /// Its bytes for a node are its own: the node's shape and fields as JSON, from
 /// [encode] for the annotation shapes and [encodeOther] for any other. They
 /// say what the node says and nothing more, so equal bytes are one version.
-/// The journey path's own bytes hold an envelope as well
-/// (`docs/design/authority.md` in enspyrco/intersyntactic), so an id minted
-/// here means nothing there.
+/// A real journey path hashes a small envelope of its own in with them, and
+/// the parent's id, so an id minted here means nothing there.
 final class StandInJourneyPath {
   StandInJourneyPath({required this.deliver, required this.encodeOther});
 
