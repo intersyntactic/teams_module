@@ -97,14 +97,9 @@ Future<void> main() async {
       exit(0);
     });
   }
-  // The relay only witnesses: it hands the airlock no run, so nothing is
-  // decided here, and anything that asked would be refused.
-  final airlock = RecordedAirlock<Object?>(
-    journal,
-    decide: (_, _) =>
-        const Deny('the Teams relay decides nothing', by: DecidedBy.rules),
-    narrows: (_, _) => false,
-  );
+  // The relay only witnesses: it has no run and no rules, so it takes the
+  // airlock's Witness rather than an Airlock with a policy it would invent.
+  final witness = Witness(journal);
   final teams = ArrivalSource.parse('teams')!;
 
   final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
@@ -121,7 +116,7 @@ Future<void> main() async {
   final relay = TeamsRelay(
     spec: TeamsSourceSpec(appId: appId, tenantAllowlist: allow),
     keys: keys,
-    witness: (body) => airlock.witness(body, source: teams),
+    witness: (body) => witness.witness(body, source: teams),
   );
   final server = await HttpServer.bind(address, port);
   stdout.writeln('teams relay listening on ${address.address}:${server.port}');

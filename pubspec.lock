@@ -166,19 +166,18 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: bb4f421dde0dd92a5c7cff9f8d6a56c788da66d0
-      resolved-ref: bb4f421dde0dd92a5c7cff9f8d6a56c788da66d0
+      ref: "062f0a7e2ae5f262b4406fdb32534b0e4746e619"
+      resolved-ref: "062f0a7e2ae5f262b4406fdb32534b0e4746e619"
       url: "https://github.com/intersyntactic/airlock.git"
     source: git
     version: "0.1.0"
   is_airlock_api:
     dependency: transitive
     description:
-      path: "."
-      ref: "7136de43de8b2ac036e2619c8ddd7793f1f57fab"
-      resolved-ref: "7136de43de8b2ac036e2619c8ddd7793f1f57fab"
-      url: "https://github.com/intersyntactic/airlock_api.git"
-    source: git
+      name: is_airlock_api
+      sha256: "183b2604b543db24b454ca90d27967726c77b7db54439ebd099afed36d901f86"
+      url: "https://pub.dev"
+    source: hosted
     version: "0.2.0"
   is_annotation_shapes:
     dependency: "direct main"
@@ -198,22 +197,21 @@ packages:
     source: hosted
     version: "0.2.0"
   is_effects:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
-      path: "."
-      ref: c6c50439eb5401fecb462ce55dc538942712b28c
-      resolved-ref: c6c50439eb5401fecb462ce55dc538942712b28c
-      url: "https://github.com/intersyntactic/effects.git"
-    source: git
+      name: is_effects
+      sha256: "8c5af555fc6d3461f4120c470d0199e66c15a23e5bbb3e5509b9fb5f4e5a0295"
+      url: "https://pub.dev"
+    source: hosted
     version: "0.1.0"
   is_journal:
     dependency: "direct main"
     description:
       name: is_journal
-      sha256: "93da732c92871bbda5e57f26ee37f32204a444bfef6b6c21543d084201eb26ee"
+      sha256: "388d1a059e0cfb5242b24f58e7ffbbd0d8353700d6ae544acc8ae8e3c785df2c"
       url: "https://pub.dev"
     source: hosted
-    version: "0.2.0"
+    version: "0.4.0"
   is_shapes:
     dependency: "direct main"
     description:
