@@ -153,6 +153,32 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.1.0"
+  is_agent_shapes:
+    dependency: "direct main"
+    description:
+      path: "."
+      ref: bddc4cef70326b8ead79b2ac59d15fb673949006
+      resolved-ref: bddc4cef70326b8ead79b2ac59d15fb673949006
+      url: "git@github.com:intersyntactic/agent_shapes.git"
+    source: git
+    version: "0.1.0"
+  is_airlock:
+    dependency: "direct main"
+    description:
+      path: "."
+      ref: "062f0a7e2ae5f262b4406fdb32534b0e4746e619"
+      resolved-ref: "062f0a7e2ae5f262b4406fdb32534b0e4746e619"
+      url: "https://github.com/intersyntactic/airlock.git"
+    source: git
+    version: "0.1.0"
+  is_airlock_api:
+    dependency: transitive
+    description:
+      name: is_airlock_api
+      sha256: "183b2604b543db24b454ca90d27967726c77b7db54439ebd099afed36d901f86"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.0"
   is_annotation_shapes:
     dependency: "direct main"
     description:
@@ -166,18 +192,34 @@ packages:
     dependency: transitive
     description:
       name: is_content_id
-      sha256: d0f8c6de8a98cf72659abcabb849f5358288a9fa6bd9d3fd8195c8ee8362b3d7
+      sha256: "40381247bf99e093eab9951d070ab2b416e526a9639ec85f80179ee26ef35e12"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.0"
+  is_effects:
+    dependency: transitive
+    description:
+      name: is_effects
+      sha256: "8c5af555fc6d3461f4120c470d0199e66c15a23e5bbb3e5509b9fb5f4e5a0295"
       url: "https://pub.dev"
     source: hosted
     version: "0.1.0"
+  is_journal:
+    dependency: "direct main"
+    description:
+      name: is_journal
+      sha256: "388d1a059e0cfb5242b24f58e7ffbbd0d8353700d6ae544acc8ae8e3c785df2c"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.4.0"
   is_shapes:
     dependency: "direct main"
     description:
       name: is_shapes
-      sha256: "5a72dd9c5b1cc8347972366a6ed7180377466d67d3a5980a80653807cdb1543c"
+      sha256: d107356ab7a2b60b6fa67b7072520021cf7a7edd20b7d52febff2b06ae47e1ea
       url: "https://pub.dev"
     source: hosted
-    version: "0.3.0"
+    version: "0.3.2"
   lints:
     dependency: "direct dev"
     description:

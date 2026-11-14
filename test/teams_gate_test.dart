@@ -291,7 +291,7 @@ void main() {
         now: now,
         maxBodyBytes: 10,
       );
-      refused(d, 401, contains('over cap'));
+      refused(d, 413, contains('over cap'));
     });
 
     test('a request with no bearer token', () {

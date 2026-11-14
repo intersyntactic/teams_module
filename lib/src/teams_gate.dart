@@ -82,7 +82,7 @@ final class TeamsGateDecision {
   /// The HTTP status to respond with: 200 unless refused. 401 for a request
   /// that is not from the Bot Connector, 403 for an authentic one this bot
   /// won't take (a key not endorsed for Teams, a tenant not allowed), 400 for
-  /// an authentic activity that isn't one.
+  /// an authentic activity that isn't one, 413 for a body over the cap.
   final int status;
 
   /// What happened, present iff [outcome] is [TeamsGateOutcome.trigger].
@@ -140,6 +140,28 @@ final class TeamsSourceSpec {
   final String acknowledgement;
 }
 
+/// What the headers alone say about a delivery: a token the gate believes,
+/// or a refusal.
+sealed class TeamsTokenCheck {}
+
+/// A bearer token Microsoft signed for this bot, in date. Made only by
+/// [teamsToken], and taken by [teamsGateBody], which still has to match its
+/// `serviceurl` claim against the activity.
+final class TeamsToken extends TeamsTokenCheck {
+  TeamsToken._(this._claims, this._key);
+  final JsonObject _claims;
+  final BotFrameworkKey _key;
+}
+
+/// A delivery refused on its headers: [decision] is a 401, and no body need
+/// be read.
+final class TeamsTokenRefused extends TeamsTokenCheck {
+  TeamsTokenRefused._(this.decision);
+  final TeamsGateDecision decision;
+}
+
+/// The whole gate, for a delivery whose body is already in hand: the token
+/// from [teamsToken], then the body from [teamsGateBody].
 TeamsGateDecision teamsGate({
   required TeamsSourceSpec spec,
   required BotFrameworkKeys keys,
@@ -149,38 +171,75 @@ TeamsGateDecision teamsGate({
   bool Function(String seenKey)? hasSeen,
   Duration maxClockSkew = const Duration(minutes: 5),
   int maxBodyBytes = 1024 * 1024,
+}) => switch (teamsToken(
+  spec: spec,
+  keys: keys,
+  headers: headers,
+  now: now,
+  maxClockSkew: maxClockSkew,
+)) {
+  TeamsTokenRefused(:final decision) => decision,
+  final TeamsToken token => teamsGateBody(
+    spec: spec,
+    token: token,
+    body: body,
+    hasSeen: hasSeen,
+    maxBodyBytes: maxBodyBytes,
+  ),
+};
+
+/// The checks the headers alone can make, so a sender with no valid token
+/// is refused before a byte of its body is read: a token is present, signed
+/// by one of [keys], from the Bot Connector, in date, and for this bot.
+TeamsTokenCheck teamsToken({
+  required TeamsSourceSpec spec,
+  required BotFrameworkKeys keys,
+  required Map<String, String> headers,
+  required DateTime now,
+  Duration maxClockSkew = const Duration(minutes: 5),
 }) {
   // FAIL CLOSED on a missing app id: a deploy that forgot an env var
   // becomes a refuser.
   if (spec.appId.isEmpty) {
-    return const TeamsGateDecision._reject(401, 'app id not configured');
+    return TeamsTokenRefused._(
+      const TeamsGateDecision._reject(401, 'app id not configured'),
+    );
   }
-  if (body.length > maxBodyBytes) {
-    return TeamsGateDecision._reject(401, 'body ${body.length}b over cap');
-  }
-
   final auth = {
     for (final e in headers.entries) e.key.toLowerCase(): e.value,
   }['authorization'];
   if (auth == null || !auth.startsWith('Bearer ')) {
-    return const TeamsGateDecision._reject(401, 'no bearer token');
+    return TeamsTokenRefused._(
+      const TeamsGateDecision._reject(401, 'no bearer token'),
+    );
   }
-  final JsonObject claims;
-  final BotFrameworkKey key;
-  switch (_verify(
+  return switch (_verify(
     auth.substring('Bearer '.length).trim(),
     keys: keys,
     appId: spec.appId,
     now: now,
     skew: maxClockSkew,
   )) {
-    case _Refused(:final reason):
-      return TeamsGateDecision._reject(401, reason);
-    case _Verified(claims: final c, key: final k):
-      claims = c;
-      key = k;
-  }
+    _Refused(:final reason) => TeamsTokenRefused._(
+      TeamsGateDecision._reject(401, reason),
+    ),
+    _Verified(:final claims, :final key) => TeamsToken._(claims, key),
+  };
+}
 
+/// The checks that need the body, for a delivery whose [token] passed: what
+/// the activity is, and whether it is the one the token was sent with, as
+/// far as the `serviceurl` claim can tell.
+TeamsGateDecision teamsGateBody({
+  required TeamsSourceSpec spec,
+  required TeamsToken token,
+  required List<int> body,
+  bool Function(String seenKey)? hasSeen,
+  int maxBodyBytes = 1024 * 1024,
+}) {
+  if (body.length > maxBodyBytes) {
+    return TeamsGateDecision._reject(413, 'body ${body.length}b over cap');
+  }
   final JsonObject activity;
   try {
     activity = JsonObject.decode(utf8.decode(body));
@@ -188,7 +247,7 @@ TeamsGateDecision teamsGate({
     return const TeamsGateDecision._reject(400, 'body is not a JSON object');
   }
   try {
-    return _decide(spec, activity, claims, key, hasSeen);
+    return _decide(spec, activity, token._claims, token._key, hasSeen);
   } on FormatException catch (e) {
     return TeamsGateDecision._reject(400, 'activity: ${e.message}');
   }
