@@ -4,9 +4,7 @@ The Teams module for intersyntactic. It lets a journey take part in Microsoft
 Teams: what a journey shows a person arrives as a message or a card, and what
 they say and press there comes back as nodes on its journey path. The modules
 on that path never learn Teams exists; a module that wants a person's review
-or approval plugs into this one rather than speaking Teams itself. The
-questions its design left open are answered in
-https://github.com/intersyntactic/teams_module/issues/1.
+or approval plugs into this one rather than speaking Teams itself.
 
 ## Shape
 
