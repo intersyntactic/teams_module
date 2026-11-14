@@ -4,7 +4,7 @@ import 'package:is_shapes/is_shapes.dart';
 /// Teams' record of one activity, checked by the gate. Each case is named
 /// for Teams' own activity, since it is Teams' account of what happened, not
 /// a reading of it: Teams says nothing, a user does, and saying is what the
-/// interpreter reads from it.
+/// translator reads from it.
 ///
 /// It carries content: a person's words and what they submitted on a card
 /// exist nowhere but the request that brought them, so they come here, not

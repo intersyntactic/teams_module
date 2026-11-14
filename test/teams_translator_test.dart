@@ -43,7 +43,7 @@ void main() {
   setUpAll(setUpKeys);
 
   late StandInJourneyPath journeyPath;
-  late TeamsInterpreter teams;
+  late TeamsTranslator teams;
   late List<TeamsPost> posted;
 
   /// Every node appended, in order, as a journey path's store keeps them.
@@ -52,7 +52,7 @@ void main() {
   /// What the agent does when a [UserSaid] reaches it, if anything.
   void Function(TurnId id, UserSaid said)? agent;
 
-  /// What the composition does with a Teams message: the interpreter reads it, and
+  /// What the composition does with a Teams message: the translator reads it, and
   /// the journey path appends what it read, the conversation first.
   TurnId? say(Map<String, Object?> activity) {
     final read = teams.said(messageOf(activity));
@@ -62,7 +62,7 @@ void main() {
   }
 
   /// The composition delivering [node] to the module's acceptors.
-  void deliverTo(TeamsInterpreter module, TurnId id, Object node) {
+  void deliverTo(TeamsTranslator module, TurnId id, Object node) {
     switch (node) {
       case TeamsConversation joined:
         module.joined(joined);
@@ -77,7 +77,7 @@ void main() {
     posted = [];
     stored = [];
     agent = null;
-    teams = TeamsInterpreter();
+    teams = TeamsTranslator();
     // The composition: each node goes to the acceptor bound to its shape,
     // and a post the module describes goes to the airlock (here, a list).
     journeyPath = StandInJourneyPath(
@@ -198,7 +198,7 @@ void main() {
       final asked = say(message(id: 'act-3'))!;
       // A new module, knowing only what the journey path hands it back:
       // copies, as a store would read them, not the nodes appended.
-      final restarted = TeamsInterpreter();
+      final restarted = TeamsTranslator();
       for (final (id, node) in stored) {
         deliverTo(restarted, id, switch (node) {
           TeamsConversation(:final id, :final serviceUrl) => TeamsConversation(

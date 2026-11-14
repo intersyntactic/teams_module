@@ -18,7 +18,7 @@ typedef _Where = ({String conversation, String message});
 /// To answer, it has to know which chat each message came from. It learns
 /// that only from what the journey path delivers back, through [joined] and
 /// [heard], so replaying the path after a restart rebuilds it.
-final class TeamsInterpreter {
+final class TeamsTranslator {
   /// How to reach each chat joined.
   final _serviceUrls = <String, Uri>{};
 
