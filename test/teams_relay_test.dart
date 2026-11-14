@@ -131,28 +131,64 @@ void main() {
     expect(events, isEmpty);
   });
 
-  test('gives a body one deadline, not one per chunk', () async {
-    // A byte every 100ms never leaves a gap as long as the 300ms deadline,
-    // so only a deadline on the whole body stops it.
-    final req = await client.post('127.0.0.1', server.port, TeamsRelay.path);
-    req.headers.set('authorization', 'Bearer ${signedToken()}');
-    req.contentLength = 20;
-    final response = req.done;
+  /// Sends the head of a POST that promises a 20-byte body, then [trickle]
+  /// bytes of it, one every 100ms, and returns the response head the relay
+  /// sends and how long after the request's head it came. A raw socket,
+  /// since HttpClient reads no response until its whole request is sent.
+  Future<(String, Duration)> unfinished(String token, {int trickle = 1}) async {
+    final socket = await Socket.connect('127.0.0.1', server.port);
+    addTearDown(socket.destroy);
+    socket.write(
+      'POST ${TeamsRelay.path} HTTP/1.1\r\n'
+      'Host: 127.0.0.1\r\n'
+      'Authorization: Bearer $token\r\n'
+      'Content-Type: application/json\r\n'
+      'Content-Length: 20\r\n'
+      '\r\n',
+    );
+    await socket.flush();
+    final sent = DateTime.now();
+    final head = utf8.decoder.bind(socket).first;
     unawaited(() async {
       try {
-        for (var i = 0; i < 20; i++) {
-          req.add(const [0x20]);
-          await req.flush();
+        for (var i = 0; i < trickle; i++) {
+          socket.add(const [0x20]);
+          await socket.flush();
           await Future<void>.delayed(const Duration(milliseconds: 100));
         }
-        await req.close();
-      } on Exception {
+      } on Object {
         // The relay has responded and closed; the rest has nowhere to go.
       }
     }());
-    final res = await response.timeout(const Duration(seconds: 5));
-    expect(res.statusCode, 408);
+    final response = await head.timeout(const Duration(seconds: 5));
+    return (response, DateTime.now().difference(sent));
+  }
+
+  test('gives a body one deadline, not one per chunk', () async {
+    // A byte every 100ms never leaves a gap as long as the 300ms deadline,
+    // so only a deadline on the whole body stops it, and the 408 comes long
+    // before the 2s the body would take. The connection goes with it, so
+    // the rest of the body has nowhere to land.
+    final (response, after) = await unfinished(signedToken(), trickle: 20);
+    expect(response, startsWith('HTTP/1.1 408'));
+    expect(response.toLowerCase(), contains('connection: close'));
+    expect(after, lessThan(const Duration(seconds: 1)));
+    expect(logged, ['teams relay: 408 body too slow']);
     expect(events, isEmpty);
+  });
+
+  test('refuses a bad token without reading the body', () async {
+    // The body never finishes, and nothing reads it: dart:io sends no
+    // response while a request's body sits unread, so a relay that left it
+    // there would never answer, and one that read it first would wait out
+    // the 300ms deadline and send 408.
+    final (response, after) = await unfinished('nope');
+    expect(response, startsWith('HTTP/1.1 401'));
+    expect(response.toLowerCase(), contains('connection: close'));
+    expect(after, lessThan(const Duration(milliseconds: 300)));
+    expect(logged, ['teams relay: 401 token is not three parts']);
+    expect(events, isEmpty);
+    expect(witnessed, isEmpty);
   });
 
   test('says "try again" while it has no keys', () async {
