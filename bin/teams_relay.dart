@@ -100,7 +100,7 @@ Future<void> main() async {
   }
   // The relay only witnesses: it hands the airlock no run, so nothing is
   // decided here, and anything that asked would be refused.
-  final airlock = JournalAirlock<Object?>(
+  final airlock = RecordedAirlock<Object?>(
     journal,
     decide: (_, _) =>
         const Deny('the Teams relay decides nothing', by: DecidedBy.rules),
