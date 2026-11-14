@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:checked_json/checked_json.dart';
 import 'package:is_agent_shapes/is_agent_shapes.dart';
 import 'package:is_shapes/is_shapes.dart';
 import 'package:is_teams_module/is_teams_module.dart';
@@ -8,19 +7,21 @@ import 'package:test/test.dart';
 
 import 'support/fixtures.dart';
 
-/// The doorbell the gate makes of [activity], as the relay hands it on,
-/// under a token that names the activity's service URL, as Microsoft's do.
-JsonObject bellOf(Map<String, Object?> activity) => teamsGate(
-  spec: const TeamsSourceSpec(appId: appId, tenantAllowlist: {tenant}),
-  keys: keys,
-  headers: {
-    'Authorization':
-        'Bearer ${signedToken(claims: {...tokenClaims(), 'serviceurl': activity['serviceUrl']})}',
-  },
-  body: utf8.encode(jsonEncode(activity)),
-  now: now,
-  hasSeen: (_) => false,
-).doorbell!;
+/// The message the gate reads [activity] as, under a token that names the
+/// activity's service URL, as Microsoft's do.
+TeamsMessage messageOf(Map<String, Object?> activity) =>
+    teamsGate(
+          spec: const TeamsSourceSpec(appId: appId, tenantAllowlist: {tenant}),
+          keys: keys,
+          headers: {
+            'Authorization':
+                'Bearer ${signedToken(claims: {...tokenClaims(), 'serviceurl': activity['serviceUrl']})}',
+          },
+          body: utf8.encode(jsonEncode(activity)),
+          now: now,
+          hasSeen: (_) => false,
+        ).event!
+        as TeamsMessage;
 
 final ada = ActorId.parse('teams:$tenant/oid-ada')!;
 final agentId = ActorId.parse('agent:demo')!;
@@ -42,9 +43,8 @@ void main() {
   setUpAll(setUpKeys);
 
   late StandInJourneyPath journeyPath;
-  late TeamsMessages teams;
+  late TeamsInterpreter teams;
   late List<TeamsPost> posted;
-  late List<String> logged;
 
   /// Every node appended, in order, as a journey path's store keeps them.
   late List<(TurnId, Object)> stored;
@@ -52,17 +52,17 @@ void main() {
   /// What the agent does when a [UserSaid] reaches it, if anything.
   void Function(TurnId id, UserSaid said)? agent;
 
-  /// What the composition does with a doorbell: the module reads it, and
+  /// What the composition does with a Teams message: the interpreter reads it, and
   /// the journey path appends what it read, the conversation first.
   TurnId? say(Map<String, Object?> activity) {
-    final read = teams.said(bellOf(activity));
+    final read = teams.said(messageOf(activity));
     if (read == null) return null;
     if (read.joined case final joined?) journeyPath.append(joined);
     return journeyPath.append(read.said);
   }
 
   /// The composition delivering [node] to the module's acceptors.
-  void deliverTo(TeamsMessages module, TurnId id, Object node) {
+  void deliverTo(TeamsInterpreter module, TurnId id, Object node) {
     switch (node) {
       case TeamsConversation joined:
         module.joined(joined);
@@ -75,10 +75,9 @@ void main() {
 
   setUp(() {
     posted = [];
-    logged = [];
     stored = [];
     agent = null;
-    teams = TeamsMessages(log: logged.add);
+    teams = TeamsInterpreter();
     // The composition: each node goes to the acceptor bound to its shape,
     // and a post the module describes goes to the airlock (here, a list).
     journeyPath = StandInJourneyPath(
@@ -112,7 +111,7 @@ void main() {
   group('what is said', () {
     test('is read as UserSaid: who, where, and what', () {
       final got = teams.said(
-        bellOf(message(id: 'act-1', text: 'Is the draft ready?')),
+        messageOf(message(id: 'act-1', text: 'Is the draft ready?')),
       );
       expect(got?.said.author, ada);
       expect(got?.said.source.value, 'a:1personal|act-1');
@@ -121,48 +120,54 @@ void main() {
 
     test('loses the @-mention of the bot, which is how a group says it', () {
       final got = teams.said(
-        bellOf(message(text: '<at>Bot</at> Is the draft ready?')),
+        messageOf(message(text: '<at>Bot</at> Is the draft ready?')),
       );
       expect(got?.said.text, 'Is the draft ready?');
     });
 
+    test('by another bot is read as UserSaid too: a bot is a user', () {
+      final got = teams.said(
+        messageOf({
+          ...message(id: 'act-2', text: 'Build 41 failed'),
+          'from': {'id': '28:other-bot', 'name': 'CI'},
+        }),
+      );
+      expect(got?.said.author.value, 'teams:$tenant/bot:other-bot');
+      expect(got?.said.text, 'Build 41 failed');
+    });
+
     test('from someone Teams does not name reads as nothing', () {
       final a = message()..remove('from');
-      expect(teams.said(bellOf(a)), isNull);
-      expect(logged.single, contains('no tenant or Entra user'));
+      expect(teams.said(messageOf(a)), isNull);
     });
 
     test('with no words reads as nothing', () {
-      expect(teams.said(bellOf(message(text: '<at>Bot</at>'))), isNull);
-    });
-
-    test('a card press is not a message', () {
-      expect(teams.said(bellOf(cardAction())), isNull);
+      expect(teams.said(messageOf(message(text: '<at>Bot</at>'))), isNull);
     });
   });
 
   group('a conversation', () {
     test('is offered the first time it is heard from', () {
-      final got = teams.said(bellOf(message()));
+      final got = teams.said(messageOf(message()));
       expect(got?.joined?.conversation, 'a:1personal');
       expect(got?.joined?.serviceUrl, Uri.parse(serviceUrl));
     });
 
     test('is not offered again once joined', () {
       say(message(id: 'act-1'));
-      expect(teams.said(bellOf(message(id: 'act-2')))?.joined, isNull);
+      expect(teams.said(messageOf(message(id: 'act-2')))?.joined, isNull);
     });
 
     test('is offered again when Teams moves it', () {
       say(message(id: 'act-1'));
       final moved = 'https://smba.trafficmanager.net/emea/';
-      final got = teams.said(bellOf(through(moved, message(id: 'act-2'))));
+      final got = teams.said(messageOf(through(moved, message(id: 'act-2'))));
       expect(got?.joined?.serviceUrl, Uri.parse(moved));
     });
 
     test('is joined only when the journey path delivers it', () {
-      teams.said(bellOf(message(id: 'act-1')));
-      expect(teams.said(bellOf(message(id: 'act-2')))?.joined, isNotNull);
+      teams.said(messageOf(message(id: 'act-1')));
+      expect(teams.said(messageOf(message(id: 'act-2')))?.joined, isNotNull);
     });
   });
 
@@ -193,7 +198,7 @@ void main() {
       final asked = say(message(id: 'act-3'))!;
       // A new module, knowing only what the journey path hands it back:
       // copies, as a store would read them, not the nodes appended.
-      final restarted = TeamsMessages(log: logged.add);
+      final restarted = TeamsInterpreter();
       for (final (id, node) in stored) {
         deliverTo(restarted, id, switch (node) {
           TeamsConversation(:final conversation, :final serviceUrl) =>
@@ -240,22 +245,15 @@ void main() {
         ReplyText(by: agentId, answers: elsewhere, text: 'Hi.'),
       );
       expect(posted, isEmpty);
-      expect(logged, isEmpty);
     });
 
-    test('to a Teams message from a chat never joined says so', () {
-      final unjoined = journeyPath.append(
-        UserSaid(
-          author: ada,
-          source: SourceMessageId.parse('a:9never|act-1')!,
-          text: 'hello',
-        ),
+    test('from a Teams chat never joined is a broken path, said aloud', () {
+      final unjoined = UserSaid(
+        author: ada,
+        source: SourceMessageId.parse('a:9never|act-1')!,
+        text: 'hello',
       );
-      journeyPath.append(
-        ReplyText(by: agentId, answers: unjoined, text: 'Hi.'),
-      );
-      expect(posted, isEmpty);
-      expect(logged.single, contains('never joined'));
+      expect(() => journeyPath.append(unjoined), throwsStateError);
     });
 
     test('goes to the conversation of what it answers, not the newest', () {

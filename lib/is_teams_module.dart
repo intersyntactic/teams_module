@@ -6,10 +6,9 @@
 /// against, [BotFrameworkKeys], fetched by [BotFrameworkKeySource]. Then
 /// [TeamsReceiver], which reads each event as the annotation shapes it
 /// writes, and a [StandInJourneyPath] to write them to until the module meets
-/// a real journey path; and [TeamsMessages], which reads what people say as
-/// a `UserSaid` and describes each `ReplyText` to it as a [TeamsPost] (both
-/// from is_agent_shapes), appending and sending neither. And the way out: [BotConnector], which holds the
-/// bot's secret and speaks as it.
+/// a real journey path; and [TeamsInterpreter], which turns a Teams message
+/// into a `UserSaid` and the agent's `ReplyText` into a [TeamsPost]. And the
+/// way out: [BotConnector], which holds the bot's secret and speaks as it.
 library;
 
 export 'src/bot_connector.dart';
@@ -19,7 +18,7 @@ export 'src/stand_in_journey_path.dart';
 export 'src/teams_event.dart';
 export 'src/teams_gate.dart';
 export 'src/teams_conversation.dart';
-export 'src/teams_messages.dart';
+export 'src/teams_interpreter.dart';
 export 'src/teams_post.dart';
 export 'src/teams_receiver.dart';
 export 'src/teams_relay.dart';
