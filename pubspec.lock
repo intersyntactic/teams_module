@@ -166,13 +166,13 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "3f2fdc7c503d373aa8c38b510bd1f9c339e9cef3"
-      resolved-ref: "3f2fdc7c503d373aa8c38b510bd1f9c339e9cef3"
+      ref: bb4f421dde0dd92a5c7cff9f8d6a56c788da66d0
+      resolved-ref: bb4f421dde0dd92a5c7cff9f8d6a56c788da66d0
       url: "https://github.com/intersyntactic/airlock.git"
     source: git
     version: "0.1.0"
   is_airlock_api:
-    dependency: "direct main"
+    dependency: transitive
     description:
       path: "."
       ref: "7136de43de8b2ac036e2619c8ddd7793f1f57fab"
