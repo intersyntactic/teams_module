@@ -1,36 +1,31 @@
 /// Decides whether an inbound Teams delivery is authentic, and what the relay
 /// should do with it.
 ///
-/// A sibling of the Slack module's `slack_gate.dart`, and pure like it: the
-/// key set and the seen set are the caller's, so every case is testable
-/// without a clock, a socket, or Microsoft. Four things differ from Slack,
-/// each forced by Teams:
+/// It is pure: the key set and the seen set are the caller's, so every case
+/// is testable without a clock, a socket, or Microsoft. Four things about it
+/// are forced by Teams:
 ///
 /// 1. AUTHENTICATION is a JWT that Microsoft signs with a private key and the
 ///    gate checks against Microsoft's published public keys. The gate holds
 ///    no secret, only the bot's app id, which is the token's audience.
 ///
-/// 2. THE TOKEN VOUCHES FOR THE SENDER, NOT THE BODY. Slack's and GitHub's
-///    HMACs are computed over the body; no documented check of this token
-///    touches it. The `serviceurl` claim matched against the activity is the
-///    only thing tying the two together. So whoever runs the relay is trusted
-///    with content, in any design.
+/// 2. THE TOKEN VOUCHES FOR THE SENDER, NOT THE BODY. No documented check of
+///    it touches the body. The `serviceurl` claim matched against the
+///    activity is the only thing tying the two together. So whoever runs the
+///    relay is trusted with content, in any design.
 ///
-/// 3. THE DOORBELL CARRIES CONTENT (Nick, 2026-11-06). A card submission
+/// 3. AN ARRIVAL CARRIES CONTENT (Nick, 2026-11-06). A card submission
 ///    exists nowhere but this request, and nothing can read a one-to-one
-///    chat back short of permission over every chat in the tenant, so a
-///    doorbell that only said "something happened" would lose both. Text
-///    and submitted values ride in the doorbell.
+///    chat back short of permission over every chat in the tenant, so there
+///    is nothing to fetch later. Text and submitted values ride in the
+///    [TeamsArrival].
 ///
-/// 4. REPLAYS ARE KEYED BY ACTIVITY, NOT SIGNATURE. Because the doorbell
-///    carries content, the receiver acts on it, which is the condition
-///    the GitHub relay's `relay.dart` names for needing a seen set.
-///    Slack's gate keys its seen set by signature digest; that cannot work
-///    here, because the Bot Connector reuses one token across many
-///    deliveries until it expires.
-///    The key is the conversation id with the activity id. Teams also
-///    re-sends anything not answered within 15 seconds, so duplicates are
-///    ordinary traffic, not only attacks.
+/// 4. REPEATS ARE KEYED BY ACTIVITY. What arrives is acted on, so the same
+///    activity must not be acted on twice. The signature can't be the key:
+///    the Bot Connector reuses one token across many deliveries until it
+///    expires. The key is the conversation id with the activity id. Teams
+///    also re-sends anything not answered within 15 seconds, so duplicates
+///    are ordinary traffic, not only attacks.
 library;
 
 import 'dart:convert';
@@ -43,13 +38,14 @@ import 'package:pointycastle/digests/sha256.dart';
 import 'package:pointycastle/signers/rsa_signer.dart';
 
 import 'bot_framework_keys.dart';
+import 'teams_arrival.dart';
 
 /// The issuer of every token the Bot Connector sends to a bot.
 const botFrameworkIssuer = 'https://api.botframework.com';
 
 /// What the caller should do.
 enum TeamsGateOutcome {
-  /// Hand [TeamsGateDecision.doorbell] on; answer 200, with
+  /// Hand [TeamsGateDecision.arrival] on; answer 200, with
   /// [TeamsGateDecision.invokeResponse] as the body when there is one.
   trigger,
 
@@ -69,7 +65,7 @@ final class TeamsGateDecision {
     this.outcome,
     this.reason, {
     this.status = 200,
-    this.doorbell,
+    this.arrival,
     this.invokeResponse,
     this.seenKey,
   });
@@ -89,34 +85,8 @@ final class TeamsGateDecision {
   /// authentic activity that isn't one.
   final int status;
 
-  /// What the receiver is told, present iff [outcome] is
-  /// [TeamsGateOutcome.trigger]. Absent fields are left out:
-  /// ```
-  /// {
-  ///   "event": "teams_message" | "teams_card_action"
-  ///          | "teams_conversation_update" | "teams_installation_update"
-  ///          | "teams_message_update" | "teams_message_delete" | ...,
-  ///   "tenant": "...",               // the Entra tenant id
-  ///   "conversation": "...",         // the conversation id
-  ///   "conversation_type": "personal" | "groupChat" | "channel",
-  ///   "activity": "...",             // the activity id
-  ///   "reply_to": "...",             // a card action: the card's own id
-  ///   "service_url": "https://smba.trafficmanager.net/...",
-  ///   "timestamp": "...",
-  ///   "from": "29:...",              // the channel's id for the sender
-  ///   "from_aad_object_id": "...",   // the sender's Entra object id
-  ///   "recipient": "28:...",         // the bot's id in this conversation
-  ///   "text": "...",                 // a message, or an edit
-  ///   "value": {...},                // a card action: what was submitted
-  ///   "entities": [{...}],           // mentions, quoted replies: as sent
-  ///   "name": "adaptiveCard/action", // an invoke
-  ///   "event_type": "editMessage",   // channelData.eventType, when given
-  ///   "action": "add",               // an installation update
-  ///   "members_added": ["..."],
-  ///   "members_removed": ["..."]
-  /// }
-  /// ```
-  final JsonObject? doorbell;
+  /// What arrived, present iff [outcome] is [TeamsGateOutcome.trigger].
+  final TeamsArrival? arrival;
 
   /// The body to answer an invoke with. Teams waits for it before showing
   /// the person anything, and the agent is too far away to answer in time,
@@ -179,8 +149,8 @@ TeamsGateDecision teamsGate({
   Duration maxClockSkew = const Duration(minutes: 5),
   int maxBodyBytes = 1024 * 1024,
 }) {
-  // FAIL CLOSED on a missing app id, as the Slack gate does on a missing
-  // secret: a deploy that forgot an env var becomes a refuser.
+  // FAIL CLOSED on a missing app id: a deploy that forgot an env var
+  // becomes a refuser.
   if (spec.appId.isEmpty) {
     return const TeamsGateDecision._reject(401, 'app id not configured');
   }
@@ -303,16 +273,28 @@ TeamsGateDecision _decide(
       seenKey: seenKey,
     );
   }
+  final arrival = TeamsArrival.fromJson(
+    _wire(a, type, name, tenant, conversation),
+  );
+  if (arrival == null) {
+    return TeamsGateDecision._(
+      TeamsGateOutcome.ignore,
+      'no arrival is read from $type',
+      invokeResponse: invokeResponse,
+      seenKey: seenKey,
+    );
+  }
   return TeamsGateDecision._(
     TeamsGateOutcome.trigger,
     type == 'invoke' ? 'invoke $name' : type,
-    doorbell: _doorbell(a, type, name, tenant, conversation),
+    arrival: arrival,
     invokeResponse: invokeResponse,
     seenKey: seenKey,
   );
 }
 
-JsonObject _doorbell(
+/// The activity in its wire form, as [TeamsArrival.toJson] writes it.
+JsonObject _wire(
   JsonObject a,
   String type,
   String? name,

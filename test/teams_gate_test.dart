@@ -16,7 +16,7 @@ void main() {
       expect(d.status, 200);
       expect(d.invokeResponse, isNull);
       expect(d.seenKey, jsonEncode(['a:1personal', '1730881234567']));
-      expect(d.doorbell!.asUncheckedMap(), {
+      expect(d.arrival!.toJson().asUncheckedMap(), {
         'event': 'teams_message',
         'tenant': tenant,
         'conversation': 'a:1personal',
@@ -39,11 +39,11 @@ void main() {
         'type': 'application/vnd.microsoft.activity.message',
         'value': 'Got it',
       });
-      final bell = d.doorbell!;
-      expect(bell.string('event'), 'teams_card_action');
-      expect(bell.string('name'), 'adaptiveCard/action');
-      expect(bell.string('reply_to'), '1730881000000');
-      expect(bell.object('value').object('action').string('verb'), 'approve');
+      final wire = d.arrival!.toJson();
+      expect(wire.string('event'), 'teams_card_action');
+      expect(wire.string('name'), 'adaptiveCard/action');
+      expect(wire.string('reply_to'), '1730881000000');
+      expect(wire.object('value').object('action').string('verb'), 'approve');
     });
 
     test('an audience given as a list', () {
@@ -88,9 +88,9 @@ void main() {
           ..remove('text'),
       );
       expect(d.outcome, TeamsGateOutcome.trigger);
-      expect(d.doorbell!.string('event'), 'teams_installation_update');
-      expect(d.doorbell!.string('action'), 'add');
-      expect(d.doorbell!.string('service_url'), serviceUrl);
+      expect(d.arrival!.toJson().string('event'), 'teams_installation_update');
+      expect(d.arrival!.toJson().string('action'), 'add');
+      expect(d.arrival!.toJson().string('service_url'), serviceUrl);
     });
 
     test('a quoted reply, with the entities that say what it quotes', () {
@@ -112,8 +112,14 @@ void main() {
         'entities': entities,
       });
       expect(d.outcome, TeamsGateOutcome.trigger);
-      expect(jsonEncode(d.doorbell!.raw('entities')), jsonEncode(entities));
-      expect(d.doorbell!.string('text'), startsWith('<quoted messageId='));
+      expect(
+        jsonEncode(d.arrival!.toJson().raw('entities')),
+        jsonEncode(entities),
+      );
+      expect(
+        d.arrival!.toJson().string('text'),
+        startsWith('<quoted messageId='),
+      );
     });
 
     test('a tenant in upper case, matched and passed on in lower', () {
@@ -125,7 +131,7 @@ void main() {
         },
       }, spec: TeamsSourceSpec(appId: appId, tenantAllowlist: {upper}));
       expect(d.outcome, TeamsGateOutcome.trigger);
-      expect(d.doorbell!.string('tenant'), tenant);
+      expect(d.arrival!.toJson().string('tenant'), tenant);
     });
 
     test('a conversation update, with who joined', () {
@@ -138,8 +144,8 @@ void main() {
           ],
         }..remove('text'),
       );
-      expect(d.doorbell!.string('event'), 'teams_conversation_update');
-      expect(d.doorbell!.strings('members_added'), ['28:$appId']);
+      expect(d.arrival!.toJson().string('event'), 'teams_conversation_update');
+      expect(d.arrival!.toJson().strings('members_added'), ['28:$appId']);
     });
   });
 
@@ -148,7 +154,7 @@ void main() {
       final d = _gate({...message(), 'type': 'typing'}..remove('text'));
       expect(d.outcome, TeamsGateOutcome.ignore);
       expect(d.status, 200);
-      expect(d.doorbell, isNull);
+      expect(d.arrival, isNull);
       expect(d.seenKey, isNotNull);
     });
 
@@ -164,7 +170,7 @@ void main() {
       seen.add(first.seenKey!);
       final again = _gate(message(), hasSeen: seen.contains);
       expect(again.outcome, TeamsGateOutcome.ignore);
-      expect(again.doorbell, isNull);
+      expect(again.arrival, isNull);
     });
 
     test('a card action re-sent, still answered as the first was', () {
@@ -192,7 +198,7 @@ void main() {
       expect(d.outcome, TeamsGateOutcome.reject);
       expect(d.status, status);
       expect(d.reason, reason);
-      expect(d.doorbell, isNull);
+      expect(d.arrival, isNull);
       expect(d.invokeResponse, isNull);
       // An unauthenticated request never reaches the seen set.
       expect(d.seenKey, isNull);
@@ -366,7 +372,7 @@ void main() {
     // of the token covers the body (see the library comment, point 2).
     final d = _gate(message(text: 'words Ada never typed'));
     expect(d.outcome, TeamsGateOutcome.trigger);
-    expect(d.doorbell!.string('text'), 'words Ada never typed');
+    expect(d.arrival!.toJson().string('text'), 'words Ada never typed');
   });
 
   group('the key set', () {
