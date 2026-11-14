@@ -39,7 +39,7 @@ final class TeamsInterpreter {
       joined: _serviceUrls[message.conversation] == message.serviceUrl
           ? null
           : TeamsConversation(
-              conversation: message.conversation,
+              id: message.conversation,
               serviceUrl: message.serviceUrl,
             ),
       said: UserSaid(author: author, source: source, text: text),
@@ -48,7 +48,7 @@ final class TeamsInterpreter {
 
   /// Notes how to reach [conversation].
   void joined(TeamsConversation conversation) =>
-      _serviceUrls[conversation.conversation] = conversation.serviceUrl;
+      _serviceUrls[conversation.id] = conversation.serviceUrl;
 
   /// Notes that [id] was [said] in a Teams chat. Anything not said by a
   /// Teams user is ignored.

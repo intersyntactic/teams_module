@@ -87,9 +87,9 @@ void main() {
         if (node case UserSaid said) agent?.call(id, said);
       },
       encodeOther: (node) => switch (node) {
-        TeamsConversation(:final conversation, :final serviceUrl) => {
+        TeamsConversation(:final id, :final serviceUrl) => {
           'shape': 'TeamsConversation',
-          'conversation': conversation,
+          'id': id,
           'service_url': '$serviceUrl',
         },
         UserSaid(:final author, :final source, :final text) => {
@@ -149,7 +149,7 @@ void main() {
   group('a conversation', () {
     test('is offered the first time it is heard from', () {
       final got = teams.said(messageOf(message()));
-      expect(got?.joined?.conversation, 'a:1personal');
+      expect(got?.joined?.id, 'a:1personal');
       expect(got?.joined?.serviceUrl, Uri.parse(serviceUrl));
     });
 
@@ -201,11 +201,10 @@ void main() {
       final restarted = TeamsInterpreter();
       for (final (id, node) in stored) {
         deliverTo(restarted, id, switch (node) {
-          TeamsConversation(:final conversation, :final serviceUrl) =>
-            TeamsConversation(
-              conversation: conversation,
-              serviceUrl: serviceUrl,
-            ),
+          TeamsConversation(:final id, :final serviceUrl) => TeamsConversation(
+            id: id,
+            serviceUrl: serviceUrl,
+          ),
           UserSaid(:final author, :final source, :final text) => UserSaid(
             author: author,
             source: source,
