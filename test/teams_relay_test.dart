@@ -74,7 +74,7 @@ void main() {
     expect((events.single as TeamsSaid).text, 'Looks right to me');
   });
 
-  test('answers a card action with the acknowledgement, as JSON', () async {
+  test('responds to a card action with the acknowledgement, as JSON', () async {
     final (status, body, type) = await post(cardAction());
     expect(status, 200);
     expect(type?.mimeType, 'application/json');
@@ -87,7 +87,7 @@ void main() {
   });
 
   test(
-    'answers a re-sent card action the same, and hands it on once',
+    'responds to a re-sent card action the same, and hands it on once',
     () async {
       final (_, first, _) = await post(cardAction());
       final (status, again, _) = await post(cardAction());
@@ -137,7 +137,7 @@ void main() {
         }
         await req.close();
       } on Exception {
-        // The relay has answered and closed; the rest has nowhere to go.
+        // The relay has responded and closed; the rest has nowhere to go.
       }
     }());
     final res = await response.timeout(const Duration(seconds: 5));

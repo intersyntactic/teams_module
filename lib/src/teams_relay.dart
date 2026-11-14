@@ -1,9 +1,9 @@
 /// The HTTP front of the Teams module: the one endpoint Teams posts to.
 ///
-/// It reads the body under a cap and a deadline, asks [teamsGate], answers
+/// It reads the body under a cap and a deadline, asks [teamsGate], responds
 /// at once, and only then hands the [TeamsEvent] to [TeamsRelay.onEvent],
-/// so nothing the receiver does
-/// can make Teams wait past its 15 seconds and send again. It holds no
+/// so nothing done with it can make Teams wait past its 15 seconds and send
+/// again. It holds no
 /// Microsoft credential: the gate needs only the app id and the public keys.
 library;
 
@@ -35,7 +35,7 @@ final class TeamsRelay {
   final TeamsSourceSpec spec;
   final BotFrameworkKeySource keys;
 
-  /// What becomes of an event once Teams has its answer. Defaults to a log
+  /// What becomes of an event once Teams has its response. Defaults to a log
   /// line, so the relay runs end to end before a receiver is wired in.
   final Future<void> Function(TeamsEvent event) onEvent;
 
@@ -126,9 +126,9 @@ final class TeamsRelay {
     log('teams relay: ${d.outcome.name} ${d.status}: ${d.reason}');
 
     req.response.statusCode = d.status;
-    if (d.invokeResponse case final answer?) {
+    if (d.invokeResponse case final body?) {
       req.response.headers.contentType = ContentType.json;
-      req.response.write(jsonEncode(answer));
+      req.response.write(jsonEncode(body));
     }
     await req.response.close();
     if (d.event case final event?) unawaited(_dispatch(event));

@@ -80,7 +80,7 @@ void main() {
       expect(invoked.value!.object('action').string('verb'), 'approve');
     });
 
-    test('a card action, answered with the acknowledgement', () {
+    test('a card action, responded to with the acknowledgement', () {
       final d = _gate(cardAction());
       expect(d.outcome, TeamsGateOutcome.trigger);
       expect(d.invokeResponse!.asUncheckedMap(), {
@@ -228,7 +228,7 @@ void main() {
       expect(d.seenKey, isNotNull);
     });
 
-    test('an invoke it was not built for, with no answer to give', () {
+    test('an invoke it was not built for, with no response to give', () {
       final d = _gate({...cardAction(), 'name': 'composeExtension/query'});
       expect(d.outcome, TeamsGateOutcome.ignore);
       expect(d.invokeResponse, isNull);
@@ -243,7 +243,7 @@ void main() {
       expect(again.event, isNull);
     });
 
-    test('a card action re-sent, still answered as the first was', () {
+    test('a card action re-sent, still responded to as the first was', () {
       final seen = {_gate(cardAction()).seenKey!};
       final again = _gate(cardAction(), hasSeen: seen.contains);
       expect(again.outcome, TeamsGateOutcome.ignore);

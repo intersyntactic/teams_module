@@ -1,4 +1,4 @@
-/// A TEST bot: the relay, with an event handler that answers through the
+/// A TEST bot: the relay, with an event handler that responds through the
 /// Bot Connector. It proves the round trip on a test tenant before any real
 /// content goes near it, and it is not the module's shape: in the module
 /// the relay never holds the secret, and the sender runs beside the agent.
@@ -112,7 +112,7 @@ Future<void> main() async {
   final relay = TeamsRelay(
     spec: TeamsSourceSpec(appId: appId, tenantAllowlist: {tenantId}),
     keys: keys,
-    onEvent: (event) => _answer(echo, event),
+    onEvent: (event) => _respond(echo, event),
   );
   final server = await HttpServer.bind(address, port);
   stdout.writeln('teams echo listening on ${address.address}:${server.port}');
@@ -130,7 +130,7 @@ typedef _Echo = ({
 /// What each card shows, by its activity id, to draw it again when edited.
 final _examples = <String, _Example>{};
 
-Future<void> _answer(_Echo echo, TeamsEvent event) async {
+Future<void> _respond(_Echo echo, TeamsEvent event) async {
   final connector = echo.connector;
   final serviceUrl = event.serviceUrl;
   final conversation = event.conversation;

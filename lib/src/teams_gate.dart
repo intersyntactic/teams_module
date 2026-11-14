@@ -24,8 +24,8 @@
 ///    activity must not be acted on twice. The signature can't be the key:
 ///    the Bot Connector reuses one token across many deliveries until it
 ///    expires. The key is the conversation id with the activity id. Teams
-///    also re-sends anything not answered within 15 seconds, so duplicates
-///    are ordinary traffic, not only attacks.
+///    also re-sends anything it gets no response to within 15 seconds, so
+///    duplicates are ordinary traffic, not only attacks.
 library;
 
 import 'dart:convert';
@@ -45,18 +45,18 @@ const botFrameworkIssuer = 'https://api.botframework.com';
 
 /// What the caller should do.
 enum TeamsGateOutcome {
-  /// Hand [TeamsGateDecision.event] on; answer 200, with
+  /// Hand [TeamsGateDecision.event] on; respond with 200, with
   /// [TeamsGateDecision.invokeResponse] as the body when there is one.
   trigger,
 
   /// Authentic but not for waking anyone: a quiet activity type, or one
-  /// already seen. Answer 200, still with [TeamsGateDecision.invokeResponse]
-  /// when there is one, since a re-sent card action wants the same answer
-  /// the first one got.
+  /// already seen. Respond with 200, still with
+  /// [TeamsGateDecision.invokeResponse] as the body when there is one, since
+  /// a re-sent card action wants the same response the first one got.
   ignore,
 
-  /// Refused. Answer [TeamsGateDecision.status] and never say why in the
-  /// body; the log may.
+  /// Refused. Respond with [TeamsGateDecision.status] and never say why in
+  /// the body; the log may.
   reject,
 }
 
@@ -79,19 +79,20 @@ final class TeamsGateDecision {
   /// hint to whoever is guessing.
   final String reason;
 
-  /// The HTTP status to answer: 200 unless refused. 401 for a request that
-  /// is not from the Bot Connector, 403 for an authentic one this bot won't
-  /// take (a key not endorsed for Teams, a tenant not allowed), 400 for an
-  /// authentic activity that isn't one.
+  /// The HTTP status to respond with: 200 unless refused. 401 for a request
+  /// that is not from the Bot Connector, 403 for an authentic one this bot
+  /// won't take (a key not endorsed for Teams, a tenant not allowed), 400 for
+  /// an authentic activity that isn't one.
   final int status;
 
   /// What happened, present iff [outcome] is [TeamsGateOutcome.trigger].
   final TeamsEvent? event;
 
-  /// The body to answer an invoke with. Teams waits for it before showing
-  /// the person anything, and the agent is too far away to answer in time,
-  /// so the gate answers with a fixed acknowledgement and the agent edits
-  /// the card afterwards. Present for a card action, seen or not.
+  /// The body of the response to an invoke. Teams waits for it before
+  /// showing the person anything, and the agent is too far away to respond
+  /// in time, so the gate responds with a fixed acknowledgement and the
+  /// agent edits the card afterwards. Present for a card action, seen or
+  /// not.
   final JsonObject? invokeResponse;
 
   /// What the caller adds to its seen set: the conversation id and activity
@@ -131,7 +132,7 @@ final class TeamsSourceSpec {
   /// needs to message a conversation first: its service URL, id and tenant.
   final Set<String> wakeActivityTypes;
 
-  /// Invoke names that wake the receiver. Each is answered with
+  /// Invoke names that wake the receiver. Each is responded to with
   /// [acknowledgement].
   final Set<String> wakeInvokes;
 

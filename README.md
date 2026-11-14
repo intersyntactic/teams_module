@@ -11,7 +11,7 @@ or approval plugs into this one rather than speaking Teams itself.
 ```
 Teams ──POST (Bot Framework JWT)──▶ Teams relay ──event, with content────▶ receiver
                                      │  checks the token against            │  writes nodes,
-                                     │  Microsoft's public keys; answers    │  feeds the journey
+                                     │  Microsoft's public keys; responds   │  feeds the journey
                                      │  a card action with "Got it"         ▼
                                      │  at once; drops repeats       Bot Connector REST
                                      │  by activity id               (posts and edits cards)
@@ -25,8 +25,8 @@ Three things about it are forced by Teams:
 - **An event carries the message and what was submitted.** A card
   submission exists nowhere but the request that delivers it, and the bot
   can't read a chat back, so there is nothing to fetch later.
-- **Repeats are dropped by activity id.** Teams re-sends anything not
-  answered within 15 seconds, so duplicates are ordinary traffic.
+- **Repeats are dropped by activity id.** Teams re-sends anything it gets
+  no response to within 15 seconds, so duplicates are ordinary traffic.
 
 v1 mirrors what is addressed to the bot: card actions, form submissions and
 @-mentions, which in a one-to-one chat is every message. It asks for no Graph
@@ -48,7 +48,7 @@ fields.
 ## Testing on a test tenant
 
 `bin/teams_echo.dart` is a test bot, not the module's shape: the relay with a
-handler that answers through the Connector. It echoes text, sends a card with
+handler that responds through the Connector. It echoes text, sends a card with
 Approve and Not yet when told "card", and edits the card when one is pressed.
 
 ```
