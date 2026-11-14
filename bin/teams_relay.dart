@@ -11,6 +11,14 @@
 ///   HOST=127.0.0.1                   optional; the address to bind. The
 ///                                    default is loopback, for a proxy on
 ///                                    the same machine.
+///   TEAMS_JOURNAL_DIR=/var/lib/...   the airlock's journal: every accepted
+///                                    request's body is witnessed there,
+///                                    byte for byte, before Teams gets a
+///                                    response. Required.
+///
+/// Run it from source (`dart run`), not as a compiled executable: the
+/// journal names the code that writes each entry by hashing its own source,
+/// and refuses to open without it, so a compiled relay won't start.
 ///
 /// The bot's messaging endpoint is `https://<host>/api/messages`.
 library;
@@ -19,6 +27,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:is_airlock/is_airlock.dart';
+import 'package:is_journal/is_journal.dart';
 import 'package:is_teams_module/is_teams_module.dart';
 
 Future<void> main() async {
@@ -57,6 +67,41 @@ Future<void> main() async {
     exit(78);
   }
 
+  final journalDir = env['TEAMS_JOURNAL_DIR'] ?? '';
+  if (journalDir.isEmpty) {
+    // A relay that can't record what arrives must not respond 200 to it.
+    stderr.writeln('abort: TEAMS_JOURNAL_DIR not set');
+    exit(78);
+  }
+  final Journal? journal;
+  try {
+    journal = Journal.open(Directory(journalDir));
+  } on Exception catch (e) {
+    stderr.writeln('abort: journal at $journalDir: $e');
+    exit(73);
+  }
+  if (journal == null) {
+    stderr.writeln(
+      'abort: the journal cannot name its own code, as in a compiled build; '
+      'run the relay from source with dart run',
+    );
+    exit(78);
+  }
+  // Give up the journal's claim on its folder when told to stop, so the next
+  // start can take it: in a container the relay is the same pid every time,
+  // and a claim left behind would refuse it. A kill that can't be caught
+  // still leaves one; the abort then names the file to delete.
+  for (final signal in [ProcessSignal.sigterm, ProcessSignal.sigint]) {
+    signal.watch().listen((_) {
+      journal!.close();
+      exit(0);
+    });
+  }
+  // The relay only witnesses: it has no run and no rules, so it takes the
+  // airlock's Witness rather than an Airlock with a policy it would invent.
+  final witness = Witness(journal);
+  final teams = ArrivalSource.parse('teams')!;
+
   final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
   final keys = BotFrameworkKeySource(
     get: (url) => _get(client, url),
@@ -71,6 +116,7 @@ Future<void> main() async {
   final relay = TeamsRelay(
     spec: TeamsSourceSpec(appId: appId, tenantAllowlist: allow),
     keys: keys,
+    witness: (body) => witness.witness(body, source: teams),
   );
   final server = await HttpServer.bind(address, port);
   stdout.writeln('teams relay listening on ${address.address}:${server.port}');

@@ -1,16 +1,19 @@
 /// The HTTP front of the Teams module: the one endpoint Teams posts to.
 ///
-/// It reads the body under a cap and a deadline, asks [teamsGate], responds
-/// at once, and only then hands the [TeamsEvent] to [TeamsRelay.onEvent],
-/// so nothing done with it can make Teams wait past its 15 seconds and send
-/// again. It holds no
-/// Microsoft credential: the gate needs only the app id and the public keys.
+/// It checks the token from the headers alone ([teamsToken]), so a sender
+/// with no valid token is refused before its body is read. Then it reads
+/// the body under a cap and a deadline, asks [teamsGateBody], responds at
+/// once, and only then hands the [TeamsEvent] to [TeamsRelay.onEvent], so
+/// nothing done with it can make Teams wait past its 15 seconds and send
+/// again. It holds no Microsoft credential: the gate needs only the app id
+/// and the public keys.
 library;
 
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'key_source.dart';
 import 'teams_event.dart';
@@ -21,6 +24,7 @@ final class TeamsRelay {
     required this.spec,
     required this.keys,
     this.onEvent = _logEvent,
+    this.witness,
     DateTime Function()? now,
     this.bodyTimeout = const Duration(seconds: 10),
     this.maxBodyBytes = 1024 * 1024,
@@ -38,6 +42,12 @@ final class TeamsRelay {
   /// What becomes of an event once Teams has its response. Defaults to a log
   /// line, so the relay runs end to end before a receiver is wired in.
   final Future<void> Function(TeamsEvent event) onEvent;
+
+  /// Records the body of each accepted request, its bytes exactly as they
+  /// came, before Teams gets a response and before anything downstream reads
+  /// it. A 200 then means "recorded": if this throws, Teams gets a 500 and
+  /// the activity is not marked seen, so its retry is taken. None in tests.
+  final void Function(Uint8List body)? witness;
 
   final Duration bodyTimeout;
   final int maxBodyBytes;
@@ -59,9 +69,9 @@ final class TeamsRelay {
   Future<void> handle(HttpRequest req) async {
     try {
       if (req.uri.path != path) {
-        await _end(req, HttpStatus.notFound);
+        await _refuseUnread(req, HttpStatus.notFound);
       } else if (req.method != 'POST') {
-        await _end(req, HttpStatus.methodNotAllowed);
+        await _refuseUnread(req, HttpStatus.methodNotAllowed);
       } else {
         await _messages(req);
       }
@@ -77,8 +87,35 @@ final class TeamsRelay {
 
   Future<void> _messages(HttpRequest req) async {
     if (req.contentLength > maxBodyBytes) {
-      return _end(req, HttpStatus.requestEntityTooLarge);
+      return _refuseUnread(req, HttpStatus.requestEntityTooLarge);
     }
+
+    final keySet = await keys.keys();
+    if (keySet == null) {
+      // Not the sender's fault: no key set has arrived from Microsoft yet.
+      // A 503 says "try again", and Teams will.
+      log('teams relay: ${HttpStatus.serviceUnavailable} no keys yet');
+      return _refuseUnread(req, HttpStatus.serviceUnavailable);
+    }
+
+    // The token before the body: a sender with no valid token is turned
+    // away at the door, without a byte of its body read.
+    final headers = <String, String>{};
+    req.headers.forEach((name, values) => headers[name] = values.first);
+    final TeamsToken token;
+    switch (teamsToken(
+      spec: spec,
+      keys: keySet,
+      headers: headers,
+      now: _now(),
+    )) {
+      case TeamsTokenRefused(:final decision):
+        log('teams relay: ${decision.status} ${decision.reason}');
+        return _refuseUnread(req, decision.status);
+      case final TeamsToken t:
+        token = t;
+    }
+
     final body = <int>[];
     var tooLarge = false;
     try {
@@ -94,36 +131,41 @@ final class TeamsRelay {
         }
       }().timeout(bodyTimeout);
     } on TimeoutException {
-      log('teams relay: body too slow');
-      return _end(req, HttpStatus.requestTimeout);
+      log('teams relay: ${HttpStatus.requestTimeout} body too slow');
+      return _refuseUnread(req, HttpStatus.requestTimeout);
     }
-    if (tooLarge) return _end(req, HttpStatus.requestEntityTooLarge);
+    if (tooLarge) return _refuseUnread(req, HttpStatus.requestEntityTooLarge);
 
-    final keySet = await keys.keys();
-    if (keySet == null) {
-      // Not the sender's fault: no key set has arrived from Microsoft yet.
-      // A 503 says "try again", and Teams will.
-      log('teams relay: no keys yet');
-      return _end(req, HttpStatus.serviceUnavailable);
-    }
-
-    final headers = <String, String>{};
-    req.headers.forEach((name, values) => headers[name] = values.first);
     final now = _now();
     // No await from here to _markSeen: two copies of one activity arriving
     // together cannot both get past hasSeen.
-    final d = teamsGate(
+    final d = teamsGateBody(
       spec: spec,
-      keys: keySet,
-      headers: headers,
+      token: token,
       body: body,
-      now: now,
       hasSeen: _hasSeen,
       maxBodyBytes: maxBodyBytes,
     );
     if (d.seenKey case final key?) _markSeen(key, now);
-    // The reason, never the content: the log is not a copy of anyone's words.
-    log('teams relay: ${d.outcome.name} ${d.status}: ${d.reason}');
+
+    // One line per request, written once its status is decided, so it says
+    // what Teams was sent. The reason, never the content: the log is not a
+    // copy of anyone's words.
+    if (d.event != null && witness != null) {
+      try {
+        witness!(Uint8List.fromList(body));
+      } on Object catch (e) {
+        // Unrecorded is not taken: forget it was seen, so the retry Teams
+        // sends for a 500 is taken and recorded then.
+        if (d.seenKey case final key?) _seen.remove(key);
+        log(
+          'teams relay: ${HttpStatus.internalServerError} ${d.reason}: '
+          'witness failed: ${e.runtimeType}',
+        );
+        return _end(req, HttpStatus.internalServerError);
+      }
+    }
+    log('teams relay: ${d.status} ${d.reason}');
 
     req.response.statusCode = d.status;
     if (d.invokeResponse case final body?) {
@@ -164,9 +206,24 @@ final class TeamsRelay {
     }
   }
 
+  /// Responds once the whole body has been read.
   static Future<void> _end(HttpRequest req, int status) async {
     req.response.statusCode = status;
     await req.response.close();
+  }
+
+  /// Responds with [status] and drops the connection, leaving the rest of
+  /// the body unread. dart:io's `response.close()` reads the whole request
+  /// body before it sends a byte, so a refusal sent with it would still
+  /// wait on whatever the sender chooses to send.
+  static Future<void> _refuseUnread(HttpRequest req, int status) async {
+    req.response
+      ..statusCode = status
+      ..persistentConnection = false
+      ..contentLength = 0;
+    final socket = await req.response.detachSocket();
+    await socket.flush();
+    socket.destroy();
   }
 
   static void _stderr(String line) => stderr.writeln(line);
