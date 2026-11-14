@@ -1,9 +1,10 @@
 import 'package:checked_json/checked_json.dart';
 import 'package:is_shapes/is_shapes.dart';
 
-/// One thing that happened in Teams, checked by the gate and read into what
-/// it is: something said, edited or deleted, a card pressed, members or an
-/// install changed, or another invoke the gate was told to take.
+/// Teams' record of one activity, checked by the gate. Each case is named
+/// for Teams' own activity, since it is Teams' account of what happened, not
+/// a reading of it: Teams says nothing, a user does, and saying is what the
+/// interpreter reads from it.
 ///
 /// It carries content: a person's words and what they submitted on a card
 /// exist nowhere but the request that brought them, so they come here, not
@@ -47,20 +48,35 @@ sealed class TeamsEvent {
   /// The bot's id in this conversation.
   final String? recipient;
 
-  /// Who sent it: `teams:<tenant>/<Entra object id>`, both GUIDs in lower
-  /// case. Null when Teams named no tenant or no Entra user, as for another
-  /// bot.
+  /// Who sent it. To a journey everyone but the agent is a user, another
+  /// bot included, so both have an id, in lower case:
+  ///
+  /// - a person, `teams:<tenant>/<Entra object id>`;
+  /// - a bot, which Teams names by its channel id `28:<app id>` and no Entra
+  ///   user, `teams:<tenant>/bot:<app id>`. An Entra object id is a GUID and
+  ///   never has a colon, so the two can't be read as each other.
+  ///
+  /// The `28:` is from Microsoft's docs, not yet seen in a witnessed body,
+  /// so what follows it is taken as it comes. Null when Teams named no
+  /// tenant, or a sender that is neither.
   ActorId? get actor {
-    final tenant = this.tenant;
-    final user = fromAadObjectId;
-    if (tenant == null || user == null) return null;
-    return ActorId.parse('teams:${tenant.toLowerCase()}/${user.toLowerCase()}');
+    final tenant = this.tenant?.toLowerCase();
+    if (tenant == null) return null;
+    if (fromAadObjectId case final user?) {
+      return ActorId.parse('teams:$tenant/${user.toLowerCase()}');
+    }
+    if (from case final id? when id.startsWith('28:') && id.length > 3) {
+      return ActorId.parse(
+        'teams:$tenant/bot:${id.substring(3).toLowerCase()}',
+      );
+    }
+    return null;
   }
 }
 
-/// A message someone sent.
-final class TeamsSaid extends TeamsEvent {
-  const TeamsSaid({
+/// A `message`: someone, a person or a bot, sent words.
+final class TeamsMessage extends TeamsEvent {
+  const TeamsMessage({
     required super.conversation,
     required super.id,
     required super.serviceUrl,
@@ -88,9 +104,9 @@ final class TeamsSaid extends TeamsEvent {
   final String? replyTo;
 }
 
-/// A message someone edited.
-final class TeamsEdited extends TeamsEvent {
-  const TeamsEdited({
+/// A `messageUpdate`: a message was changed.
+final class TeamsMessageUpdate extends TeamsEvent {
+  const TeamsMessageUpdate({
     required super.conversation,
     required super.id,
     required super.serviceUrl,
@@ -113,9 +129,9 @@ final class TeamsEdited extends TeamsEvent {
   final String? channelEventType;
 }
 
-/// A message someone deleted.
-final class TeamsDeleted extends TeamsEvent {
-  const TeamsDeleted({
+/// A `messageDelete`: a message was deleted.
+final class TeamsMessageDelete extends TeamsEvent {
+  const TeamsMessageDelete({
     required super.conversation,
     required super.id,
     required super.serviceUrl,
@@ -133,9 +149,9 @@ final class TeamsDeleted extends TeamsEvent {
   final String? channelEventType;
 }
 
-/// A press on a card's action.
-final class TeamsPressed extends TeamsEvent {
-  const TeamsPressed({
+/// An `invoke` named `adaptiveCard/action`: an action on a card was pressed.
+final class TeamsCardAction extends TeamsEvent {
+  const TeamsCardAction({
     required super.conversation,
     required super.id,
     required super.serviceUrl,
@@ -159,9 +175,9 @@ final class TeamsPressed extends TeamsEvent {
   String? get verb => value?.objectOrNull('action')?.stringOrNull('verb');
 }
 
-/// An invoke other than a card press, one the gate was told to take.
-final class TeamsInvoked extends TeamsEvent {
-  const TeamsInvoked({
+/// Any other `invoke` the gate was told to take.
+final class TeamsInvoke extends TeamsEvent {
+  const TeamsInvoke({
     required super.conversation,
     required super.id,
     required super.serviceUrl,
@@ -179,9 +195,10 @@ final class TeamsInvoked extends TeamsEvent {
   final JsonObject? value;
 }
 
-/// People, or the bot, added to or removed from a conversation.
-final class TeamsMembersChanged extends TeamsEvent {
-  const TeamsMembersChanged({
+/// A `conversationUpdate`. Only who was added or removed is read from it:
+/// people, or the bot.
+final class TeamsConversationUpdate extends TeamsEvent {
+  const TeamsConversationUpdate({
     required super.conversation,
     required super.id,
     required super.serviceUrl,
@@ -200,9 +217,10 @@ final class TeamsMembersChanged extends TeamsEvent {
   final List<String> removed;
 }
 
-/// The app installed in, or removed from, a conversation.
-final class TeamsInstallChanged extends TeamsEvent {
-  const TeamsInstallChanged({
+/// An `installationUpdate`: the app was installed in, or removed from, a
+/// conversation.
+final class TeamsInstallationUpdate extends TeamsEvent {
+  const TeamsInstallationUpdate({
     required super.conversation,
     required super.id,
     required super.serviceUrl,

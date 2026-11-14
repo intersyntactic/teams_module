@@ -71,7 +71,7 @@ void main() {
     final (status, body, _) = await post(message());
     expect(status, 200);
     expect(body, isEmpty);
-    expect((events.single as TeamsSaid).text, 'Looks right to me');
+    expect((events.single as TeamsMessage).text, 'Looks right to me');
   });
 
   test('responds to a card action with the acknowledgement, as JSON', () async {
@@ -83,7 +83,7 @@ void main() {
       'type': 'application/vnd.microsoft.activity.message',
       'value': 'Got it',
     });
-    expect(events.single, isA<TeamsPressed>());
+    expect(events.single, isA<TeamsCardAction>());
   });
 
   test(

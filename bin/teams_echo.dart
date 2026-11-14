@@ -137,7 +137,7 @@ Future<void> _respond(_Echo echo, TeamsEvent event) async {
   stderr.writeln('echo: ${event.runtimeType} in $conversation');
   try {
     switch (event) {
-      case TeamsSaid(:final text):
+      case TeamsMessage(:final text):
         final said = _plain(text ?? '');
         if (said.toLowerCase().split(' ') case ['card', ...final words]) {
           final example = _Example(
@@ -168,7 +168,7 @@ Future<void> _respond(_Echo echo, TeamsEvent event) async {
             'text': 'echo: $said',
           });
         }
-      case TeamsPressed(:final verb, :final card?):
+      case TeamsCardAction(:final verb, :final card?):
         echo.receiver.read(event).inOrder.forEach(echo.journeyPath.append);
         final by = event.actor;
         if (by == null) return;
@@ -188,9 +188,9 @@ Future<void> _respond(_Echo echo, TeamsEvent event) async {
           });
           stderr.writeln('echo: card $other edited, ${stance.name}');
         }
-      case TeamsInstallChanged(:final action) when action != 'remove':
+      case TeamsInstallationUpdate(:final action) when action != 'remove':
         await _hello(connector, serviceUrl, conversation);
-      case TeamsMembersChanged(:final added, :final recipient)
+      case TeamsConversationUpdate(:final added, :final recipient)
           when added.contains(recipient):
         await _hello(connector, serviceUrl, conversation);
       default:

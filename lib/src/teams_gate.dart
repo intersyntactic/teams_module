@@ -323,7 +323,7 @@ TeamsEvent? _read(
   List<String> ids(String k) =>
       a.objectsOrNull(k)?.map((m) => m.string('id')).toList() ?? const [];
   return switch (type) {
-    'message' => TeamsSaid(
+    'message' => TeamsMessage(
       conversation: conversationId,
       id: id,
       serviceUrl: serviceUrl,
@@ -337,7 +337,7 @@ TeamsEvent? _read(
       entities: entities,
       replyTo: a.stringOrNull('replyToId'),
     ),
-    'messageUpdate' => TeamsEdited(
+    'messageUpdate' => TeamsMessageUpdate(
       conversation: conversationId,
       id: id,
       serviceUrl: serviceUrl,
@@ -351,7 +351,7 @@ TeamsEvent? _read(
       entities: entities,
       channelEventType: channelEventType,
     ),
-    'messageDelete' => TeamsDeleted(
+    'messageDelete' => TeamsMessageDelete(
       conversation: conversationId,
       id: id,
       serviceUrl: serviceUrl,
@@ -363,7 +363,7 @@ TeamsEvent? _read(
       recipient: recipient,
       channelEventType: channelEventType,
     ),
-    'invoke' when name == 'adaptiveCard/action' => TeamsPressed(
+    'invoke' when name == 'adaptiveCard/action' => TeamsCardAction(
       conversation: conversationId,
       id: id,
       serviceUrl: serviceUrl,
@@ -376,7 +376,7 @@ TeamsEvent? _read(
       card: a.stringOrNull('replyToId'),
       value: a.objectOrNull('value'),
     ),
-    'invoke' => TeamsInvoked(
+    'invoke' => TeamsInvoke(
       conversation: conversationId,
       id: id,
       serviceUrl: serviceUrl,
@@ -389,7 +389,7 @@ TeamsEvent? _read(
       name: name,
       value: a.objectOrNull('value'),
     ),
-    'conversationUpdate' => TeamsMembersChanged(
+    'conversationUpdate' => TeamsConversationUpdate(
       conversation: conversationId,
       id: id,
       serviceUrl: serviceUrl,
@@ -402,7 +402,7 @@ TeamsEvent? _read(
       added: ids('membersAdded'),
       removed: ids('membersRemoved'),
     ),
-    'installationUpdate' => TeamsInstallChanged(
+    'installationUpdate' => TeamsInstallationUpdate(
       conversation: conversationId,
       id: id,
       serviceUrl: serviceUrl,

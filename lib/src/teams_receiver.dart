@@ -105,10 +105,10 @@ final class TeamsReceiver {
   /// What [event] writes. Nothing, unless it is a press on a card this
   /// receiver shows, by an actor Teams named.
   Annotations read(TeamsEvent event) {
-    if (event is! TeamsPressed) return Annotations.none;
+    if (event is! TeamsCardAction) return Annotations.none;
     final by = event.actor;
     if (by == null) {
-      log('teams receiver: a press with no tenant or Entra user');
+      log('teams receiver: a press by no one Teams named');
       return Annotations.none;
     }
     final card = event.card;

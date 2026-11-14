@@ -16,7 +16,7 @@ void main() {
       expect(d.status, 200);
       expect(d.invokeResponse, isNull);
       expect(d.seenKey, jsonEncode(['a:1personal', '1730881234567']));
-      final said = d.event! as TeamsSaid;
+      final said = d.event! as TeamsMessage;
       expect(said.tenant, tenant);
       expect(said.conversation, 'a:1personal');
       expect(said.conversationType, 'personal');
@@ -33,7 +33,7 @@ void main() {
 
     test('a message in a channel, with what it replies under', () {
       final d = _gate({...message(), 'replyToId': '1730881000000'});
-      expect((d.event! as TeamsSaid).replyTo, '1730881000000');
+      expect((d.event! as TeamsMessage).replyTo, '1730881000000');
     });
 
     test('an edit, with what Teams calls the change', () {
@@ -45,7 +45,7 @@ void main() {
           'eventType': 'editMessage',
         },
       });
-      final edited = d.event! as TeamsEdited;
+      final edited = d.event! as TeamsMessageUpdate;
       expect(edited.text, 'Looks right to me now');
       expect(edited.channelEventType, 'editMessage');
     });
@@ -61,7 +61,7 @@ void main() {
           },
         }..remove('text'),
       );
-      final deleted = d.event! as TeamsDeleted;
+      final deleted = d.event! as TeamsMessageDelete;
       expect(deleted.id, '1730881234567');
       expect(deleted.channelEventType, 'softDeleteMessage');
     });
@@ -75,7 +75,7 @@ void main() {
           wakeInvokes: {'task/fetch'},
         ),
       );
-      final invoked = d.event! as TeamsInvoked;
+      final invoked = d.event! as TeamsInvoke;
       expect(invoked.name, 'task/fetch');
       expect(invoked.value!.object('action').string('verb'), 'approve');
     });
@@ -88,7 +88,7 @@ void main() {
         'type': 'application/vnd.microsoft.activity.message',
         'value': 'Got it',
       });
-      final pressed = d.event! as TeamsPressed;
+      final pressed = d.event! as TeamsCardAction;
       expect(pressed.card, '1730881000000');
       expect(pressed.verb, 'approve');
     });
@@ -135,7 +135,7 @@ void main() {
           ..remove('text'),
       );
       expect(d.outcome, TeamsGateOutcome.trigger);
-      final installed = d.event! as TeamsInstallChanged;
+      final installed = d.event! as TeamsInstallationUpdate;
       expect(installed.action, 'add');
       expect(installed.serviceUrl, Uri.parse(serviceUrl));
     });
@@ -168,7 +168,7 @@ void main() {
         'entities': entities,
       });
       expect(d.outcome, TeamsGateOutcome.trigger);
-      final said = d.event! as TeamsSaid;
+      final said = d.event! as TeamsMessage;
       expect(
         jsonEncode([for (final e in said.entities!) e.asUncheckedMap()]),
         jsonEncode(entities),
@@ -198,7 +198,7 @@ void main() {
           ],
         }..remove('text'),
       );
-      final changed = d.event! as TeamsMembersChanged;
+      final changed = d.event! as TeamsConversationUpdate;
       expect(changed.added, ['28:$appId']);
       expect(changed.removed, isEmpty);
     });
@@ -442,7 +442,7 @@ void main() {
     // of the token covers the body (see the library comment, point 2).
     final d = _gate(message(text: 'words Ada never typed'));
     expect(d.outcome, TeamsGateOutcome.trigger);
-    expect((d.event! as TeamsSaid).text, 'words Ada never typed');
+    expect((d.event! as TeamsMessage).text, 'words Ada never typed');
   });
 
   group('the key set', () {
