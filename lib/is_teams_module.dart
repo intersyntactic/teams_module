@@ -13,6 +13,7 @@
 /// way out: [BotConnector], which holds the bot's secret and speaks as it.
 library;
 
+export 'src/airlock_witness.dart';
 export 'src/bot_connector.dart';
 export 'src/bot_framework_keys.dart';
 export 'src/key_source.dart';

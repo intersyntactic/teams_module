@@ -11,14 +11,14 @@
 ///   HOST=127.0.0.1                   optional; the address to bind. The
 ///                                    default is loopback, for a proxy on
 ///                                    the same machine.
-///   TEAMS_JOURNAL_DIR=/var/lib/...   the airlock's journal: every accepted
-///                                    request's body is witnessed there,
-///                                    byte for byte, before Teams gets a
-///                                    response. Required.
+///   AIRLOCK_SOCKET=/run/...sock      the airlock service's Unix socket:
+///                                    every accepted request's body is
+///                                    witnessed through it, byte for byte,
+///                                    before Teams gets a response.
+///                                    Required.
 ///
-/// Run it from source (`dart run`), not as a compiled executable: the
-/// journal names the code that writes each entry by hashing its own source,
-/// and refuses to open without it, so a compiled relay won't start.
+/// The relay keeps no record of its own: the record has one writer, and
+/// only the airlock sends it what arrives.
 ///
 /// The bot's messaging endpoint is `https://<host>/api/messages`.
 library;
@@ -27,9 +27,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:is_airlock/is_airlock.dart';
-import 'package:is_journal/is_journal.dart';
 import 'package:is_teams_module/is_teams_module.dart';
+
+/// The source the relay's arrivals are witnessed under: the same as when
+/// the relay kept its own record, so old and new arrivals read alike.
+const _source = 'teams';
 
 Future<void> main() async {
   final env = Platform.environment;
@@ -67,40 +69,14 @@ Future<void> main() async {
     exit(78);
   }
 
-  final journalDir = env['TEAMS_JOURNAL_DIR'] ?? '';
-  if (journalDir.isEmpty) {
-    // A relay that can't record what arrives must not respond 200 to it.
-    stderr.writeln('abort: TEAMS_JOURNAL_DIR not set');
+  final airlock = env['AIRLOCK_SOCKET'] ?? '';
+  if (airlock.isEmpty) {
+    // A relay that can't have what arrives witnessed must not respond 200.
+    stderr.writeln('abort: AIRLOCK_SOCKET not set');
     exit(78);
   }
-  final Journal? journal;
-  try {
-    journal = Journal.open(Directory(journalDir));
-  } on Exception catch (e) {
-    stderr.writeln('abort: journal at $journalDir: $e');
-    exit(73);
-  }
-  if (journal == null) {
-    stderr.writeln(
-      'abort: the journal cannot name its own code, as in a compiled build; '
-      'run the relay from source with dart run',
-    );
-    exit(78);
-  }
-  // Give up the journal's claim on its folder when told to stop, so the next
-  // start can take it: in a container the relay is the same pid every time,
-  // and a claim left behind would refuse it. A kill that can't be caught
-  // still leaves one; the abort then names the file to delete.
-  for (final signal in [ProcessSignal.sigterm, ProcessSignal.sigint]) {
-    signal.watch().listen((_) {
-      journal!.close();
-      exit(0);
-    });
-  }
-  // The relay only witnesses: it has no run and no rules, so it takes the
-  // airlock's Witness rather than an Airlock with a policy it would invent.
-  final witness = Witness(journal);
-  final teams = ArrivalSource.parse('teams')!;
+  // Not checked for at boot: the airlock may start after the relay, and
+  // until it answers, every message gets a 500 and Teams sends it again.
 
   final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
   final keys = BotFrameworkKeySource(
@@ -116,7 +92,8 @@ Future<void> main() async {
   final relay = TeamsRelay(
     spec: TeamsSourceSpec(appId: appId, tenantAllowlist: allow),
     keys: keys,
-    witness: (body) => witness.witness(body, source: teams),
+    witness: (body) =>
+        witnessThroughAirlock(airlock, source: _source, bytes: body),
   );
   final server = await HttpServer.bind(address, port);
   stdout.writeln('teams relay listening on ${address.address}:${server.port}');
