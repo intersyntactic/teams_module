@@ -65,4 +65,59 @@ void main() {
     expect(sentBy(tenant: 't', from: '29:1ada').actor, isNull);
     expect(sentBy(tenant: 't', from: '28:').actor, isNull);
   });
+
+  group('a quote', () {
+    TeamsMessage replying(List<Map<String, Object?>> entities) => TeamsMessage(
+      conversation: '19:chat@thread.v2',
+      id: '1794712228139',
+      serviceUrl: _url,
+      entities: [for (final e in entities) JsonObject.of(e)],
+    );
+
+    // As a group-chat Reply with @CAM carried it, witnessed 2026-11-15.
+    const mention = {
+      'type': 'mention',
+      'mentioned': {'id': '28:app-id', 'name': 'CAM'},
+      'text': '<at>CAM</at>',
+    };
+    const quoted = {
+      'type': 'quotedReply',
+      'quotedReply': {
+        'messageId': '1794611050347',
+        'senderId': '29:1bea',
+        'senderName': 'Bea',
+        'preview': 'Good morning!',
+        'time': '2026-11-13T23:04:10.3470000Z',
+        'validatedMessageReference': true,
+      },
+    };
+
+    test('is read from the quotedReply entity, past a mention', () {
+      final q = replying([mention, quoted]).quote!;
+      expect(q.messageId, '1794611050347');
+      expect(q.senderId, '29:1bea');
+      expect(q.senderName, 'Bea');
+      expect(q.preview, 'Good morning!');
+    });
+
+    test('is absent from a message that quotes nothing', () {
+      expect(replying([mention]).quote, isNull);
+      expect(
+        TeamsMessage(conversation: 'a:1', id: 'a', serviceUrl: _url).quote,
+        isNull,
+      );
+    });
+
+    test('needs both the message and its author', () {
+      Map<String, Object?> without(String key) => {
+        'type': 'quotedReply',
+        'quotedReply': {...(quoted['quotedReply']! as Map<String, Object?>)}
+          ..remove(key),
+      };
+      expect(replying([without('messageId')]).quote, isNull);
+      expect(replying([without('senderId')]).quote, isNull);
+      final named = replying([without('senderName')]).quote!;
+      expect(named.senderName, isNull);
+    });
+  });
 }
