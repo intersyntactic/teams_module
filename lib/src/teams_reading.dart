@@ -66,7 +66,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
     final conversation = Conversation.parse('teams:${event.conversation}');
     if (conversation == null) return null;
     // A thread sits inside its channel. A team-wide event arrives in the
-    // General channel itself, which sits inside nothing.
+    // team's first channel itself, which sits inside nothing.
     final within = switch (event.channel) {
       final c? when c != event.conversation => Conversation.parse('teams:$c'),
       _ => null,

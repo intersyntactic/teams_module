@@ -62,8 +62,9 @@ sealed class TeamsEvent {
   /// channel: `<channel>;messageid=<the thread's first post>`.
   final String? channel;
 
-  /// In a team, the team's id. It is the id of the team's General channel,
-  /// where Teams sends a team-wide event such as the bot being added.
+  /// In a team, the team's id. It is the id of the team's first channel,
+  /// where Teams sends a team-wide event such as the bot being added. That
+  /// channel is created as General, but can be renamed.
   final String? team;
 
   /// Who sent it, as [teamsActor] names them.

@@ -196,8 +196,8 @@ void main() {
       expect(joined.joiners, [bot]);
     });
 
-    test('of a team is the General channel itself, inside nothing', () {
-      // As CAM's addition to a team arrived on 15 Nov: in the General
+    test("of a team is the team's first channel itself, inside nothing", () {
+      // As CAM's addition to a team arrived on 15 Nov: in the team's first
       // channel, whose id is the team's, with no channel of its own named.
       const team = '19:abc@thread.tacv2';
       final (_, [r]) = fold([
