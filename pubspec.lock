@@ -186,6 +186,14 @@ packages:
       url: "https://github.com/intersyntactic/docking_port.git"
     source: git
     version: "0.0.1"
+  is_effects:
+    dependency: "direct main"
+    description:
+      name: is_effects
+      sha256: "8c5af555fc6d3461f4120c470d0199e66c15a23e5bbb3e5509b9fb5f4e5a0295"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.1.0"
   is_journal:
     dependency: "direct dev"
     description:
