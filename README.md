@@ -87,6 +87,12 @@ documentation or inference only).
   `conversationUpdate` as the join and the `installationUpdate` as nothing,
   so one join is read once. Measured on 15 Nov, for two teams in Hart's
   tenant.
+- The two activities of a join can arrive in either order, under a
+  millisecond apart: the `conversationUpdate` came first for one team and
+  the `installationUpdate` first for the other. The reading doesn't depend
+  on the order. Measured in the record, 15 Nov; for a one-to-one chat the
+  one join seen had the `conversationUpdate` first, so whether that order
+  holds there is unmeasured.
 - Installing the bot in a one-to-one chat sends the same pair, and its
   `membersAdded` names both the person and the bot. Measured, 15 Nov.
 - Taking the bot out sends an `installationUpdate` with `action` `remove`.
