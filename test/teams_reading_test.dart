@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:is_annotation_shapes/is_annotation_shapes.dart'
+    show Approved, HeldOff;
 import 'package:is_conversation_shapes/is_conversation_shapes.dart';
 import 'package:is_docking_port/is_docking_port.dart';
 import 'package:is_journal/is_journal.dart';
@@ -74,6 +76,13 @@ Map<String, Object?> quotingBea(Map<String, Object?> activity, String id) => {
     },
   ],
 };
+
+/// Ada pressing the button whose verb is [verb] on card `1730881000000`.
+Map<String, Object?> pressed(String verb) {
+  final press = cardAction();
+  ((press['value']! as Map)['action']! as Map)['verb'] = verb;
+  return press;
+}
 
 /// CAM added to [conversation] by Ada, with anyone in [alsoAdded], as
 /// Teams sent it on 15 Nov.
@@ -259,6 +268,49 @@ void main() {
     });
   });
 
+  group('a press on a card', () {
+    test('of Approve is Responded to that card: Approved', () {
+      final (_, [r]) = fold([pressed('approve')]);
+      final responded = r as Responded;
+      expect(responded.conversation, Conversation.parse('teams:a:1personal'));
+      expect(responded.key, ArrivalKey.parse('invoke:f:9001'));
+      expect(responded.from, ada);
+      expect(responded.to.value, 'a:1personal|1730881000000');
+      expect(responded.response, isA<Approved>());
+    });
+
+    test('of Not yet is Responded to that card: HeldOff', () {
+      final (_, [r]) = fold([pressed('notyet')]);
+      expect((r as Responded).response, isA<HeldOff>());
+    });
+
+    test('naming no card is nothing to admit', () {
+      final (_, [r]) = fold([pressed('approve')..remove('replyToId')]);
+      expect(r, isA<NothingToAdmit>());
+    });
+
+    test('by someone Teams names no Entra id for is nothing to admit', () {
+      final (_, [r]) = fold([
+        {
+          ...pressed('approve'),
+          'from': {'id': '29:1ada', 'name': 'Ada'},
+        },
+      ]);
+      expect(r, isA<NothingToAdmit>());
+    });
+
+    test("never reads the card's own data as what it shows", () {
+      // The data comes back from the Teams client, which can send anything.
+      final forged = pressed('approve');
+      ((forged['value']! as Map)['action']! as Map)['data'] = {
+        'node': 'someone-elses',
+      };
+      final (_, [a]) = fold([pressed('approve')]);
+      final (_, [b]) = fold([forged]);
+      expect((b as Responded).to, (a as Responded).to);
+    });
+  });
+
   group('nothing to admit, for now', () {
     test('an edit or a delete, until a shape says what a message became', () {
       final (_, readings) = fold([
@@ -268,8 +320,8 @@ void main() {
       expect(readings, everyElement(isA<NothingToAdmit>()));
     });
 
-    test('a card action', () {
-      final (_, [r]) = fold([cardAction()]);
+    test('a press of Edit, which only reopens the choice on a card', () {
+      final (_, [r]) = fold([pressed('edit')]);
       expect(r, isA<NothingToAdmit>());
     });
 
@@ -315,11 +367,13 @@ void main() {
         added(),
         fromBea('act-1'),
         quotingBea(message(id: 'act-2', text: '<at>Bot</at>'), 'act-1'),
+        pressed('notyet'),
       ];
       String described(Reading r) => switch (r) {
         Said() => 'said ${r.key} ${r.from} ${r.node.quotes?.author}',
         Joined() => 'joined ${r.key} ${r.joiners}',
         Changed() => 'changed ${r.key}',
+        Responded() => 'responded ${r.key} ${r.to} ${r.response}',
         NothingToAdmit() => 'nothing',
       };
       expect(

@@ -1,3 +1,5 @@
+import 'package:is_annotation_shapes/is_annotation_shapes.dart'
+    show Approved, HeldOff, Proposed, Response;
 import 'package:is_docking_port/is_docking_port.dart';
 
 import 'teams_event.dart';
@@ -10,14 +12,19 @@ import 'teams_translator.dart';
 ///
 /// It describes and decides nothing (RULINGS, "The docking port admits
 /// arrivals under journey paths"): a message is [Said] with the [UserSaid]
-/// made from it, CAM or a person added to a conversation is [Joined], and
+/// made from it, CAM or a person added to a conversation is [Joined], a
+/// press of Approve or Not yet on a card is [Responded] to that card, and
 /// everything else is [NothingToAdmit] for now:
 ///
 /// - an `installationUpdate`, which Teams sends beside the
 ///   `conversationUpdate` of the same join, so one join is read once;
 /// - an edit or a delete, until conversation_shapes has a shape for what a
 ///   message became;
-/// - a card action, until the contract has a reading for one.
+/// - a press of Edit, which only reopens the choice on a card, and any verb
+///   the cards don't send. No card takes a typed correction yet: [Proposed]
+///   needs the shown shape's value type, which only whatever sent the card
+///   knows, since a card's own data comes back from the Teams client and
+///   is never trusted.
 ///
 /// A conversation is Teams' conversation id as Teams sends it. In a channel
 /// that names a thread, `<channel>;messageid=<the thread's first post>`, so
@@ -25,8 +32,8 @@ import 'teams_translator.dart';
 /// lands in the thread; it sits [Admissible.within] its channel, the
 /// journey whose journey path it is (Nick, 15 Nov 21:00 and 21:03).
 ///
-/// Arrival keys: `message:<id>` for something said, and
-/// `conversationUpdate:<id>` for a join. Teams sends a redelivery with the
+/// Arrival keys: `message:<id>` for something said,
+/// `conversationUpdate:<id>` for a join, and `invoke:<id>` for a press. Teams sends a redelivery with the
 /// same activity id, and two activities with two.
 final class TeamsReading implements ModuleReading<TeamsReadingState> {
   const TeamsReading();
@@ -92,6 +99,24 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
                 entra: state.entraIdOf(user),
               ),
           ],
+        );
+      case TeamsCardAction(:final card?, :final actor?):
+        final key = ArrivalKey.parse('invoke:${event.id}');
+        final to = TeamsMessageRef.of(event.conversation, card)?.source;
+        // The verbs the cards send. Edit only reopens the choice on a card.
+        final Response? response = switch (event.verb) {
+          'approve' => const Approved(),
+          'notyet' => const HeldOff(),
+          _ => null,
+        };
+        if (key == null || to == null || response == null) return null;
+        return Responded(
+          conversation: conversation,
+          within: within,
+          from: actor,
+          key: key,
+          to: to,
+          response: response,
         );
       default:
         return null;
