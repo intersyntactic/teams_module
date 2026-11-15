@@ -1,8 +1,13 @@
 import 'package:checked_json/checked_json.dart';
+import 'package:is_conversation_shapes/is_conversation_shapes.dart';
 import 'package:is_teams_module/is_teams_module.dart';
 import 'package:test/test.dart';
 
 final _url = Uri.parse('https://smba.trafficmanager.net/amer/');
+
+/// [s] as the gate would read it.
+TeamsUserId? _user(String s) => TeamsUserId.parse(s);
+EntraObjectId? _entra(String s) => EntraObjectId.parse(s);
 
 void main() {
   test('a press says its verb', () {
@@ -24,7 +29,7 @@ void main() {
       id: 'act-1',
       serviceUrl: _url,
       tenant: 'TENANT-1',
-      fromAadObjectId: 'ADA00000-0000-4000-8000-000000000001',
+      fromAadObjectId: _entra('ADA00000-0000-4000-8000-000000000001'),
     );
     expect(
       '${said.actor}',
@@ -38,7 +43,7 @@ void main() {
       id: 'act-1',
       serviceUrl: _url,
       tenant: 'TENANT-1',
-      from: '28:App-Id',
+      from: _user('28:App-Id'),
     );
     expect('${said.actor}', 'teams:tenant-1/bot:app-id');
   });
@@ -49,8 +54,8 @@ void main() {
       id: 'act-1',
       serviceUrl: _url,
       tenant: 'tenant-1',
-      from: '28:app-id',
-      fromAadObjectId: 'ada00000-0000-4000-8000-000000000001',
+      from: _user('28:app-id'),
+      fromAadObjectId: _entra('ada00000-0000-4000-8000-000000000001'),
     );
     expect(
       '${said.actor}',
@@ -64,7 +69,7 @@ void main() {
       id: 'a',
       serviceUrl: _url,
       tenant: tenant,
-      from: from,
+      from: from == null ? null : _user(from),
     );
     expect(sentBy(from: '28:app-id').actor, isNull);
     expect(sentBy(tenant: 't').actor, isNull);
@@ -101,7 +106,7 @@ void main() {
     test('is read from the quotedReply entity, past a mention', () {
       final q = replying([mention, quoted]).quote!;
       expect(q.messageId, '1794611050347');
-      expect(q.senderId, '29:1bea');
+      expect(q.senderId, _user('29:1bea'));
       expect(q.senderName, 'Bea');
       expect(q.preview, 'Good morning!');
     });
@@ -124,6 +129,55 @@ void main() {
       expect(replying([without('senderId')]).quote, isNull);
       final named = replying([without('senderName')]).quote!;
       expect(named.senderName, isNull);
+    });
+  });
+
+  group('a message ref', () {
+    test('is a journey path source and back, unchanged', () {
+      final ref = TeamsMessageRef.of('19:chat@thread.v2', '1794727863400')!;
+      expect(ref.source.value, '19:chat@thread.v2|1794727863400');
+      expect(TeamsMessageRef.fromSource(ref.source), ref);
+    });
+
+    test('splits a source at its last bar, so only the message id must be '
+        'free of one', () {
+      final ref = TeamsMessageRef.fromSource(
+        SourceMessageId.parse('a:odd|chat|1794727863400')!,
+      )!;
+      expect(ref.conversation, 'a:odd|chat');
+      expect(ref.message, '1794727863400');
+    });
+
+    test(
+      'is not made of an empty part, whitespace, or a message with a bar',
+      () {
+        for (final (c, m) in [
+          ('', '1'),
+          ('a:1', ''),
+          ('a 1', '1'),
+          ('a:1', '1 2'),
+          ('a:1', '1|2'),
+        ]) {
+          expect(TeamsMessageRef.of(c, m), isNull, reason: '"$c" "$m"');
+        }
+        expect(
+          TeamsMessageRef.fromSource(SourceMessageId.parse('no-bar')!),
+          isNull,
+        );
+        expect(
+          TeamsMessageRef.fromSource(SourceMessageId.parse('a:1|')!),
+          isNull,
+        );
+      },
+    );
+
+    test('names an event by its conversation and id', () {
+      final said = TeamsMessage(
+        conversation: 'a:1',
+        id: '42',
+        serviceUrl: _url,
+      );
+      expect(said.ref, TeamsMessageRef.of('a:1', '42'));
     });
   });
 

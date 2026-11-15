@@ -299,8 +299,10 @@ void main() {
             conversation: 'a:1personal',
             id: 'f:1',
             serviceUrl: Uri.parse(serviceUrl),
-            from: '29:1bea',
-            fromAadObjectId: 'bea00000-0000-4000-8000-000000000002',
+            from: TeamsUserId.parse('29:1bea'),
+            fromAadObjectId: EntraObjectId.parse(
+              'bea00000-0000-4000-8000-000000000002',
+            ),
           ),
         );
       expect(
@@ -310,17 +312,22 @@ void main() {
       expect(authors.entraIdOf(TeamsUserId.parse('29:1ada')!), isNull);
     });
 
-    test('learns nothing from an id in the wrong form', () {
-      TeamsMessage sentBy(String from, String aad) => TeamsMessage(
-        conversation: 'a:1personal',
-        id: 'm',
-        serviceUrl: Uri.parse(serviceUrl),
-        from: from,
-        fromAadObjectId: aad,
+    test('learns nothing from an id in the wrong form: the gate reads it as '
+        'absent', () {
+      TeamsMessage sentBy(String from, String aad) => messageOf({
+        ...message(id: 'm-$from'),
+        'from': {'id': from, 'aadObjectId': aad, 'name': 'Bea'},
+      });
+      final wrongEntra = sentBy('29:1bea', 'oid-bea');
+      final wrongUser = sentBy(
+        'a:1personal',
+        'bea00000-0000-4000-8000-000000000002',
       );
+      expect(wrongEntra.fromAadObjectId, isNull);
+      expect(wrongUser.from, isNull);
       final authors = TeamsAuthors()
-        ..learn(sentBy('29:1bea', 'oid-bea'))
-        ..learn(sentBy('a:1personal', 'bea00000-0000-4000-8000-000000000002'));
+        ..learn(wrongEntra)
+        ..learn(wrongUser);
       expect(authors.entraIdOf(TeamsUserId.parse('29:1bea')!), isNull);
     });
 

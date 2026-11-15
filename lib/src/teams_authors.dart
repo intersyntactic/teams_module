@@ -18,17 +18,11 @@ final class TeamsAuthors {
   final _entraIds = <TeamsUserId, EntraObjectId>{};
 
   /// Notes who sent [event], when Teams named both their channel id and
-  /// their Entra object id, each in its proper form.
+  /// their Entra object id.
   void learn(TeamsEvent event) {
-    final from = switch (event.from) {
-      final s? => TeamsUserId.parse(s),
-      null => null,
-    };
-    final entra = switch (event.fromAadObjectId) {
-      final s? => EntraObjectId.parse(s),
-      null => null,
-    };
-    if (from != null && entra != null) _entraIds[from] = entra;
+    if ((event.from, event.fromAadObjectId) case (final from?, final entra?)) {
+      _entraIds[from] = entra;
+    }
   }
 
   /// The Entra object id of the person Teams calls [user], or null when

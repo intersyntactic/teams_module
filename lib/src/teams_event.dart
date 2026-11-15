@@ -1,6 +1,8 @@
 import 'package:checked_json/checked_json.dart';
 import 'package:is_shapes/is_shapes.dart';
 
+import 'teams_ids.dart';
+
 /// Teams' record of one activity, checked by the gate. Each case is named
 /// for Teams' own activity, since it is Teams' account of what happened, not
 /// a reading of it: Teams says nothing, a user does, and saying is what the
@@ -31,32 +33,36 @@ sealed class TeamsEvent {
   /// `personal`, `groupChat` or `channel`.
   final String? conversationType;
 
-  /// The activity's id. Teams makes it unique only within [conversation].
+  /// The activity's id. Teams makes it unique only within [conversation],
+  /// so [ref] is what names it.
   final String id;
+
+  /// This activity by where it was said; null when Teams' ids aren't the
+  /// kind [TeamsMessageRef] takes.
+  TeamsMessageRef? get ref => TeamsMessageRef.of(conversation, id);
 
   /// The Bot Connector endpoint for the conversation's region.
   final Uri serviceUrl;
 
   final String? timestamp;
 
-  /// The channel's id for the sender.
-  final String? from;
+  /// The sender's channel account id.
+  final TeamsUserId? from;
 
-  /// The sender's Entra object id.
-  final String? fromAadObjectId;
+  /// The sender's Entra object id: a person's, never a bot's.
+  final EntraObjectId? fromAadObjectId;
 
-  /// The bot's id in this conversation.
-  final String? recipient;
+  /// The bot's channel account id in this conversation.
+  final TeamsUserId? recipient;
 
   /// Who sent it, as [teamsActor] names them.
-  ActorId? get actor =>
-      teamsActor(tenant, channelId: from, aadObjectId: fromAadObjectId);
+  ActorId? get actor => teamsActor(tenant, user: from, entra: fromAadObjectId);
 }
 
 /// A Teams user's id on a journey path. To a journey everyone but the agent
 /// is a user, another bot included, so both have an id, in lower case:
 ///
-/// - a person, `teams:<tenant>/<Entra object id>`, from [aadObjectId];
+/// - a person, `teams:<tenant>/<Entra object id>`, from [entra];
 /// - a bot, which Teams names by its channel id `28:<app id>` and no Entra
 ///   user, `teams:<tenant>/bot:<app id>`. An Entra object id is a GUID and
 ///   never has a colon, so the two can't be read as each other.
@@ -64,14 +70,12 @@ sealed class TeamsEvent {
 /// A person's channel id, `29:…`, is not enough on its own: it names them
 /// only to this bot, so it isn't the id they have everywhere else. Null
 /// when there is no [tenant], or no id of either kind.
-ActorId? teamsActor(String? tenant, {String? channelId, String? aadObjectId}) {
+ActorId? teamsActor(String? tenant, {TeamsUserId? user, EntraObjectId? entra}) {
   final t = tenant?.toLowerCase();
   if (t == null) return null;
-  if (aadObjectId case final user?) {
-    return ActorId.parse('teams:$t/${user.toLowerCase()}');
-  }
-  if (channelId case final id? when id.startsWith('28:') && id.length > 3) {
-    return ActorId.parse('teams:$t/bot:${id.substring(3).toLowerCase()}');
+  if (entra != null) return ActorId.parse('teams:$t/${entra.value}');
+  if (user case final u? when u.isBot) {
+    return ActorId.parse('teams:$t/bot:${u.value.substring(3).toLowerCase()}');
   }
   return null;
 }
@@ -92,7 +96,7 @@ final class TeamsQuote {
   final String messageId;
 
   /// Its author's channel id: `28:<app id>` for a bot, `29:…` for a person.
-  final String senderId;
+  final TeamsUserId senderId;
 
   /// Its author's display name, as Teams showed it.
   final String? senderName;
@@ -136,7 +140,10 @@ final class TeamsMessage extends TeamsEvent {
       if (e.stringOrNull('type') != 'quotedReply') continue;
       final q = e.objectOrNull('quotedReply');
       final messageId = q?.stringOrNull('messageId');
-      final senderId = q?.stringOrNull('senderId');
+      final senderId = switch (q?.stringOrNull('senderId')) {
+        final s? => TeamsUserId.parse(s),
+        null => null,
+      };
       if (q == null || messageId == null || senderId == null) continue;
       return TeamsQuote(
         messageId: messageId,
@@ -257,9 +264,10 @@ final class TeamsConversationUpdate extends TeamsEvent {
     this.removed = const [],
   });
 
-  /// The channel's ids for those added; the bot's own is its [recipient].
-  final List<String> added;
-  final List<String> removed;
+  /// The channel account ids of those added; the bot's own is its
+  /// [recipient].
+  final List<TeamsUserId> added;
+  final List<TeamsUserId> removed;
 }
 
 /// An `installationUpdate`: the app was installed in, or removed from, a
