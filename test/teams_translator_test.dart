@@ -201,7 +201,7 @@ void main() {
       expect(got.author, ada);
       expect(got.text, isEmpty);
       expect(got.quotes!.source.value, 'a:1personal|act-0');
-      expect((got.quotes!.author as Known).actor, bea);
+      expect((got.quotes!.author as KnownAuthor).actor, bea);
     });
 
     test('with words carries them and the quote', () {
@@ -217,7 +217,7 @@ void main() {
           )!
           .said;
       expect(got.text, 'not quite');
-      expect((got.quotes!.author as Known).actor, ada);
+      expect((got.quotes!.author as KnownAuthor).actor, ada);
     });
 
     test('names its quoted author by the record alone: someone never heard '
@@ -234,7 +234,9 @@ void main() {
             ),
           )!
           .said;
-      expect((got.quotes!.author as Unknown).displayName, 'Bea');
+      expect((got.quotes!.author as UnknownAuthor).displayName, 'Bea');
+      // The only words of it the journey path has, since it never got there.
+      expect(got.quotes!.preview, 'Good morning!');
     });
 
     test('learns from a message that reads as nothing', () {
@@ -253,7 +255,7 @@ void main() {
             ),
           )!
           .said;
-      expect((got.quotes!.author as Known).actor, bea);
+      expect((got.quotes!.author as KnownAuthor).actor, bea);
     });
 
     test('names someone heard from in another chat, through the authors '
@@ -273,7 +275,7 @@ void main() {
             ),
           )!
           .said;
-      expect((got.quotes!.author as Known).actor, bea);
+      expect((got.quotes!.author as KnownAuthor).actor, bea);
       // A translator with authors of its own knows nothing of chat A.
       final alone = TeamsTranslator(authors: TeamsAuthors())
           .said(
@@ -286,7 +288,7 @@ void main() {
             ),
           )!
           .said;
-      expect(alone.quotes!.author, isA<Unknown>());
+      expect(alone.quotes!.author, isA<UnknownAuthor>());
     });
 
     test('names someone the authors learnt from any event, not only a '
@@ -335,7 +337,7 @@ void main() {
           )!
           .said;
       expect(
-        (got.quotes!.author as Known).actor.value,
+        (got.quotes!.author as KnownAuthor).actor.value,
         'teams:$tenant/bot:$appId',
       );
     });
