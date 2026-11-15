@@ -16,7 +16,7 @@ dependencies:
   is_docking_port:
     git:
       url: https://github.com/intersyntactic/docking_port.git
-      ref: 0d1ea83
+      ref: e6350be
   is_shapes: ^0.4.0
   pointycastle: ^4.0.0
 
@@ -26,7 +26,7 @@ dependency_overrides:
   is_annotation_shapes:
     git:
       url: https://github.com/intersyntactic/annotation_shapes.git
-      ref: 56a58d89b009e6def38390193c5f6ba61881420b
+      ref: 4f2759894f6ae37211bece1becaf8ea1a629b897
 
 dev_dependencies:
   is_journal: ^0.5.0

@@ -21,10 +21,9 @@ import 'teams_translator.dart';
 /// - an edit or a delete, until conversation_shapes has a shape for what a
 ///   message became;
 /// - a press of Edit, which only reopens the choice on a card, and any verb
-///   the cards don't send. No card takes a typed correction yet: [Proposed]
-///   needs the shown shape's value type, which only whatever sent the card
-///   knows, since a card's own data comes back from the Teams client and
-///   is never trusted.
+///   the cards don't send. No card takes a typed correction yet; when one
+///   does, what was typed goes into [Proposed] as text, and the apex reads
+///   it as the shown shape's value.
 ///
 /// A conversation is Teams' conversation id as Teams sends it. In a channel
 /// that names a thread, `<channel>;messageid=<the thread's first post>`, so

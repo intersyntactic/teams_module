@@ -157,8 +157,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "56a58d89b009e6def38390193c5f6ba61881420b"
-      resolved-ref: "56a58d89b009e6def38390193c5f6ba61881420b"
+      ref: "4f2759894f6ae37211bece1becaf8ea1a629b897"
+      resolved-ref: "4f2759894f6ae37211bece1becaf8ea1a629b897"
       url: "https://github.com/intersyntactic/annotation_shapes.git"
     source: git
     version: "0.2.1"
@@ -182,8 +182,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "0d1ea83"
-      resolved-ref: "0d1ea838da3c9394b963b9e39e82cb6cb68c6c8b"
+      ref: e6350be
+      resolved-ref: e6350be381e980649b473701ef4bb44986565b75
       url: "https://github.com/intersyntactic/docking_port.git"
     source: git
     version: "0.0.1"
