@@ -1,6 +1,7 @@
 /// A message for a Teams conversation, described and not sent: the airlock
-/// decides it by the journey path's rule for that conversation, and a driver
-/// that holds the bot's secret ([BotConnector]) sends it. A stand-in until
+/// decides it by the journey path's rule for that conversation, as the
+/// request [teamsPostRequest] makes of it, and a web driver that holds the
+/// bot's secret signs and sends it. A stand-in until
 /// intersyntactic has an effect of its own for a message that leaves.
 final class TeamsPost {
   const TeamsPost({

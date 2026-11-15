@@ -12,7 +12,10 @@
 /// writes, and a [StandInJourneyPath] to write them to until the module meets
 /// a real journey path; and [TeamsTranslator], which turns a Teams message
 /// into a `UserSaid` and the agent's `ReplyText` into a [TeamsPost]. And the
-/// way out: [BotConnector], which holds the bot's secret and speaks as it.
+/// way out: [teamsPostRequest] and [teamsUpdateRequest], which describe a
+/// message as a request for a web driver to sign and send; and, until that
+/// driver runs, [BotConnector], which holds the bot's secret and speaks as
+/// it.
 library;
 
 export 'src/bot_connector.dart';
@@ -28,5 +31,6 @@ export 'src/teams_conversation.dart';
 export 'src/teams_translator.dart';
 export 'src/teams_post.dart';
 export 'src/teams_reading.dart';
+export 'src/teams_requests.dart';
 export 'src/teams_receiver.dart';
 export 'src/teams_relay.dart';
