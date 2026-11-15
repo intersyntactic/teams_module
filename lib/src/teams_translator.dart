@@ -75,8 +75,10 @@ final class TeamsTranslator {
   }
 
   /// What [message] quotes, its author named when the record knows them
-  /// and otherwise by the name Teams showed. A quote is always of a message
-  /// in the same chat.
+  /// and otherwise by the name Teams showed, with Teams' preview of its
+  /// text: the only words of it the journey path has when the quoted
+  /// message never reached it. A quote is always of a message in the same
+  /// chat.
   Quote? _quote(TeamsMessage message, TeamsQuote q) {
     final source = SourceMessageId.parse(
       _source(message.conversation, q.messageId),
@@ -90,7 +92,8 @@ final class TeamsTranslator {
     );
     return Quote(
       source: source,
-      author: actor == null ? Unknown(q.senderName) : Known(actor),
+      author: actor == null ? UnknownAuthor(q.senderName) : KnownAuthor(actor),
+      preview: q.preview,
     );
   }
 
