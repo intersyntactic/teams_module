@@ -6,7 +6,8 @@
 /// against, [BotFrameworkKeys], fetched by [BotFrameworkKeySource]; and
 /// [recordArrival], which records each accepted body with the record's one
 /// writer; and [teamsWitnessedEvent], which reads a recorded body back into
-/// the same event, for whatever reads the record. Then
+/// the same event, for whatever reads the record; and [TeamsReading], which
+/// tells the docking port what each recorded arrival is. Then
 /// [TeamsReceiver], which reads each event as the annotation shapes it
 /// writes, and a [StandInJourneyPath] to write them to until the module meets
 /// a real journey path; and [TeamsTranslator], which turns a Teams message
@@ -26,5 +27,6 @@ export 'src/teams_authors.dart';
 export 'src/teams_conversation.dart';
 export 'src/teams_translator.dart';
 export 'src/teams_post.dart';
+export 'src/teams_reading.dart';
 export 'src/teams_receiver.dart';
 export 'src/teams_relay.dart';

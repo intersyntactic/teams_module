@@ -22,6 +22,8 @@ sealed class TeamsEvent {
     this.from,
     this.fromAadObjectId,
     this.recipient,
+    this.channel,
+    this.team,
   });
 
   /// The Entra tenant id, in lower case.
@@ -54,6 +56,15 @@ sealed class TeamsEvent {
 
   /// The bot's channel account id in this conversation.
   final TeamsUserId? recipient;
+
+  /// In a team, the channel it happened in, as Teams names it in
+  /// `channelData`. A channel message's [conversation] is a thread in this
+  /// channel: `<channel>;messageid=<the thread's first post>`.
+  final String? channel;
+
+  /// In a team, the team's id. It is the id of the team's General channel,
+  /// where Teams sends a team-wide event such as the bot being added.
+  final String? team;
 
   /// Who sent it, as [teamsActor] names them.
   ActorId? get actor => teamsActor(tenant, user: from, entra: fromAadObjectId);
@@ -117,6 +128,8 @@ final class TeamsMessage extends TeamsEvent {
     super.from,
     super.fromAadObjectId,
     super.recipient,
+    super.channel,
+    super.team,
     this.text,
     this.entities,
     this.replyTo,
@@ -168,6 +181,8 @@ final class TeamsMessageUpdate extends TeamsEvent {
     super.from,
     super.fromAadObjectId,
     super.recipient,
+    super.channel,
+    super.team,
     this.text,
     this.entities,
     this.channelEventType,
@@ -193,6 +208,8 @@ final class TeamsMessageDelete extends TeamsEvent {
     super.from,
     super.fromAadObjectId,
     super.recipient,
+    super.channel,
+    super.team,
     this.channelEventType,
   });
 
@@ -213,6 +230,8 @@ final class TeamsCardAction extends TeamsEvent {
     super.from,
     super.fromAadObjectId,
     super.recipient,
+    super.channel,
+    super.team,
     this.card,
     this.value,
   });
@@ -239,6 +258,8 @@ final class TeamsInvoke extends TeamsEvent {
     super.from,
     super.fromAadObjectId,
     super.recipient,
+    super.channel,
+    super.team,
     this.name,
     this.value,
   });
@@ -260,6 +281,8 @@ final class TeamsConversationUpdate extends TeamsEvent {
     super.from,
     super.fromAadObjectId,
     super.recipient,
+    super.channel,
+    super.team,
     this.added = const [],
     this.removed = const [],
   });
@@ -283,6 +306,8 @@ final class TeamsInstallationUpdate extends TeamsEvent {
     super.from,
     super.fromAadObjectId,
     super.recipient,
+    super.channel,
+    super.team,
     this.action,
   });
 
