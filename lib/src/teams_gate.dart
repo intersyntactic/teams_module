@@ -413,9 +413,10 @@ TeamsEvent? _read(
   // earlier message a reply quotes. That is how a free-text reply in a chat
   // names the node it is about; TeamsMessage.quote reads it.
   final entities = a.objectsOrNull('entities');
-  final channelEventType = a
-      .objectOrNull('channelData')
-      ?.stringOrNull('eventType');
+  final channelData = a.objectOrNull('channelData');
+  final channelEventType = channelData?.stringOrNull('eventType');
+  final channel = channelData?.objectOrNull('channel')?.stringOrNull('id');
+  final team = channelData?.objectOrNull('team')?.stringOrNull('id');
   List<TeamsUserId> ids(String k) => [
     for (final m in a.objectsOrNull(k) ?? const <JsonObject>[])
       ?user(m.string('id')),
@@ -431,6 +432,8 @@ TeamsEvent? _read(
       from: fromId,
       fromAadObjectId: fromAadObjectId,
       recipient: recipient,
+      channel: channel,
+      team: team,
       text: text,
       entities: entities,
       replyTo: a.stringOrNull('replyToId'),
@@ -445,6 +448,8 @@ TeamsEvent? _read(
       from: fromId,
       fromAadObjectId: fromAadObjectId,
       recipient: recipient,
+      channel: channel,
+      team: team,
       text: text,
       entities: entities,
       channelEventType: channelEventType,
@@ -459,6 +464,8 @@ TeamsEvent? _read(
       from: fromId,
       fromAadObjectId: fromAadObjectId,
       recipient: recipient,
+      channel: channel,
+      team: team,
       channelEventType: channelEventType,
     ),
     'invoke' when name == 'adaptiveCard/action' => TeamsCardAction(
@@ -471,6 +478,8 @@ TeamsEvent? _read(
       from: fromId,
       fromAadObjectId: fromAadObjectId,
       recipient: recipient,
+      channel: channel,
+      team: team,
       card: a.stringOrNull('replyToId'),
       value: a.objectOrNull('value'),
     ),
@@ -484,6 +493,8 @@ TeamsEvent? _read(
       from: fromId,
       fromAadObjectId: fromAadObjectId,
       recipient: recipient,
+      channel: channel,
+      team: team,
       name: name,
       value: a.objectOrNull('value'),
     ),
@@ -497,6 +508,8 @@ TeamsEvent? _read(
       from: fromId,
       fromAadObjectId: fromAadObjectId,
       recipient: recipient,
+      channel: channel,
+      team: team,
       added: ids('membersAdded'),
       removed: ids('membersRemoved'),
     ),
@@ -510,6 +523,8 @@ TeamsEvent? _read(
       from: fromId,
       fromAadObjectId: fromAadObjectId,
       recipient: recipient,
+      channel: channel,
+      team: team,
       action: a.stringOrNull('action'),
     ),
     _ => null,

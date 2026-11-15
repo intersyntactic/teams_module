@@ -16,7 +16,7 @@ dependencies:
   is_docking_port:
     git:
       url: https://github.com/intersyntactic/docking_port.git
-      ref: e73ce7a7
+      ref: 073b200
   is_shapes: ^0.4.0
   pointycastle: ^4.0.0
 

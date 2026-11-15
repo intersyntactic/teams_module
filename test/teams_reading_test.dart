@@ -101,10 +101,11 @@ void main() {
       expect(said.node.text, 'Looks right to me');
     });
 
-    test('in a channel thread is in that thread: the id Teams sent, whole', () {
+    test('in a channel thread is in that thread, within its channel', () {
       // As a channel post arrived on 15 Nov: its conversation names the
       // thread by its first post, and a new post's first post is itself.
-      const thread = '19:abc@thread.tacv2;messageid=1794736789259';
+      const channel = '19:abc@thread.tacv2';
+      const thread = '$channel;messageid=1794736789259';
       final (_, [r]) = fold([
         {
           ...message(id: '1794736789259', text: '<at>Bot</at> test'),
@@ -113,11 +114,22 @@ void main() {
             'conversationType': 'channel',
             'tenantId': tenant,
           },
+          'channelData': {
+            'tenant': {'id': tenant},
+            'channel': {'id': channel},
+            'team': {'id': channel},
+          },
         },
       ]);
       final said = r as Said;
       expect(said.conversation.value, 'teams:$thread');
+      expect(said.within, Conversation.parse('teams:$channel'));
       expect(said.node.text, 'test');
+    });
+
+    test('in a chat sits inside nothing', () {
+      final (_, [r]) = fold([message()]);
+      expect((r as Said).within, isNull);
     });
 
     test('delivered twice has one key', () {
@@ -173,6 +185,51 @@ void main() {
       expect(joined.key, ArrivalKey.parse('conversationUpdate:f:24c8730b'));
       expect(joined.from, ada);
       expect(joined.joiners, [bot]);
+    });
+
+    test('of a team is the General channel itself, inside nothing', () {
+      // As CAM's addition to a team arrived on 15 Nov: in the General
+      // channel, whose id is the team's, with no channel of its own named.
+      const team = '19:abc@thread.tacv2';
+      final (_, [r]) = fold([
+        {
+          ...added(),
+          'conversation': {
+            'id': team,
+            'conversationType': 'channel',
+            'tenantId': tenant,
+          },
+          'channelData': {
+            'tenant': {'id': tenant},
+            'eventType': 'teamMemberAdded',
+            'team': {'id': team},
+          },
+        },
+      ]);
+      final joined = r as Joined;
+      expect(joined.conversation, Conversation.parse('teams:$team'));
+      expect(joined.within, isNull);
+    });
+
+    test('naming its own conversation as its channel sits inside nothing', () {
+      // The installationUpdate beside a team join named it so on 15 Nov.
+      const team = '19:abc@thread.tacv2';
+      final (_, [r]) = fold([
+        {
+          ...added(),
+          'conversation': {
+            'id': team,
+            'conversationType': 'channel',
+            'tenantId': tenant,
+          },
+          'channelData': {
+            'tenant': {'id': tenant},
+            'channel': {'id': team},
+            'team': {'id': team},
+          },
+        },
+      ]);
+      expect((r as Joined).within, isNull);
     });
 
     test('names a person heard from, and leaves out one never heard from', () {

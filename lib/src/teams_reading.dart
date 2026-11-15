@@ -21,8 +21,9 @@ import 'teams_translator.dart';
 ///
 /// A conversation is Teams' conversation id as Teams sends it. In a channel
 /// that names a thread, `<channel>;messageid=<the thread's first post>`, so
-/// each thread is a conversation of its own (Nick, 15 Nov 21:00), and an
-/// answer sent back to it lands in the thread.
+/// each thread is a conversation of its own, and an answer sent back to it
+/// lands in the thread; it sits [Admissible.within] its channel, the
+/// journey whose journey path it is (Nick, 15 Nov 21:00 and 21:03).
 ///
 /// Arrival keys: `message:<id>` for something said, and
 /// `conversationUpdate:<id>` for a join. Teams sends a redelivery with the
@@ -58,17 +59,29 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
   static Reading? _read(TeamsEvent event, TeamsReadingState state) {
     final conversation = Conversation.parse('teams:${event.conversation}');
     if (conversation == null) return null;
+    // A thread sits inside its channel. A team-wide event arrives in the
+    // General channel itself, which sits inside nothing.
+    final within = switch (event.channel) {
+      final c? when c != event.conversation => Conversation.parse('teams:$c'),
+      _ => null,
+    };
     switch (event) {
       case TeamsMessage():
         final key = ArrivalKey.parse('message:${event.id}');
         final node = teamsSaid(event, entraOf: state.entraIdOf);
         if (key == null || node == null) return null;
-        return Said(conversation: conversation, key: key, node: node);
+        return Said(
+          conversation: conversation,
+          within: within,
+          key: key,
+          node: node,
+        );
       case TeamsConversationUpdate():
         final key = ArrivalKey.parse('conversationUpdate:${event.id}');
         if (key == null) return null;
         return Joined.of(
           conversation: conversation,
+          within: within,
           from: event.actor,
           key: key,
           joiners: [
