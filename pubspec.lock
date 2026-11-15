@@ -177,6 +177,23 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.4.0"
+  is_docking_port:
+    dependency: "direct main"
+    description:
+      path: "."
+      ref: e73ce7a7
+      resolved-ref: e73ce7a7e2d4030b77eed033aa508610acb6771d
+      url: "https://github.com/intersyntactic/docking_port.git"
+    source: git
+    version: "0.0.1"
+  is_journal:
+    dependency: "direct dev"
+    description:
+      name: is_journal
+      sha256: e662f4ceff4bbfced819526588c3d629559bc3e52afeea51fe7b691181b6c443
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.5.0"
   is_shapes:
     dependency: "direct main"
     description:
