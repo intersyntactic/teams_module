@@ -177,22 +177,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.2.0"
-  is_effects:
-    dependency: transitive
-    description:
-      name: is_effects
-      sha256: "8c5af555fc6d3461f4120c470d0199e66c15a23e5bbb3e5509b9fb5f4e5a0295"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.1.0"
-  is_journal:
-    dependency: "direct main"
-    description:
-      name: is_journal
-      sha256: "388d1a059e0cfb5242b24f58e7ffbbd0d8353700d6ae544acc8ae8e3c785df2c"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.4.0"
   is_shapes:
     dependency: "direct main"
     description:
