@@ -77,7 +77,7 @@ void main() {
     posted = [];
     stored = [];
     agent = null;
-    teams = TeamsTranslator();
+    teams = TeamsTranslator(authors: TeamsAuthors());
     // The composition: each node goes to the acceptor bound to its shape,
     // and a post the module describes goes to the airlock (here, a list).
     journeyPath = StandInJourneyPath(
@@ -248,6 +248,55 @@ void main() {
       expect((got.quotes!.author as Known).actor, bea);
     });
 
+    test('names someone heard from in another chat, through the authors '
+        'every chat shares', () {
+      final authors = TeamsAuthors();
+      final chatA = TeamsTranslator(authors: authors);
+      final chatB = TeamsTranslator(authors: authors);
+      chatA.said(messageOf(inConversation('19:a@thread.v2', fromBea('a-1'))));
+      final got = chatB
+          .said(
+            messageOf(
+              quoting(
+                message(id: 'act-2', text: '<at>Bot</at>'),
+                id: 'act-0',
+                senderId: '29:1bea',
+              ),
+            ),
+          )!
+          .said;
+      expect((got.quotes!.author as Known).actor, bea);
+      // A translator with authors of its own knows nothing of chat A.
+      final alone = TeamsTranslator(authors: TeamsAuthors())
+          .said(
+            messageOf(
+              quoting(
+                message(id: 'act-3', text: '<at>Bot</at>'),
+                id: 'act-0',
+                senderId: '29:1bea',
+              ),
+            ),
+          )!
+          .said;
+      expect(alone.quotes!.author, isA<Unknown>());
+    });
+
+    test('names someone the authors learnt from any event, not only a '
+        'message', () {
+      final authors = TeamsAuthors()
+        ..learn(
+          TeamsCardAction(
+            conversation: 'a:1personal',
+            id: 'f:1',
+            serviceUrl: Uri.parse(serviceUrl),
+            from: '29:1bea',
+            fromAadObjectId: 'oid-bea',
+          ),
+        );
+      expect(authors.aadObjectIdOf('29:1bea'), 'oid-bea');
+      expect(authors.aadObjectIdOf('29:1ada'), isNull);
+    });
+
     test('of a bot names the bot, which needs no record', () {
       final got = teams
           .said(
@@ -319,7 +368,7 @@ void main() {
       final asked = say(message(id: 'act-3'))!;
       // A new module, knowing only what the journey path hands it back:
       // copies, as a store would read them, not the nodes appended.
-      final restarted = TeamsTranslator();
+      final restarted = TeamsTranslator(authors: TeamsAuthors());
       for (final (id, node) in stored) {
         deliverTo(restarted, id, switch (node) {
           TeamsConversation(:final id, :final serviceUrl) => TeamsConversation(

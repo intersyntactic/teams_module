@@ -1,6 +1,7 @@
 import 'package:is_conversation_shapes/is_conversation_shapes.dart';
 import 'package:is_shapes/is_shapes.dart';
 
+import 'teams_authors.dart';
 import 'teams_event.dart';
 import 'teams_conversation.dart';
 import 'teams_post.dart';
@@ -19,21 +20,21 @@ typedef _Where = ({String conversation, String message});
 /// that only from what the journey path delivers back, through [joined] and
 /// [heard], so replaying the path after a restart rebuilds it.
 ///
-/// To name who wrote a quoted message, it has to know which Entra user a
-/// Teams channel id `29:…` belongs to, and a quote gives only the channel
-/// id. It learns that from every message given to [said], so giving it the
-/// witnessed arrivals again, in order, after a restart rebuilds it. Nothing
-/// is asked of Teams: who wrote a quote is whatever the record already
-/// knows (Nick, 15 Nov).
+/// To name who wrote a quoted message, it reads [authors], which every
+/// message given to [said] teaches. Share one [TeamsAuthors] between every
+/// chat's translator, so someone heard from in one chat is known when
+/// quoted in another.
 final class TeamsTranslator {
+  TeamsTranslator({required this.authors});
+
+  /// Who each Teams channel id is, as far as the record says.
+  final TeamsAuthors authors;
+
   /// How to reach each chat joined.
   final _serviceUrls = <String, Uri>{};
 
   /// Where each [UserSaid] heard was said, by its id.
   final _heard = <TurnId, _Where>{};
-
-  /// Each Teams user's Entra object id, by their channel id.
-  final _aadObjectIds = <String, String>{};
 
   /// [message] as a [UserSaid], with a [TeamsConversation] to append before
   /// it when the chat is new to this journey path or Teams has moved it.
@@ -44,12 +45,7 @@ final class TeamsTranslator {
   ({TeamsConversation? joined, UserSaid said})? said(TeamsMessage message) {
     // Learnt first, so a person quoting themselves is named even when this
     // is the first the record has heard from them.
-    if ((message.from, message.fromAadObjectId) case (
-      final from?,
-      final aad?,
-    )) {
-      _aadObjectIds[from] = aad;
-    }
+    authors.learn(message);
     final author = message.actor;
     final text = _plain(message.text ?? '');
     final source = SourceMessageId.parse(
@@ -88,7 +84,7 @@ final class TeamsTranslator {
     final actor = teamsActor(
       message.tenant,
       channelId: q.senderId,
-      aadObjectId: _aadObjectIds[q.senderId],
+      aadObjectId: authors.aadObjectIdOf(q.senderId),
     );
     return Quote(
       source: source,
