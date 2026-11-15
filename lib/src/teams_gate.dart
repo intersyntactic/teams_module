@@ -403,9 +403,7 @@ TeamsEvent? _read(
   final text = a.stringOrNull('text');
   // As they came: @-mentions, and the quoted-reply entity that says which
   // earlier message a reply quotes. That is how a free-text reply in a chat
-  // names the node it is about. Its JSON is described only in a Teams SDK
-  // blog post, not on Learn, so it is passed on unread rather than projected
-  // from a guess.
+  // names the node it is about; TeamsMessage.quote reads it.
   final entities = a.objectsOrNull('entities');
   final channelEventType = a
       .objectOrNull('channelData')

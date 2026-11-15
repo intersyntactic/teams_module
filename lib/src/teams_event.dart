@@ -48,30 +48,57 @@ sealed class TeamsEvent {
   /// The bot's id in this conversation.
   final String? recipient;
 
-  /// Who sent it. To a journey everyone but the agent is a user, another
-  /// bot included, so both have an id, in lower case:
-  ///
-  /// - a person, `teams:<tenant>/<Entra object id>`;
-  /// - a bot, which Teams names by its channel id `28:<app id>` and no Entra
-  ///   user, `teams:<tenant>/bot:<app id>`. An Entra object id is a GUID and
-  ///   never has a colon, so the two can't be read as each other.
-  ///
-  /// The `28:` is from Microsoft's docs, not yet seen in a witnessed body,
-  /// so what follows it is taken as it comes. Null when Teams named no
-  /// tenant, or a sender that is neither.
-  ActorId? get actor {
-    final tenant = this.tenant?.toLowerCase();
-    if (tenant == null) return null;
-    if (fromAadObjectId case final user?) {
-      return ActorId.parse('teams:$tenant/${user.toLowerCase()}');
-    }
-    if (from case final id? when id.startsWith('28:') && id.length > 3) {
-      return ActorId.parse(
-        'teams:$tenant/bot:${id.substring(3).toLowerCase()}',
-      );
-    }
-    return null;
+  /// Who sent it, as [teamsActor] names them.
+  ActorId? get actor =>
+      teamsActor(tenant, channelId: from, aadObjectId: fromAadObjectId);
+}
+
+/// A Teams user's id on a journey path. To a journey everyone but the agent
+/// is a user, another bot included, so both have an id, in lower case:
+///
+/// - a person, `teams:<tenant>/<Entra object id>`, from [aadObjectId];
+/// - a bot, which Teams names by its channel id `28:<app id>` and no Entra
+///   user, `teams:<tenant>/bot:<app id>`. An Entra object id is a GUID and
+///   never has a colon, so the two can't be read as each other.
+///
+/// A person's channel id, `29:…`, is not enough on its own: it names them
+/// only to this bot, so it isn't the id they have everywhere else. Null
+/// when there is no [tenant], or no id of either kind.
+ActorId? teamsActor(String? tenant, {String? channelId, String? aadObjectId}) {
+  final t = tenant?.toLowerCase();
+  if (t == null) return null;
+  if (aadObjectId case final user?) {
+    return ActorId.parse('teams:$t/${user.toLowerCase()}');
   }
+  if (channelId case final id? when id.startsWith('28:') && id.length > 3) {
+    return ActorId.parse('teams:$t/bot:${id.substring(3).toLowerCase()}');
+  }
+  return null;
+}
+
+/// What a Teams Reply quotes, read from its `quotedReply` entity: the shape
+/// seen in every witnessed reply so far, in a one-to-one chat and a group
+/// chat alike. Teams gives the quoted message's author only as a channel id
+/// and a display name, never an Entra object id.
+final class TeamsQuote {
+  const TeamsQuote({
+    required this.messageId,
+    required this.senderId,
+    this.senderName,
+    this.preview,
+  });
+
+  /// The quoted message's id, in the same conversation as the reply.
+  final String messageId;
+
+  /// Its author's channel id: `28:<app id>` for a bot, `29:…` for a person.
+  final String senderId;
+
+  /// Its author's display name, as Teams showed it.
+  final String? senderName;
+
+  /// Teams' shortened copy of the quoted text.
+  final String? preview;
 }
 
 /// A `message`: someone, a person or a bot, sent words.
@@ -95,13 +122,31 @@ final class TeamsMessage extends TeamsEvent {
   final String? text;
 
   /// As they came: @-mentions, and the quoted-reply entity that says which
-  /// earlier message a reply quotes. Its JSON is described only in a Teams
-  /// SDK blog post, not on Learn, so it is passed on unread rather than
-  /// projected from a guess.
+  /// earlier message a reply quotes, which [quote] reads.
   final List<JsonObject>? entities;
 
   /// In a channel, the message this one replies under.
   final String? replyTo;
+
+  /// What this message quotes, when it is a Reply: the first `quotedReply`
+  /// entity that names both a message and its author. In a chat a Reply has
+  /// no [replyTo], so this is the only place Teams says what it is about.
+  TeamsQuote? get quote {
+    for (final e in entities ?? const <JsonObject>[]) {
+      if (e.stringOrNull('type') != 'quotedReply') continue;
+      final q = e.objectOrNull('quotedReply');
+      final messageId = q?.stringOrNull('messageId');
+      final senderId = q?.stringOrNull('senderId');
+      if (q == null || messageId == null || senderId == null) continue;
+      return TeamsQuote(
+        messageId: messageId,
+        senderId: senderId,
+        senderName: q.stringOrNull('senderName'),
+        preview: q.stringOrNull('preview'),
+      );
+    }
+    return null;
+  }
 }
 
 /// A `messageUpdate`: a message was changed.
