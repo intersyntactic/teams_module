@@ -32,6 +32,126 @@ v1 mirrors what is addressed to the bot: card actions, form submissions and
 @-mentions, which in a one-to-one chat is every message. It asks for no Graph
 permissions, so an organisation's IT has one thing to do: upload the app.
 
+## What Teams sends, and how it is read
+
+The docking port gives this module's reading every arrival from the relay,
+in the record's order, and the reading says what each one is: something
+said, a conversation joined, or nothing to admit. These are the facts about
+Teams that reading rests on. Each says whether it was **measured** (seen in
+bytes Teams really sent, with where) or is **unmeasured** (from Microsoft's
+documentation or inference only).
+
+**Conversations and threads.**
+
+- A one-to-one chat's conversation id is `a:…`. Measured, in Hart's tenant.
+  A group chat's is `19:…@thread.v2` by Microsoft's documentation; none is
+  in the record, so unmeasured here.
+- In a channel, every message names its *thread*, not the channel:
+  `conversation.id` is `<channel id>;messageid=<the thread's first post>`.
+  A new post's thread is itself: its id and the `messageid` are the same.
+  A reply carries its thread's first post's id. `channelData.replyChain.id`
+  repeats that id, and `channelData.channel.id` is the channel. Measured on
+  15 Nov in the "AI Forensic Agents" team, Hart's tenant, for a new post and
+  a reply.
+- So each thread is a conversation of its own, and an answer sent back to
+  its id lands in the thread. The reading names the channel as the
+  conversation the thread sits within.
+- A reply in a channel has `replyToId` null and no `quotedReply` entity:
+  the thread is the reply. Measured, 15 Nov. In a chat, a Reply is
+  different: `replyToId` is null too, but a `quotedReply` entity names the
+  message quoted, and the text starts with `<quoted messageId=…/>`.
+  Measured in a one-to-one chat on 14 Nov. A Reply in a group chat is
+  unmeasured.
+- A Teams message id is the millisecond it was posted (`1794736789259` is
+  09:59:49.259 UTC on 15 Nov), unique only within its conversation. So a
+  message is named by both: `<conversation>|<message id>`. Measured.
+- Every message measured so far was posted in a team's **General** channel,
+  whose id is also the team's id. A post in any other channel is
+  unmeasured: it should arrive with that channel's id in
+  `channelData.channel.id` and the team's in `channelData.team.id`.
+
+**Joins.**
+
+- Adding the bot to a team is one join that Teams sends as two activities
+  at the same moment: a `conversationUpdate` (`channelData.eventType`
+  `teamMemberAdded`, with the bot in `membersAdded`) and an
+  `installationUpdate` with `action` `add`. Both arrive in the team's
+  General channel, whichever channel the installer picked (that one is in
+  `channelData.settings.selectedChannel`). The reading takes the
+  `conversationUpdate` as the join and the `installationUpdate` as nothing,
+  so one join is read once. Measured on 15 Nov, for two teams in Hart's
+  tenant.
+- Installing the bot in a one-to-one chat sends the same pair, and its
+  `membersAdded` names both the person and the bot. Measured, 15 Nov.
+- Taking the bot out sends an `installationUpdate` with `action` `remove`.
+  Measured in a one-to-one chat, 15 Nov.
+- The join's `from` is whoever added the bot. Measured.
+
+**Who someone is.**
+
+- Teams names a person to the bot by a channel id, `29:…`, which means
+  nothing outside this bot, and by their Entra object id
+  (`from.aadObjectId`), which is who they are across Microsoft 365. Someone
+  is attributed as `teams:<tenant>/<Entra object id>`. A person Teams gives
+  no Entra object id for is no one, so their message is not admitted.
+  Measured: every person's message so far carried one.
+- A bot is `28:<app id>` with no Entra object id, and is attributed as
+  `teams:<tenant>/bot:<app id>`. To a journey, another bot is a user like
+  anyone else. Measured for this bot in `membersAdded`, 15 Nov. A message
+  *from* another bot is unmeasured.
+- A quote names its author only by channel id and display name, never an
+  Entra object id. So the author is named from earlier arrivals: if that
+  person has sent something the record holds, the quote is attributed to
+  them; otherwise it carries the display name Teams showed. Nothing is
+  asked of Teams to find out. Measured shape, 14 Nov.
+
+**What arrives at all.**
+
+- The app's manifest asks for no resource-specific permissions (it has no
+  `authorization` block). Without them, Teams delivers only messages that
+  @mention the bot in a group chat or a channel; in a one-to-one chat every
+  message arrives. Mention-only is from Microsoft's documentation: every
+  group or channel message in the record mentions the bot, but no
+  unmentioned post has been sent since the bot joined, so its absence is
+  unmeasured.
+- To be offered in a team at all, the manifest's bot must list the `team`
+  scope. Measured on 15 Nov: without it, Teams showed only About, Share and
+  Uninstall, and the admin centre's Add to team was greyed out.
+
+**Edits and deletes.** An edit is a `messageUpdate` reusing the message's
+id (`channelData.eventType` `editMessage`); a delete is a `messageDelete`
+(`softDeleteMessage`). Both shapes are from hand-written test bodies, so
+unmeasured. So is the arrival key planned for them,
+`<type>:<id>@<timestamp>`, which rests on a redelivery keeping its
+timestamp and a second edit getting a new one. A restored message
+arriving as a `messageUpdate` with `undeleteMessage` is unmeasured too.
+They are read as nothing to admit until there is a shape for what a
+message became.
+
+**Card presses (`Responded`).**
+
+- A press is an `invoke` named `adaptiveCard/action`. It names its card
+  only by the card's activity id, in `replyToId`, and says which button by
+  `value.action.verb`. Measured through the gate on 10 Nov, and in a group
+  chat on 13 Nov in Hart's tenant, where the echo bot edited the pressed
+  card by that id. No press is in the record yet: it
+  began on 15 Nov.
+- The card's own `value.action.data` comes back from the Teams client,
+  which can be made to send anything, so it is never read as which node a
+  card shows. That is known only to whatever sent the card.
+- A card's activity id comes back in the Bot Connector's response to
+  sending it. Editing a card needs it, so that much is measured. Whether
+  the record of a send keeps it, which a press needs in order to be traced
+  to its node, is being decided with the airlock.
+- Teams wants an invoke answered within about 15 seconds, and sends it
+  again if not. The relay answers at once with a fixed message, before
+  anything is admitted, and an edit to the card can follow later. While
+  the press is handled, Teams greys the card out. Measured, 10 Nov.
+- A press in a channel, and a card with inputs (a typed correction), are
+  unmeasured.
+- Until the docking port's contract has `Responded`, the reading takes a
+  press as nothing to admit.
+
 ## Status
 
 The way in is here: the relay (`bin/teams_relay.dart`, `lib/src/teams_relay.dart`)
