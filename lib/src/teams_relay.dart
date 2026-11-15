@@ -15,7 +15,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'airlock_witness.dart';
+import 'record_arrival.dart';
 import 'key_source.dart';
 import 'teams_event.dart';
 import 'teams_gate.dart';
@@ -44,13 +44,14 @@ final class TeamsRelay {
   /// line, so the relay runs end to end before a receiver is wired in.
   final Future<void> Function(TeamsEvent event) onEvent;
 
-  /// Has the body of each accepted request witnessed, its bytes exactly as
-  /// they came, before Teams gets a response and before anything downstream
-  /// reads it: in the relay, [witnessThroughAirlock]. A 200 then means
-  /// "recorded", or "may be recorded" after an [AirlockRecordFailed], which
-  /// is logged. [AirlockNotWitnessed], or a throw, sends Teams a 500 and
-  /// forgets the activity was seen, so its retry is taken. None in tests.
-  final Future<AirlockAnswer> Function(Uint8List body)? witness;
+  /// Records the body of each accepted request, its bytes exactly as they
+  /// came, before Teams gets a response and before anything downstream
+  /// reads it: in the relay, [recordArrival]. A 200 then means "recorded",
+  /// or "may be recorded" after a [RecordFailed], which is logged. A
+  /// [RecordRefused] or [RecordUnanswered], or a throw, sends Teams a 500
+  /// and forgets the activity was seen, so its retry is taken. None in
+  /// tests.
+  final Future<RecordAnswer> Function(Uint8List body)? witness;
 
   final Duration bodyTimeout;
   final int maxBodyBytes;
@@ -156,28 +157,23 @@ final class TeamsRelay {
     // copy of anyone's words.
     var line = 'teams relay: ${d.status} ${d.reason}';
     if (d.event != null && witness != null) {
-      AirlockAnswer answer;
+      RecordAnswer answer;
       try {
         answer = await witness!(Uint8List.fromList(body));
       } on Object catch (e) {
-        answer = AirlockNotWitnessed('${e.runtimeType}');
+        answer = RecordUnanswered('${e.runtimeType}');
       }
       switch (answer) {
-        case AirlockWitnessed():
+        case Recorded():
           break;
-        case AirlockRecordFailed(:final error):
+        case RecordFailed(:final why):
           // It may be in the record already, so it is not sent again: Teams
           // is told it arrived, and a person is told it may not have.
-          line = '$line: RECORD FAILED, not resent, check the record: $error';
-        case AirlockNotWitnessed(:final error):
-          // Unrecorded is not taken: forget it was seen, so the retry Teams
-          // sends for a 500 is taken and recorded then.
-          if (d.seenKey case final key?) _seen.remove(key);
-          log(
-            'teams relay: ${HttpStatus.internalServerError} ${d.reason}: '
-            'not witnessed: $error',
-          );
-          return _end(req, HttpStatus.internalServerError);
+          line = '$line: RECORD FAILED, not resent, check the record: $why';
+        case RecordRefused(:final why):
+          return _unrecorded(req, d, 'refused by the record: $why');
+        case RecordUnanswered(:final why):
+          return _unrecorded(req, d, 'not recorded: $why');
       }
     }
     log(line);
@@ -189,6 +185,14 @@ final class TeamsRelay {
     }
     await req.response.close();
     if (d.event case final event?) unawaited(_dispatch(event));
+  }
+
+  /// Unrecorded is not taken: forgets [d]'s activity was seen, so the retry
+  /// Teams sends for a 500 is taken and recorded then.
+  Future<void> _unrecorded(HttpRequest req, TeamsGateDecision d, String why) {
+    if (d.seenKey case final key?) _seen.remove(key);
+    log('teams relay: ${HttpStatus.internalServerError} ${d.reason}: $why');
+    return _end(req, HttpStatus.internalServerError);
   }
 
   Future<void> _dispatch(TeamsEvent event) async {

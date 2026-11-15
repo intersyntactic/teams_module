@@ -11,14 +11,14 @@
 ///   HOST=127.0.0.1                   optional; the address to bind. The
 ///                                    default is loopback, for a proxy on
 ///                                    the same machine.
-///   AIRLOCK_SOCKET=/run/...sock      the airlock service's Unix socket:
+///   JOURNAL_SOCKET=/run/...sock      the record's writer's Unix socket:
 ///                                    every accepted request's body is
-///                                    witnessed through it, byte for byte,
-///                                    before Teams gets a response.
-///                                    Required.
+///                                    recorded through it as an `arrived`
+///                                    entry, byte for byte, before Teams
+///                                    gets a response. Required.
 ///
-/// The relay keeps no record of its own: the record has one writer, and
-/// only the airlock sends it what arrives.
+/// The relay keeps no record of its own: the record has one writer, which
+/// knows the relay by its user, and the relay sends it what arrives.
 ///
 /// The bot's messaging endpoint is `https://<host>/api/messages`.
 library;
@@ -29,8 +29,8 @@ import 'dart:io';
 
 import 'package:is_teams_module/is_teams_module.dart';
 
-/// The source the relay's arrivals are witnessed under: the same as when
-/// the relay kept its own record, so old and new arrivals read alike.
+/// The source the relay's arrivals are recorded under: the same as before,
+/// so old and new arrivals read alike.
 const _source = 'teams';
 
 Future<void> main() async {
@@ -69,13 +69,13 @@ Future<void> main() async {
     exit(78);
   }
 
-  final airlock = env['AIRLOCK_SOCKET'] ?? '';
-  if (airlock.isEmpty) {
-    // A relay that can't have what arrives witnessed must not respond 200.
-    stderr.writeln('abort: AIRLOCK_SOCKET not set');
+  final record = env['JOURNAL_SOCKET'] ?? '';
+  if (record.isEmpty) {
+    // A relay that can't record what arrives must not respond 200 to it.
+    stderr.writeln('abort: JOURNAL_SOCKET not set');
     exit(78);
   }
-  // Not checked for at boot: the airlock may start after the relay, and
+  // Not checked for at boot: the writer may start after the relay, and
   // until it answers, every message gets a 500 and Teams sends it again.
 
   final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
@@ -92,8 +92,7 @@ Future<void> main() async {
   final relay = TeamsRelay(
     spec: TeamsSourceSpec(appId: appId, tenantAllowlist: allow),
     keys: keys,
-    witness: (body) =>
-        witnessThroughAirlock(airlock, source: _source, bytes: body),
+    witness: (body) => recordArrival(record, source: _source, bytes: body),
   );
   final server = await HttpServer.bind(address, port);
   stdout.writeln('teams relay listening on ${address.address}:${server.port}');
