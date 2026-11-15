@@ -8,6 +8,7 @@ import 'support/fixtures.dart';
 
 void main() {
   setUpAll(setUpKeys);
+  _witnessedTests();
 
   group('takes', () {
     test('a message in a one-to-one chat, with its text', () {
@@ -467,6 +468,117 @@ void main() {
     });
   });
 }
+
+void _witnessedTests() {
+  group('a witnessed body', () {
+    final bodies = <String, Map<String, Object?>>{
+      'message': {
+        ...message(),
+        'replyToId': '1730881000000',
+        'entities': [
+          {'type': 'mention', 'text': '<at>Bot</at>'},
+        ],
+      },
+      'edit': {
+        ...message(text: 'now'),
+        'type': 'messageUpdate',
+        'channelData': {
+          'tenant': {'id': tenant},
+          'eventType': 'editMessage',
+        },
+      },
+      'delete': {
+        ...message(),
+        'type': 'messageDelete',
+        'channelData': {
+          'tenant': {'id': tenant},
+          'eventType': 'softDeleteMessage',
+        },
+      }..remove('text'),
+      'card action': cardAction(),
+      'conversation update': {
+        ...message(),
+        'type': 'conversationUpdate',
+        'membersAdded': [
+          {'id': '28:$appId'},
+        ],
+        'membersRemoved': [
+          {'id': '29:1bea'},
+        ],
+      }..remove('text'),
+      'install': {...message(), 'type': 'installationUpdate', 'action': 'add'}
+        ..remove('text'),
+    };
+    for (final MapEntry(key: kind, value: activity) in bodies.entries) {
+      test('reads a $kind as the gate does', () {
+        final body = utf8.encode(jsonEncode(activity));
+        final gated = _gate(activity, body: body).event!;
+        expect(_described(teamsWitnessedEvent(body)!), _described(gated));
+      });
+    }
+
+    test('is not checked again: a tenant the gate would refuse still reads, '
+        'in lower case', () {
+      final other = {
+        ...message(),
+        'channelData': {
+          'tenant': {'id': 'OTHER-TENANT'},
+        },
+      };
+      final body = utf8.encode(jsonEncode(other));
+      expect(_gate(other, body: body).status, 403);
+      expect(teamsWitnessedEvent(body)!.tenant, 'other-tenant');
+    });
+
+    test('of a type no event is read as is null', () {
+      final typing = {...message(), 'type': 'typing'}..remove('text');
+      expect(teamsWitnessedEvent(utf8.encode(jsonEncode(typing))), isNull);
+    });
+
+    test('that is not an activity throws a FormatException', () {
+      expect(
+        () => teamsWitnessedEvent(utf8.encode('[1]')),
+        throwsFormatException,
+      );
+      expect(() => teamsWitnessedEvent([0xff]), throwsFormatException);
+      expect(
+        () => teamsWitnessedEvent(utf8.encode('{"type":"message"}')),
+        throwsFormatException,
+      );
+    });
+  });
+}
+
+/// Every field of [e], so two events can be compared whole.
+String _described(TeamsEvent e) => jsonEncode({
+  'kind': '${e.runtimeType}',
+  'conversation': e.conversation,
+  'id': e.id,
+  'serviceUrl': '${e.serviceUrl}',
+  'tenant': e.tenant,
+  'conversationType': e.conversationType,
+  'timestamp': e.timestamp,
+  'from': e.from,
+  'fromAadObjectId': e.fromAadObjectId,
+  'recipient': e.recipient,
+  ...switch (e) {
+    TeamsMessage() => {
+      'text': e.text,
+      'entities': e.entities?.map((o) => o.asUncheckedMap()).toList(),
+      'replyTo': e.replyTo,
+    },
+    TeamsMessageUpdate() => {
+      'text': e.text,
+      'entities': e.entities?.map((o) => o.asUncheckedMap()).toList(),
+      'channelEventType': e.channelEventType,
+    },
+    TeamsMessageDelete() => {'channelEventType': e.channelEventType},
+    TeamsCardAction() => {'card': e.card, 'value': e.value?.asUncheckedMap()},
+    TeamsInvoke() => {'name': e.name, 'value': e.value?.asUncheckedMap()},
+    TeamsConversationUpdate() => {'added': e.added, 'removed': e.removed},
+    TeamsInstallationUpdate() => {'action': e.action},
+  },
+});
 
 TeamsGateDecision _gate(
   Map<String, Object?> activity, {

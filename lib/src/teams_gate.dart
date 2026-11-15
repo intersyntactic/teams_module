@@ -291,16 +291,7 @@ TeamsGateDecision _decide(
   }
 
   final conversation = a.object('conversation');
-  // A tenant id is a GUID, compared and passed on in lower case, as the
-  // actor id `teams:<tenant>/<object id>` writes it: whether Teams always
-  // sends it lower case is not something the docs promise.
-  final tenant =
-      (a
-                  .objectOrNull('channelData')
-                  ?.objectOrNull('tenant')
-                  ?.stringOrNull('id') ??
-              conversation.stringOrNull('tenantId'))
-          ?.toLowerCase();
+  final tenant = _tenant(a, conversation);
   if (spec.tenantAllowlist.isNotEmpty &&
       (tenant == null ||
           !spec.tenantAllowlist.any((t) => t.toLowerCase() == tenant))) {
@@ -350,6 +341,46 @@ TeamsGateDecision _decide(
     seenKey: seenKey,
   );
 }
+
+/// The event in a body the relay witnessed: the same reading the gate gives
+/// an activity it takes, without the gate's checks.
+///
+/// It trusts that [body] passed [teamsGate] before it was witnessed, and
+/// checks none of that again: not the token, its `serviceurl` claim, the
+/// channel, nor the tenant allowlist. The relay witnesses only bodies the gate
+/// read an event from, so this is for reading those back, never for anything
+/// that arrived any other way.
+///
+/// The same activity can be witnessed more than once: the relay forgets what
+/// it has seen when it restarts, and a witness that failed is retried. Take
+/// an event once per [TeamsEvent.conversation] and [TeamsEvent.id].
+///
+/// Null for an activity type no event is read as. Throws a
+/// [FormatException] for a body that isn't an activity, which a witnessed
+/// one never is.
+TeamsEvent? teamsWitnessedEvent(List<int> body) {
+  final a = JsonObject.decode(utf8.decode(body));
+  final conversation = a.object('conversation');
+  return _read(
+    a,
+    a.string('type'),
+    a.stringOrNull('name'),
+    _tenant(a, conversation),
+    conversation,
+  );
+}
+
+/// The activity's tenant. A tenant id is a GUID, compared and passed on in
+/// lower case, as the actor id `teams:<tenant>/<object id>` writes it:
+/// whether Teams always sends it lower case is not something the docs
+/// promise.
+String? _tenant(JsonObject a, JsonObject conversation) =>
+    (a
+                .objectOrNull('channelData')
+                ?.objectOrNull('tenant')
+                ?.stringOrNull('id') ??
+            conversation.stringOrNull('tenantId'))
+        ?.toLowerCase();
 
 /// The activity read into what happened. Null for an activity type no event
 /// is read as.
