@@ -173,10 +173,26 @@ packages:
     dependency: "direct main"
     description:
       name: is_conversation_shapes
-      sha256: "6bd729371e37d110de4cc3f5716ad6feb66822c2ea6c31b081c33d079a4b7935"
+      sha256: d49f7d9d290a373db28dcdd8b17139ac23859f39677784d05805b71adc9513b8
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.2"
+    version: "0.2.0"
+  is_effects:
+    dependency: transitive
+    description:
+      name: is_effects
+      sha256: "8c5af555fc6d3461f4120c470d0199e66c15a23e5bbb3e5509b9fb5f4e5a0295"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.1.0"
+  is_journal:
+    dependency: "direct main"
+    description:
+      name: is_journal
+      sha256: "388d1a059e0cfb5242b24f58e7ffbbd0d8353700d6ae544acc8ae8e3c785df2c"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.4.0"
   is_shapes:
     dependency: "direct main"
     description:

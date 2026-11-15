@@ -25,7 +25,7 @@ void main() {
       expect(said.serviceUrl, Uri.parse(serviceUrl));
       expect(said.timestamp, '2026-11-06T10:00:00.000Z');
       expect(said.from, '29:1ada');
-      expect(said.fromAadObjectId, 'oid-ada');
+      expect(said.fromAadObjectId, 'ada00000-0000-4000-8000-000000000001');
       expect(said.recipient, '28:$appId');
       expect(said.text, 'Looks right to me');
       expect(said.entities, isNull);

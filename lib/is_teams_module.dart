@@ -20,6 +20,8 @@ export 'src/key_source.dart';
 export 'src/stand_in_journey_path.dart';
 export 'src/teams_event.dart';
 export 'src/teams_gate.dart';
+export 'src/teams_ids.dart';
+export 'src/teams_authors.dart';
 export 'src/teams_conversation.dart';
 export 'src/teams_translator.dart';
 export 'src/teams_post.dart';

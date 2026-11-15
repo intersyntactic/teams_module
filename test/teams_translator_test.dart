@@ -23,7 +23,9 @@ TeamsMessage messageOf(Map<String, Object?> activity) =>
         ).event!
         as TeamsMessage;
 
-final ada = ActorId.parse('teams:$tenant/oid-ada')!;
+final ada = ActorId.parse(
+  'teams:$tenant/ada00000-0000-4000-8000-000000000001',
+)!;
 final agentId = ActorId.parse('agent:demo')!;
 
 /// [activity] said in the conversation [conversation].
@@ -77,7 +79,7 @@ void main() {
     posted = [];
     stored = [];
     agent = null;
-    teams = TeamsTranslator();
+    teams = TeamsTranslator(authors: TeamsAuthors());
     // The composition: each node goes to the acceptor bound to its shape,
     // and a post the module describes goes to the airlock (here, a list).
     journeyPath = StandInJourneyPath(
@@ -146,6 +148,199 @@ void main() {
     });
   });
 
+  group('a Reply', () {
+    /// [activity] quoting message [id] by [senderId], as a witnessed Reply
+    /// carried it.
+    Map<String, Object?> quoting(
+      Map<String, Object?> activity, {
+      required String id,
+      required String senderId,
+      String? senderName,
+    }) => {
+      ...activity,
+      'text': '<quoted messageId="$id"/>\n${activity['text']}',
+      'entities': [
+        {
+          'type': 'quotedReply',
+          'quotedReply': {
+            'messageId': id,
+            'senderId': senderId,
+            'senderName': ?senderName,
+            'preview': 'Good morning!',
+          },
+        },
+      ],
+    };
+
+    final bea = ActorId.parse(
+      'teams:$tenant/bea00000-0000-4000-8000-000000000002',
+    )!;
+    Map<String, Object?> fromBea(String id) => {
+      ...message(id: id, text: '<at>Bot</at> hi'),
+      'from': {
+        'id': '29:1bea',
+        'aadObjectId': 'bea00000-0000-4000-8000-000000000002',
+        'name': 'Bea',
+      },
+    };
+
+    test('of only an @-mention says "look at this", by whom it quotes', () {
+      teams.said(messageOf(fromBea('act-1')));
+      final got = teams
+          .said(
+            messageOf(
+              quoting(
+                message(id: 'act-2', text: '<at>Bot</at>'),
+                id: 'act-0',
+                senderId: '29:1bea',
+                senderName: 'Bea',
+              ),
+            ),
+          )!
+          .said;
+      expect(got.author, ada);
+      expect(got.text, isEmpty);
+      expect(got.quotes!.source.value, 'a:1personal|act-0');
+      expect((got.quotes!.author as Known).actor, bea);
+    });
+
+    test('with words carries them and the quote', () {
+      final got = teams
+          .said(
+            messageOf(
+              quoting(
+                message(id: 'act-2', text: 'not quite'),
+                id: 'act-1',
+                senderId: '29:1ada',
+              ),
+            ),
+          )!
+          .said;
+      expect(got.text, 'not quite');
+      expect((got.quotes!.author as Known).actor, ada);
+    });
+
+    test('names its quoted author by the record alone: someone never heard '
+        'from is not in it, with the name Teams showed', () {
+      final got = teams
+          .said(
+            messageOf(
+              quoting(
+                message(id: 'act-2', text: '<at>Bot</at>'),
+                id: 'act-0',
+                senderId: '29:1bea',
+                senderName: 'Bea',
+              ),
+            ),
+          )!
+          .said;
+      expect((got.quotes!.author as Unknown).displayName, 'Bea');
+    });
+
+    test('learns from a message that reads as nothing', () {
+      expect(
+        teams.said(messageOf({...fromBea('act-1'), 'text': '<at>Bot</at>'})),
+        isNull,
+      );
+      final got = teams
+          .said(
+            messageOf(
+              quoting(
+                message(id: 'act-2', text: 'see'),
+                id: 'act-1',
+                senderId: '29:1bea',
+              ),
+            ),
+          )!
+          .said;
+      expect((got.quotes!.author as Known).actor, bea);
+    });
+
+    test('names someone heard from in another chat, through the authors '
+        'every chat shares', () {
+      final authors = TeamsAuthors();
+      final chatA = TeamsTranslator(authors: authors);
+      final chatB = TeamsTranslator(authors: authors);
+      chatA.said(messageOf(inConversation('19:a@thread.v2', fromBea('a-1'))));
+      final got = chatB
+          .said(
+            messageOf(
+              quoting(
+                message(id: 'act-2', text: '<at>Bot</at>'),
+                id: 'act-0',
+                senderId: '29:1bea',
+              ),
+            ),
+          )!
+          .said;
+      expect((got.quotes!.author as Known).actor, bea);
+      // A translator with authors of its own knows nothing of chat A.
+      final alone = TeamsTranslator(authors: TeamsAuthors())
+          .said(
+            messageOf(
+              quoting(
+                message(id: 'act-3', text: '<at>Bot</at>'),
+                id: 'act-0',
+                senderId: '29:1bea',
+              ),
+            ),
+          )!
+          .said;
+      expect(alone.quotes!.author, isA<Unknown>());
+    });
+
+    test('names someone the authors learnt from any event, not only a '
+        'message', () {
+      final authors = TeamsAuthors()
+        ..learn(
+          TeamsCardAction(
+            conversation: 'a:1personal',
+            id: 'f:1',
+            serviceUrl: Uri.parse(serviceUrl),
+            from: '29:1bea',
+            fromAadObjectId: 'bea00000-0000-4000-8000-000000000002',
+          ),
+        );
+      expect(
+        authors.entraIdOf(TeamsUserId.parse('29:1bea')!),
+        EntraObjectId.parse('BEA00000-0000-4000-8000-000000000002'),
+      );
+      expect(authors.entraIdOf(TeamsUserId.parse('29:1ada')!), isNull);
+    });
+
+    test('learns nothing from an id in the wrong form', () {
+      TeamsMessage sentBy(String from, String aad) => TeamsMessage(
+        conversation: 'a:1personal',
+        id: 'm',
+        serviceUrl: Uri.parse(serviceUrl),
+        from: from,
+        fromAadObjectId: aad,
+      );
+      final authors = TeamsAuthors()
+        ..learn(sentBy('29:1bea', 'oid-bea'))
+        ..learn(sentBy('a:1personal', 'bea00000-0000-4000-8000-000000000002'));
+      expect(authors.entraIdOf(TeamsUserId.parse('29:1bea')!), isNull);
+    });
+
+    test('of a bot names the bot, which needs no record', () {
+      final got = teams
+          .said(
+            messageOf(
+              quoting(
+                message(id: 'act-2', text: 'this one'),
+                id: 'act-0',
+                senderId: '28:$appId',
+              ),
+            ),
+          )!
+          .said;
+      expect(
+        (got.quotes!.author as Known).actor.value,
+        'teams:$tenant/bot:$appId',
+      );
+    });
+  });
+
   group('a conversation', () {
     test('is offered the first time it is heard from', () {
       final got = teams.said(messageOf(message()));
@@ -198,7 +393,7 @@ void main() {
       final asked = say(message(id: 'act-3'))!;
       // A new module, knowing only what the journey path hands it back:
       // copies, as a store would read them, not the nodes appended.
-      final restarted = TeamsTranslator();
+      final restarted = TeamsTranslator(authors: TeamsAuthors());
       for (final (id, node) in stored) {
         deliverTo(restarted, id, switch (node) {
           TeamsConversation(:final id, :final serviceUrl) => TeamsConversation(

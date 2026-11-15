@@ -24,9 +24,12 @@ void main() {
       id: 'act-1',
       serviceUrl: _url,
       tenant: 'TENANT-1',
-      fromAadObjectId: 'OID-Ada',
+      fromAadObjectId: 'ADA00000-0000-4000-8000-000000000001',
     );
-    expect('${said.actor}', 'teams:tenant-1/oid-ada');
+    expect(
+      '${said.actor}',
+      'teams:tenant-1/ada00000-0000-4000-8000-000000000001',
+    );
   });
 
   test('a bot is an actor too, by its app id, in lower case', () {
@@ -47,9 +50,12 @@ void main() {
       serviceUrl: _url,
       tenant: 'tenant-1',
       from: '28:app-id',
-      fromAadObjectId: 'oid-ada',
+      fromAadObjectId: 'ada00000-0000-4000-8000-000000000001',
     );
-    expect('${said.actor}', 'teams:tenant-1/oid-ada');
+    expect(
+      '${said.actor}',
+      'teams:tenant-1/ada00000-0000-4000-8000-000000000001',
+    );
   });
 
   test('no actor without a tenant, or with a sender that is neither', () {
@@ -118,6 +124,26 @@ void main() {
       expect(replying([without('senderId')]).quote, isNull);
       final named = replying([without('senderName')]).quote!;
       expect(named.senderName, isNull);
+    });
+  });
+
+  group('ids', () {
+    test('a Teams user id is a 28: or 29: channel account', () {
+      expect(TeamsUserId.parse('29:1bea')?.isBot, isFalse);
+      expect(TeamsUserId.parse('28:app-id')?.isBot, isTrue);
+      for (final bad in ['', '29:', '30:1bea', 'a:1personal', '29:1 bea']) {
+        expect(TeamsUserId.parse(bad), isNull, reason: bad);
+      }
+    });
+
+    test('an Entra object id is a GUID, held in lower case', () {
+      expect(
+        EntraObjectId.parse('DE2CB25C-8A68-4ED2-B777-F322F2A08E67')?.value,
+        'de2cb25c-8a68-4ed2-b777-f322f2a08e67',
+      );
+      for (final bad in ['', 'oid-ada', '29:1bea', 'de2cb25c-8a68-4ed2-b777']) {
+        expect(EntraObjectId.parse(bad), isNull, reason: bad);
+      }
     });
   });
 }
