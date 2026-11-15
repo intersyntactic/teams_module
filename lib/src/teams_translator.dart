@@ -18,6 +18,13 @@ typedef _Where = ({String conversation, String message});
 /// To answer, it has to know which chat each message came from. It learns
 /// that only from what the journey path delivers back, through [joined] and
 /// [heard], so replaying the path after a restart rebuilds it.
+///
+/// To name who wrote a quoted message, it has to know which Entra user a
+/// Teams channel id `29:…` belongs to, and a quote gives only the channel
+/// id. It learns that from every message given to [said], so giving it the
+/// witnessed arrivals again, in order, after a restart rebuilds it. Nothing
+/// is asked of Teams: who wrote a quote is whatever the record already
+/// knows (Nick, 15 Nov).
 final class TeamsTranslator {
   /// How to reach each chat joined.
   final _serviceUrls = <String, Uri>{};
@@ -25,16 +32,35 @@ final class TeamsTranslator {
   /// Where each [UserSaid] heard was said, by its id.
   final _heard = <TurnId, _Where>{};
 
+  /// Each Teams user's Entra object id, by their channel id.
+  final _aadObjectIds = <String, String>{};
+
   /// [message] as a [UserSaid], with a [TeamsConversation] to append before
   /// it when the chat is new to this journey path or Teams has moved it.
-  /// Null when Teams named no sender, or the message has no words.
+  /// A Reply carries what it quotes, and may then have no words of its own:
+  /// an @-mention of the bot on a quoted message says "look at this". Null
+  /// when Teams named no sender, or the message has no words and quotes
+  /// nothing.
   ({TeamsConversation? joined, UserSaid said})? said(TeamsMessage message) {
+    // Learnt first, so a person quoting themselves is named even when this
+    // is the first the record has heard from them.
+    if ((message.from, message.fromAadObjectId) case (
+      final from?,
+      final aad?,
+    )) {
+      _aadObjectIds[from] = aad;
+    }
     final author = message.actor;
     final text = _plain(message.text ?? '');
     final source = SourceMessageId.parse(
       _source(message.conversation, message.id),
     );
-    if (author == null || text.isEmpty || source == null) return null;
+    final quotes = switch (message.quote) {
+      final q? => _quote(message, q),
+      null => null,
+    };
+    if (author == null || source == null) return null;
+    if (text.isEmpty && quotes == null) return null;
     return (
       joined: _serviceUrls[message.conversation] == message.serviceUrl
           ? null
@@ -42,7 +68,31 @@ final class TeamsTranslator {
               id: message.conversation,
               serviceUrl: message.serviceUrl,
             ),
-      said: UserSaid(author: author, source: source, text: text),
+      said: UserSaid(
+        author: author,
+        source: source,
+        text: text,
+        quotes: quotes,
+      ),
+    );
+  }
+
+  /// What [message] quotes, its author named when the record knows them
+  /// and otherwise by the name Teams showed. A quote is always of a message
+  /// in the same chat.
+  Quote? _quote(TeamsMessage message, TeamsQuote q) {
+    final source = SourceMessageId.parse(
+      _source(message.conversation, q.messageId),
+    );
+    if (source == null) return null;
+    final actor = teamsActor(
+      message.tenant,
+      channelId: q.senderId,
+      aadObjectId: _aadObjectIds[q.senderId],
+    );
+    return Quote(
+      source: source,
+      author: actor == null ? Unknown(q.senderName) : Known(actor),
     );
   }
 
