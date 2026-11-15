@@ -17,14 +17,16 @@ void main() {
   late List<String> logged;
   late bool keysServed;
   late List<Uint8List> witnessed;
-  late bool witnessFails;
+
+  /// What the airlock answers next, the body already handed over.
+  late AirlockAnswer Function() answer;
 
   setUp(() async {
     events = [];
     logged = [];
     keysServed = true;
     witnessed = [];
-    witnessFails = false;
+    answer = () => const AirlockWitnessed('ab12');
     final relay = TeamsRelay(
       spec: const TeamsSourceSpec(appId: appId, tenantAllowlist: {tenant}),
       keys: BotFrameworkKeySource(
@@ -36,9 +38,9 @@ void main() {
         now: () => now,
       ),
       onEvent: (event) async => events.add(event),
-      witness: (body) {
-        if (witnessFails) throw const FileSystemException('disk full');
+      witness: (body) async {
         witnessed.add(body);
+        return answer();
       },
       now: () => now,
       log: logged.add,
@@ -225,25 +227,46 @@ void main() {
     });
 
     test('unrecorded is a 500 and handed on to no one', () async {
-      witnessFails = true;
+      answer = () => const AirlockNotWitnessed('socket: refused');
       final (status, _, _) = await post(message());
       expect(status, 500);
       expect(events, isEmpty);
       // One line, saying the status sent: a watcher keyed on "500" fires.
       expect(logged, [
-        'teams relay: 500 message: witness failed: FileSystemException',
+        'teams relay: 500 message: not witnessed: socket: refused',
       ]);
+    });
+
+    test('a witness that throws is unrecorded too', () async {
+      answer = () => throw const FileSystemException('gone');
+      expect((await post(message())).$1, 500);
+      expect(logged.single, endsWith('not witnessed: FileSystemException'));
+    });
+
+    test('a record that failed partway is a 200, handed on, and said loudly: '
+        'it may be in, so it is not sent again', () async {
+      answer = () => const AirlockRecordFailed('object not kept');
+      final (status, _, _) = await post(message());
+      expect(status, 200);
+      expect(events, hasLength(1));
+      expect(logged, [
+        'teams relay: 200 message: RECORD FAILED, not resent, check the '
+            'record: object not kept',
+      ]);
+      // Teams' repeat is a repeat, not a second try at the record.
+      await post(message());
+      expect(witnessed, hasLength(1));
     });
 
     test(
       "Teams' retry of an unrecorded message is taken and recorded",
       () async {
-        witnessFails = true;
+        answer = () => const AirlockNotWitnessed('socket: refused');
         await post(message());
-        witnessFails = false;
+        answer = () => const AirlockWitnessed('ab12');
         final (status, _, _) = await post(message());
         expect(status, 200);
-        expect(witnessed, hasLength(1));
+        expect(witnessed, hasLength(2));
         expect(events, hasLength(1));
       },
     );
