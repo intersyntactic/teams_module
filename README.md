@@ -65,9 +65,13 @@ documentation or inference only).
 - A Teams message id is the millisecond it was posted (`1794736789259` is
   09:59:49.259 UTC on 15 Nov), unique only within its conversation. So a
   message is named by both: `<conversation>|<message id>`. Measured.
-- Every message measured so far was posted in a team's **General** channel,
-  whose id is also the team's id. A post in any other channel is
-  unmeasured: it should arrive with that channel's id in
+- A team's first channel has the team's own id. It is created as General,
+  but its owner can rename it, so the name is no guide: in the "AI
+  Forensic Agents" team it is called Intelligent Reports, and a post there
+  arrived with `channelData.channel.id`, `channelData.teamsChannelId` and
+  `channelData.team.id` all the team's id. Measured, 15 Nov. Every channel
+  message measured so far was in a team's first channel. A post in any
+  other channel is unmeasured: it should arrive with that channel's id in
   `channelData.channel.id` and the team's in `channelData.team.id`.
 
 **Joins.**
@@ -76,8 +80,10 @@ documentation or inference only).
   at the same moment: a `conversationUpdate` (`channelData.eventType`
   `teamMemberAdded`, with the bot in `membersAdded`) and an
   `installationUpdate` with `action` `add`. Both arrive in the team's
-  General channel, whichever channel the installer picked (that one is in
-  `channelData.settings.selectedChannel`). The reading takes the
+  first channel, the conversation whose id is the team's. The channel the
+  installer picked is in `channelData.settings.selectedChannel`; both
+  times it was the first channel too, so whether the join follows a
+  different pick is unmeasured. The reading takes the
   `conversationUpdate` as the join and the `installationUpdate` as nothing,
   so one join is read once. Measured on 15 Nov, for two teams in Hart's
   tenant.
