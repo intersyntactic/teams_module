@@ -39,6 +39,7 @@ import 'package:pointycastle/signers/rsa_signer.dart';
 
 import 'bot_framework_keys.dart';
 import 'teams_event.dart';
+import 'teams_ids.dart';
 
 /// The issuer of every token the Bot Connector sends to a bot.
 const botFrameworkIssuer = 'https://api.botframework.com';
@@ -396,10 +397,17 @@ TeamsEvent? _read(
   final serviceUrl = Uri.parse(a.string('serviceUrl'));
   final conversationType = conversation.stringOrNull('conversationType');
   final timestamp = a.stringOrNull('timestamp');
+  // Each id is read into its type here, where it enters, and nowhere after.
+  // One not in its proper form is read as absent: a sender Teams names
+  // wrongly is no one, rather than someone made up.
+  TeamsUserId? user(String? s) => s == null ? null : TeamsUserId.parse(s);
   final from = a.objectOrNull('from');
-  final fromId = from?.stringOrNull('id');
-  final fromAadObjectId = from?.stringOrNull('aadObjectId');
-  final recipient = a.objectOrNull('recipient')?.stringOrNull('id');
+  final fromId = user(from?.stringOrNull('id'));
+  final fromAadObjectId = switch (from?.stringOrNull('aadObjectId')) {
+    final s? => EntraObjectId.parse(s),
+    null => null,
+  };
+  final recipient = user(a.objectOrNull('recipient')?.stringOrNull('id'));
   final text = a.stringOrNull('text');
   // As they came: @-mentions, and the quoted-reply entity that says which
   // earlier message a reply quotes. That is how a free-text reply in a chat
@@ -408,8 +416,10 @@ TeamsEvent? _read(
   final channelEventType = a
       .objectOrNull('channelData')
       ?.stringOrNull('eventType');
-  List<String> ids(String k) =>
-      a.objectsOrNull(k)?.map((m) => m.string('id')).toList() ?? const [];
+  List<TeamsUserId> ids(String k) => [
+    for (final m in a.objectsOrNull(k) ?? const <JsonObject>[])
+      ?user(m.string('id')),
+  ];
   return switch (type) {
     'message' => TeamsMessage(
       conversation: conversationId,

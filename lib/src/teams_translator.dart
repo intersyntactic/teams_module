@@ -7,10 +7,6 @@ import 'teams_event.dart';
 import 'teams_conversation.dart';
 import 'teams_post.dart';
 
-/// A Teams message by where it was said: a message id is unique only within
-/// its chat.
-typedef _Where = ({String conversation, String message});
-
 /// Translates between Teams and a journey path, one per path.
 ///
 /// In: [said] turns a Teams message into a [UserSaid], for the journey path
@@ -35,7 +31,7 @@ final class TeamsTranslator {
   final _serviceUrls = <String, Uri>{};
 
   /// Where each [UserSaid] heard was said, by its id.
-  final _heard = <TurnId, _Where>{};
+  final _heard = <TurnId, TeamsMessageRef>{};
 
   /// [message] as a [UserSaid], with a [TeamsConversation] to append before
   /// it when the chat is new to this journey path or Teams has moved it.
@@ -49,9 +45,7 @@ final class TeamsTranslator {
     authors.learn(message);
     final author = message.actor;
     final text = _plain(message.text ?? '');
-    final source = SourceMessageId.parse(
-      _source(message.conversation, message.id),
-    );
+    final source = message.ref?.source;
     final quotes = switch (message.quote) {
       final q? => _quote(message, q),
       null => null,
@@ -80,18 +74,15 @@ final class TeamsTranslator {
   /// message never reached it. A quote is always of a message in the same
   /// chat.
   Quote? _quote(TeamsMessage message, TeamsQuote q) {
-    final source = SourceMessageId.parse(
-      _source(message.conversation, q.messageId),
-    );
-    if (source == null) return null;
-    final user = TeamsUserId.parse(q.senderId);
+    final quoted = TeamsMessageRef.of(message.conversation, q.messageId);
+    if (quoted == null) return null;
     final actor = teamsActor(
       message.tenant,
-      channelId: q.senderId,
-      aadObjectId: user == null ? null : authors.entraIdOf(user)?.value,
+      user: q.senderId,
+      entra: authors.entraIdOf(q.senderId),
     );
     return Quote(
-      source: source,
+      source: quoted.source,
       author: actor == null ? UnknownAuthor(q.senderName) : KnownAuthor(actor),
       preview: q.preview,
     );
@@ -110,7 +101,7 @@ final class TeamsTranslator {
   /// every reply to it would be lost.
   void heard(TurnId id, UserSaid said) {
     if (!said.author.value.startsWith('teams:')) return;
-    final where = _where(said.source);
+    final where = TeamsMessageRef.fromSource(said.source);
     if (where == null || !_serviceUrls.containsKey(where.conversation)) {
       throw StateError('$id was said in a Teams chat never joined');
     }
@@ -128,20 +119,6 @@ final class TeamsTranslator {
       replyToId: where.message,
       activity: {'type': 'message', 'text': reply.text},
     );
-  }
-
-  /// A Teams message's source id: its chat, then `|` and its message id. It
-  /// is split at the last `|`, so only the message id has to be free of one;
-  /// Teams' are the millisecond they were sent, in digits, which is also why
-  /// one alone can name two messages in two chats.
-  static String _source(String conversation, String message) =>
-      '$conversation|$message';
-
-  static _Where? _where(SourceMessageId source) {
-    final s = source.value;
-    final bar = s.lastIndexOf('|');
-    if (bar <= 0 || bar == s.length - 1) return null;
-    return (conversation: s.substring(0, bar), message: s.substring(bar + 1));
   }
 
   /// Text without Teams' `<at>…</at>` mentions and quote tags.

@@ -38,7 +38,7 @@ TeamsCardAction press(
   id: 'press-of-$card',
   serviceUrl: Uri.parse('https://smba.trafficmanager.net/amer/'),
   tenant: tenantId,
-  fromAadObjectId: user,
+  fromAadObjectId: user == null ? null : EntraObjectId.parse(user),
   card: card,
   value: JsonObject.of({
     'action': {'verb': ?verb},
@@ -150,7 +150,7 @@ void main() {
       id: 'act-1',
       serviceUrl: Uri.parse('https://smba.trafficmanager.net/amer/'),
       tenant: tenant,
-      fromAadObjectId: ada,
+      fromAadObjectId: EntraObjectId.parse(ada),
       text: 'hi',
     );
     expect(write(message).inOrder, isEmpty);

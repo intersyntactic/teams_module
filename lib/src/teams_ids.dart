@@ -1,3 +1,58 @@
+import 'package:is_conversation_shapes/is_conversation_shapes.dart';
+
+/// A Teams message by where it was said: its conversation, and its id there.
+/// Teams makes a message id unique only within its conversation (it is the
+/// millisecond the message was sent, in digits), so one alone can name two
+/// messages in two chats.
+///
+/// On a journey path it is a [SourceMessageId], `<conversation>|<message>`,
+/// and this is the one way to that string and back: split at the last `|`,
+/// so only the message id has to be free of one.
+final class TeamsMessageRef {
+  const TeamsMessageRef._(this.conversation, this.message);
+
+  /// The conversation's id.
+  final String conversation;
+
+  /// The message's id within [conversation].
+  final String message;
+
+  /// The message [message] in [conversation]; null when either is empty or
+  /// has whitespace, or [message] has a `|`.
+  static TeamsMessageRef? of(String conversation, String message) =>
+      _part.hasMatch(conversation) &&
+          _part.hasMatch(message) &&
+          !message.contains('|')
+      ? TeamsMessageRef._(conversation, message)
+      : null;
+
+  /// The message [source] names, when it names a Teams message.
+  static TeamsMessageRef? fromSource(SourceMessageId source) {
+    final s = source.value;
+    final bar = s.lastIndexOf('|');
+    if (bar < 0) return null;
+    return of(s.substring(0, bar), s.substring(bar + 1));
+  }
+
+  /// This message as a journey path names it.
+  SourceMessageId get source =>
+      SourceMessageId.parse('$conversation|$message')!;
+
+  static final _part = RegExp(r'^\S+$');
+
+  @override
+  bool operator ==(Object other) =>
+      other is TeamsMessageRef &&
+      other.conversation == conversation &&
+      other.message == message;
+
+  @override
+  int get hashCode => Object.hash(conversation, message);
+
+  @override
+  String toString() => '$conversation|$message';
+}
+
 /// A Teams channel account id: `29:…` for a person, `28:<app id>` for a
 /// bot. It names an account only to this bot, so it is not who the person
 /// is anywhere else; that is their [EntraObjectId].

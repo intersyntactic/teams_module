@@ -24,9 +24,12 @@ void main() {
       expect(said.id, '1730881234567');
       expect(said.serviceUrl, Uri.parse(serviceUrl));
       expect(said.timestamp, '2026-11-06T10:00:00.000Z');
-      expect(said.from, '29:1ada');
-      expect(said.fromAadObjectId, 'ada00000-0000-4000-8000-000000000001');
-      expect(said.recipient, '28:$appId');
+      expect(said.from, TeamsUserId.parse('29:1ada'));
+      expect(
+        said.fromAadObjectId,
+        EntraObjectId.parse('ada00000-0000-4000-8000-000000000001'),
+      );
+      expect(said.recipient, TeamsUserId.parse('28:$appId'));
       expect(said.text, 'Looks right to me');
       expect(said.entities, isNull);
       expect(said.replyTo, isNull);
@@ -200,7 +203,7 @@ void main() {
         }..remove('text'),
       );
       final changed = d.event! as TeamsConversationUpdate;
-      expect(changed.added, ['28:$appId']);
+      expect(changed.added, [TeamsUserId.parse('28:$appId')]);
       expect(changed.removed, isEmpty);
     });
   });
@@ -558,9 +561,9 @@ String _described(TeamsEvent e) => jsonEncode({
   'tenant': e.tenant,
   'conversationType': e.conversationType,
   'timestamp': e.timestamp,
-  'from': e.from,
-  'fromAadObjectId': e.fromAadObjectId,
-  'recipient': e.recipient,
+  'from': e.from?.value,
+  'fromAadObjectId': e.fromAadObjectId?.value,
+  'recipient': e.recipient?.value,
   ...switch (e) {
     TeamsMessage() => {
       'text': e.text,
@@ -575,7 +578,10 @@ String _described(TeamsEvent e) => jsonEncode({
     TeamsMessageDelete() => {'channelEventType': e.channelEventType},
     TeamsCardAction() => {'card': e.card, 'value': e.value?.asUncheckedMap()},
     TeamsInvoke() => {'name': e.name, 'value': e.value?.asUncheckedMap()},
-    TeamsConversationUpdate() => {'added': e.added, 'removed': e.removed},
+    TeamsConversationUpdate() => {
+      'added': [for (final u in e.added) u.value],
+      'removed': [for (final u in e.removed) u.value],
+    },
     TeamsInstallationUpdate() => {'action': e.action},
   },
 });
