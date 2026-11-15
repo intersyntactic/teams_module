@@ -156,11 +156,10 @@ packages:
   is_annotation_shapes:
     dependency: "direct main"
     description:
-      path: "."
-      ref: "4f2759894f6ae37211bece1becaf8ea1a629b897"
-      resolved-ref: "4f2759894f6ae37211bece1becaf8ea1a629b897"
-      url: "https://github.com/intersyntactic/annotation_shapes.git"
-    source: git
+      name: is_annotation_shapes
+      sha256: b2e8d991eade145960b1270df75218f1cf36d1782004d7c17ed6dbe0b3717cca
+      url: "https://pub.dev"
+    source: hosted
     version: "0.2.1"
   is_content_id:
     dependency: transitive
@@ -182,8 +181,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "180f140d"
-      resolved-ref: "180f140d1eee7f25a5b5552300942117ca15ac08"
+      ref: "4a78b64"
+      resolved-ref: "4a78b64da84ec16a8b158ec9a1deb1677b1c1698"
       url: "https://github.com/intersyntactic/docking_port.git"
     source: git
     version: "0.0.1"
