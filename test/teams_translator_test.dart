@@ -23,7 +23,9 @@ TeamsMessage messageOf(Map<String, Object?> activity) =>
         ).event!
         as TeamsMessage;
 
-final ada = ActorId.parse('teams:$tenant/oid-ada')!;
+final ada = ActorId.parse(
+  'teams:$tenant/ada00000-0000-4000-8000-000000000001',
+)!;
 final agentId = ActorId.parse('agent:demo')!;
 
 /// [activity] said in the conversation [conversation].
@@ -170,10 +172,16 @@ void main() {
       ],
     };
 
-    final bea = ActorId.parse('teams:$tenant/oid-bea')!;
+    final bea = ActorId.parse(
+      'teams:$tenant/bea00000-0000-4000-8000-000000000002',
+    )!;
     Map<String, Object?> fromBea(String id) => {
       ...message(id: id, text: '<at>Bot</at> hi'),
-      'from': {'id': '29:1bea', 'aadObjectId': 'oid-bea', 'name': 'Bea'},
+      'from': {
+        'id': '29:1bea',
+        'aadObjectId': 'bea00000-0000-4000-8000-000000000002',
+        'name': 'Bea',
+      },
     };
 
     test('of only an @-mention says "look at this", by whom it quotes', () {
@@ -290,11 +298,28 @@ void main() {
             id: 'f:1',
             serviceUrl: Uri.parse(serviceUrl),
             from: '29:1bea',
-            fromAadObjectId: 'oid-bea',
+            fromAadObjectId: 'bea00000-0000-4000-8000-000000000002',
           ),
         );
-      expect(authors.aadObjectIdOf('29:1bea'), 'oid-bea');
-      expect(authors.aadObjectIdOf('29:1ada'), isNull);
+      expect(
+        authors.entraIdOf(TeamsUserId.parse('29:1bea')!),
+        EntraObjectId.parse('BEA00000-0000-4000-8000-000000000002'),
+      );
+      expect(authors.entraIdOf(TeamsUserId.parse('29:1ada')!), isNull);
+    });
+
+    test('learns nothing from an id in the wrong form', () {
+      TeamsMessage sentBy(String from, String aad) => TeamsMessage(
+        conversation: 'a:1personal',
+        id: 'm',
+        serviceUrl: Uri.parse(serviceUrl),
+        from: from,
+        fromAadObjectId: aad,
+      );
+      final authors = TeamsAuthors()
+        ..learn(sentBy('29:1bea', 'oid-bea'))
+        ..learn(sentBy('a:1personal', 'bea00000-0000-4000-8000-000000000002'));
+      expect(authors.entraIdOf(TeamsUserId.parse('29:1bea')!), isNull);
     });
 
     test('of a bot names the bot, which needs no record', () {

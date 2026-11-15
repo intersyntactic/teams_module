@@ -56,7 +56,11 @@ Map<String, Object?> message({
   'channelId': 'msteams',
   'serviceUrl': serviceUrl,
   'timestamp': '2026-11-06T10:00:00.000Z',
-  'from': {'id': '29:1ada', 'aadObjectId': 'oid-ada', 'name': 'Ada'},
+  'from': {
+    'id': '29:1ada',
+    'aadObjectId': 'ada00000-0000-4000-8000-000000000001',
+    'name': 'Ada',
+  },
   'recipient': {'id': '28:$appId', 'name': 'Bot'},
   'conversation': {
     'id': 'a:1personal',

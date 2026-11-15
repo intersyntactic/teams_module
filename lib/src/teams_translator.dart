@@ -2,6 +2,7 @@ import 'package:is_conversation_shapes/is_conversation_shapes.dart';
 import 'package:is_shapes/is_shapes.dart';
 
 import 'teams_authors.dart';
+import 'teams_ids.dart';
 import 'teams_event.dart';
 import 'teams_conversation.dart';
 import 'teams_post.dart';
@@ -81,10 +82,11 @@ final class TeamsTranslator {
       _source(message.conversation, q.messageId),
     );
     if (source == null) return null;
+    final user = TeamsUserId.parse(q.senderId);
     final actor = teamsActor(
       message.tenant,
       channelId: q.senderId,
-      aadObjectId: authors.aadObjectIdOf(q.senderId),
+      aadObjectId: user == null ? null : authors.entraIdOf(user)?.value,
     );
     return Quote(
       source: source,
