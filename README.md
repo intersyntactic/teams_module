@@ -73,14 +73,16 @@ a station coloured by who wrote it, people and agents alike.
 
 ```
 TEAMS_APP_ID=<the bot's app id> TEAMS_TENANT_ALLOWLIST=<tenant ids, comma-separated> \
-AIRLOCK_SOCKET=<the airlock service's Unix socket> \
+JOURNAL_SOCKET=<the record's writer's Unix socket> \
   dart run bin/teams_relay.dart
 ```
 
 It listens on `127.0.0.1:8087` for a TLS proxy in front. The bot's messaging
 endpoint is `https://<host>/api/messages`. Every accepted request's body is
-witnessed through the airlock before Teams gets its response; the relay keeps
-no record of its own, so it builds and runs compiled as well as from source.
+recorded with the record's one writer, as an `arrived` entry, before Teams
+gets its response. The writer's sender table must let the relay's user send
+`arrived`. The relay keeps no record of its own, so it builds and runs
+compiled as well as from source.
 For the arm64 box:
 
 ```
