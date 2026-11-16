@@ -25,9 +25,3 @@ dev_dependencies:
   is_journal: ^0.5.0
   lints: ^6.1.0
   test: ^1.33.0
-
-# Until docking_port moves to is_conversation_shapes ^0.5.0 with
-# Changed.change (docking-port-e1, 16 Nov). Drop this and re-pin
-# is_docking_port then.
-dependency_overrides:
-  is_conversation_shapes: ^0.5.0
