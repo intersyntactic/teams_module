@@ -241,11 +241,13 @@ packages beside this one:
   checks the id with
   `curl -sL https://pub.dev/api/archives/is_teams_reply-<version>.tar.gz | shasum -a 256`.
 - `render_runner/`: the render runner, the program every renderer is
-  built into. It runs the renderer and records what it drew: it follows
-  the record for `post-decided` entries, answers each one the airlock
-  allowed that names its renderer's id, and records a `rendered` entry
-  following it. It keeps no state: on a restart it reads the record
-  again and answers only posts still at their tip. Its `renderer_id` tool
+  built into. It runs the renderer and records what it drew. A post is
+  never written to the record: what it holds is the airlock's decision
+  about one, a `post-decided` entry. The runner follows the record for
+  those, answers each that allowed the post and names its renderer's id,
+  and records a `rendered` entry following the decision. It keeps no
+  state: on a restart it reads the record again and answers only
+  decisions still at their tip. Its `renderer_id` tool
   reads a renderer's id from a build's `pubspec.lock`, and refuses one that
   isn't an archive on pub.dev.
 - `teams_reply/`: the teams-reply program, the render runner built with

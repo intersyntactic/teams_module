@@ -1,7 +1,8 @@
 /// teams-reply: the render runner built with is_teams_reply as its
-/// renderer. It follows the record for posts the airlock allowed naming it,
-/// and records each one's body. It holds no secret and reaches no network: only the record's
-/// read socket and its writer's socket, both Unix.
+/// renderer. It follows the record for the airlock's decisions to post a
+/// Teams reply naming it, and records the body each reply is to carry. It
+/// holds no secret and reaches no network: only the record's read socket
+/// and its writer's socket, both Unix.
 ///
 ///   JOURNAL_READ_SOCKET=/run/...sock  the record's read socket. Required.
 ///   JOURNAL_SOCKET=/run/...sock       the record's writer. Required unless

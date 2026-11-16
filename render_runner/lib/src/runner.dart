@@ -2,15 +2,20 @@
 /// the renderer and records what it drew (Nick, 16 Nov 13:49: the airlock
 /// doesn't call renderers; a renderer follows the record).
 ///
-/// It follows the record for `post-decided` entries, and for each one the
-/// airlock allowed, naming this build's renderer, still unanswered, reads
-/// the entries the post draws from, hands them to the renderer, and records
-/// what it drew as a `rendered` entry following the `post-decided`. Each
-/// post is a chain of its own (decided, then rendered, then returned), so
-/// the writer's tip check refuses a second `rendered` for one post: two
-/// runners racing, or one restarting, cannot answer a post twice. On a
-/// restart it reads the record from the start, asks each post's tip, and
-/// renders only those still at their tip; it keeps no state of its own.
+/// A post is a message to a site, such as a reply in Teams. It is never
+/// written to the record; what the record holds is the airlock's decision
+/// about it, a `post-decided` entry, made before the post's body exists.
+///
+/// The runner follows the record for those decisions, and answers each one
+/// that allowed the post, names this build's renderer, and is still
+/// unanswered: it reads the entries the post is to be drawn from, hands
+/// them to the renderer, and records what it drew as a `rendered` entry
+/// following the decision. Each decision starts a chain of its own
+/// (decided, then rendered, then returned), so the writer's tip check
+/// refuses a second `rendered` after one decision: two runners racing, or
+/// one restarting, cannot answer a decision twice. On a restart it reads
+/// the record from the start, asks each decision's tip, and answers only
+/// those still at their tip; it keeps no state of its own.
 library;
 
 import 'dart:convert';
@@ -23,10 +28,10 @@ import 'journal_reader.dart';
 import 'write_entry.dart';
 
 /// The renderer this runner was built with, from `-Drenderer=<id>`: the
-/// shasum of the renderer package's `lib/*.dart` (see [RendererId]). Null
+/// sha256 of the renderer's archive on pub.dev (see [RendererId]). Null
 /// when the build named none, or named something that is not an id, and
-/// then the runner must not start: it would answer no post, or every
-/// post named for a renderer it is not.
+/// then the runner must not start: it would answer no decision, or every
+/// decision naming a renderer it is not.
 RendererId? compiledRenderer() =>
     RendererId.parse(const String.fromEnvironment('renderer'));
 
@@ -55,10 +60,10 @@ final class RenderRunner {
   /// What the log calls this runner, such as `teams-reply`.
   final String name;
 
-  /// The renderer it was built with: it answers only posts naming this id,
-  /// and reports it in each `rendered` entry. The writer stamps entries with
-  /// its own code, never the sender's, so this is the record's only trace of
-  /// which renderer drew a post, and readers take it as a claim.
+  /// The renderer it was built with: it answers only decisions naming this
+  /// id, and reports it in each `rendered` entry, as a claim. What proves
+  /// which renderer drew a body is the runner's build, which the decision
+  /// records as the renderer's executable.
   final RendererId renderer;
 
   /// Follows the record from the start.
@@ -67,9 +72,9 @@ final class RenderRunner {
   final Future<Got> Function(String entry) get;
   final WriteEntry write;
 
-  /// The body drawn from the post's entries, which are already read and
-  /// checked, in the order the post names them. The renderer is pure: the
-  /// same entries draw the same body.
+  /// The body drawn from the entries the post names, already read and
+  /// checked, in the order it names them. The renderer is pure: the same
+  /// entries draw the same body.
   final Outcome<String> Function(List<FollowedEntry> entries) render;
 
   /// Renders and logs what it would write, and writes nothing: a deploy
@@ -80,7 +85,7 @@ final class RenderRunner {
 
   static void _silent(String _) {}
 
-  /// Follows the record until it ends, answering each post naming it.
+  /// Follows the record until it ends, answering each decision naming it.
   Future<void> run() async {
     await for (final followed in follow(const [DecidedPost.kind])) {
       switch (followed) {
@@ -97,7 +102,7 @@ final class RenderRunner {
   Future<void> answer(FollowedEntry decided) async {
     final ours = _ours(decided);
     if (ours == null) return;
-    // A read that fails says nothing about the post: it is left unanswered,
+    // A read that fails says nothing about the decision: it is left unanswered,
     // never refused, since a refusal is kept for good. The next start asks
     // its tip again.
     final Outcome<String> body;
@@ -140,9 +145,9 @@ final class RenderRunner {
     });
   }
 
-  /// [decided]'s id and post if this runner answers it, or null: denied,
-  /// named for another renderer, or not a post's entry at all, which is
-  /// logged, since the writer let it in under the kind.
+  /// [decided]'s id and the post it decided, if this runner answers it, or
+  /// null: denied, naming another renderer, or not a decision about a post
+  /// at all, which is logged, since the writer let it in under the kind.
   ({EntryId id, Post post})? _ours(FollowedEntry decided) {
     final id = EntryId.parse(decided.hash);
     final DecidedPost read;
