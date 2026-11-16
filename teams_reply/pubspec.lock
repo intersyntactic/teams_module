@@ -45,9 +45,10 @@ packages:
   is_teams_reply:
     dependency: "direct main"
     description:
-      path: "../is_teams_reply"
-      relative: true
-    source: path
+      name: is_teams_reply
+      sha256: "21db384d8b0236770ee11d7333a2a1e888cff4984e8ecc15ed86b84cc5e68a6f"
+      url: "https://pub.dev"
+    source: hosted
     version: "0.1.0"
   lints:
     dependency: "direct dev"
