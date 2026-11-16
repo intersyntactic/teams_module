@@ -4,9 +4,9 @@
 ///
 ///   TEAMS_APP_ID=...                 the bot's Microsoft app id: the
 ///                                    audience every token must name
-///   TEAMS_TENANT_ALLOWLIST=t1,t2     tenants whose activities are taken;
-///                                    empty is "any correctly signed tenant"
-///                                    and should only be used in tests
+///   TEAMS_TENANT_ALLOWLIST=t1,t2     tenants whose activities are taken.
+///                                    Required: empty would take any
+///                                    correctly signed tenant, so it aborts
 ///   PORT=8087                        optional; a non-port aborts
 ///   HOST=127.0.0.1                   optional; the address to bind. The
 ///                                    default is loopback, for a proxy on
@@ -47,10 +47,11 @@ Future<void> main() async {
       if (t.trim().isNotEmpty) t.trim().toLowerCase(),
   };
   if (allow.isEmpty) {
-    stderr.writeln(
-      'warning: TEAMS_TENANT_ALLOWLIST is empty; any correctly signed '
-      'tenant will be accepted',
-    );
+    // Refuse to start rather than fail open: anyone in any tenant who
+    // installs the bot would start journeys here. Tests that want any
+    // tenant build a TeamsSourceSpec directly.
+    stderr.writeln('abort: TEAMS_TENANT_ALLOWLIST not set');
+    exit(78);
   }
 
   final rawPort = env['PORT'];
