@@ -16,7 +16,15 @@ void main() {
       expect(d.outcome, TeamsGateOutcome.trigger);
       expect(d.status, 200);
       expect(d.invokeResponse, isNull);
-      expect(d.seenKey, jsonEncode(['a:1personal', '1730881234567']));
+      expect(
+        d.seenKey,
+        jsonEncode([
+          'a:1personal',
+          'message',
+          '1730881234567',
+          '2026-11-06T10:00:00.000Z',
+        ]),
+      );
       final said = d.event! as TeamsMessage;
       expect(said.tenant, tenant);
       expect(said.conversation, 'a:1personal');
@@ -252,6 +260,31 @@ void main() {
       final again = _gate(cardAction(), hasSeen: seen.contains);
       expect(again.outcome, TeamsGateOutcome.ignore);
       expect(again.invokeResponse!.string('value'), 'Got it');
+    });
+
+    // Measured 16 Nov: an edit, then a delete 18 s later and its undo 2 s
+    // after that, all carrying the message's id. The delete and the undo
+    // were dropped as repeats of the edit.
+    test('a change to a message seen moments ago is not a repeat', () {
+      final seen = <String>{};
+      for (final (type, eventType, at) in [
+        ('message', null, '2026-11-16T02:19:00.000Z'),
+        ('messageUpdate', 'editMessage', '2026-11-16T02:19:49.762Z'),
+        ('messageDelete', 'softDeleteMessage', '2026-11-16T02:20:07.000Z'),
+        ('messageUpdate', 'undeleteMessage', '2026-11-16T02:20:09.000Z'),
+      ]) {
+        final d = _gate({
+          ...message(),
+          'type': type,
+          'timestamp': at,
+          'channelData': {
+            'tenant': {'id': tenant},
+            'eventType': ?eventType,
+          },
+        }, hasSeen: seen.contains);
+        expect(d.outcome, TeamsGateOutcome.trigger, reason: '$type at $at');
+        seen.add(d.seenKey!);
+      }
     });
 
     test('the same activity id in another conversation is not a repeat', () {

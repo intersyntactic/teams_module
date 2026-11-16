@@ -96,10 +96,13 @@ final class TeamsGateDecision {
   /// not.
   final JsonObject? invokeResponse;
 
-  /// What the caller adds to its seen set: the conversation id and activity
-  /// id, as a JSON list so no id can run into the other. Present on every
-  /// outcome except a rejection, so an unauthenticated request never fills
-  /// the set.
+  /// What the caller adds to its seen set: the conversation id, the
+  /// activity's type, its id and its timestamp, as a JSON list so no part
+  /// can run into the next. The id alone is not enough: an edit, delete or
+  /// restore of a message carries the message's id, and each has its own
+  /// type or time (measured 16 Nov: a delete 18 s after an edit was dropped
+  /// as a repeat). Present on every outcome except a rejection, so an
+  /// unauthenticated request never fills the set.
   final String? seenKey;
 
   bool get shouldWake => outcome == TeamsGateOutcome.trigger;
@@ -301,7 +304,12 @@ TeamsGateDecision _decide(
 
   final type = a.string('type');
   final name = a.stringOrNull('name');
-  final seenKey = jsonEncode([conversation.string('id'), a.string('id')]);
+  final seenKey = jsonEncode([
+    conversation.string('id'),
+    type,
+    a.string('id'),
+    a.stringOrNull('timestamp'),
+  ]);
   final invokeResponse = type == 'invoke' && spec.wakeInvokes.contains(name)
       ? JsonObject.of({
           'statusCode': 200,
