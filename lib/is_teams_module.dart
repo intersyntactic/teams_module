@@ -4,10 +4,10 @@
 /// So far, the way in: [TeamsRelay], the endpoint Teams posts to; [teamsGate],
 /// which every delivery passes first; and the keys it checks signatures
 /// against, [BotFrameworkKeys], fetched by [BotFrameworkKeySource]; and
-/// [recordArrival], which records each accepted body with the record's one
-/// writer; and [teamsWitnessedEvent], which reads a recorded body back into
+/// [recordEvent], which records each accepted body with the record's one
+/// writer; and [teamsRecordedEvent], which reads a recorded body back into
 /// the same event, for whatever reads the record; and [TeamsReading], which
-/// tells the docking port what each recorded arrival is. Then
+/// tells the docking port what each recorded event is. Then
 /// [TeamsReceiver], which reads each event as the annotation shapes it
 /// writes, and a [StandInJourneyPath] to write them to until the module meets
 /// a real journey path; and [TeamsTranslator], which turns a Teams message
@@ -21,7 +21,7 @@ library;
 export 'src/bot_connector.dart';
 export 'src/bot_framework_keys.dart';
 export 'src/key_source.dart';
-export 'src/record_arrival.dart';
+export 'src/record_event.dart';
 export 'src/stand_in_journey_path.dart';
 export 'src/teams_event.dart';
 export 'src/teams_gate.dart';

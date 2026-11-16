@@ -34,7 +34,7 @@ permissions, so an organisation's IT has one thing to do: upload the app.
 
 ## What Teams sends, and how it is read
 
-The docking port gives this module's reading every arrival from the relay,
+The docking port gives this module's reading every event the relay recorded,
 in the record's order, and the reading says what each one is: something
 said, a conversation joined, or nothing to admit. These are the facts about
 Teams that reading rests on. Each says whether it was **measured** (seen in
@@ -88,7 +88,8 @@ documentation or inference only).
   so one join is read once. Measured on 15 Nov, for two teams in Hart's
   tenant.
 - The two activities of a join can arrive in either order, under a
-  millisecond apart: the `conversationUpdate` came first for one team and
+  millisecond apart for a team (215 ms in the one-to-one join seen): the
+  `conversationUpdate` came first for one team and
   the `installationUpdate` first for the other. The reading doesn't depend
   on the order. Measured in the record, 15 Nov; for a one-to-one chat the
   one join seen had the `conversationUpdate` first, so whether that order
@@ -112,7 +113,7 @@ documentation or inference only).
   anyone else. Measured for this bot in `membersAdded`, 15 Nov. A message
   *from* another bot is unmeasured.
 - A quote names its author only by channel id and display name, never an
-  Entra object id. So the author is named from earlier arrivals: if that
+  Entra object id. So the author is named from earlier events: if that
   person has sent something the record holds, the quote is attributed to
   them; otherwise it carries the display name Teams showed. Nothing is
   asked of Teams to find out. Measured shape, 14 Nov.
@@ -133,7 +134,7 @@ documentation or inference only).
 **Edits and deletes.** An edit is a `messageUpdate` reusing the message's
 id (`channelData.eventType` `editMessage`); a delete is a `messageDelete`
 (`softDeleteMessage`). Both shapes are from hand-written test bodies, so
-unmeasured. So is the arrival key planned for them,
+unmeasured. So is the docking port's key planned for them,
 `<type>:<id>@<timestamp>`, which rests on a redelivery keeping its
 timestamp and a second edit getting a new one. A restored message
 arriving as a `messageUpdate` with `undeleteMessage` is unmeasured too.
@@ -213,8 +214,10 @@ It listens on `127.0.0.1:8087` for a TLS proxy in front. The bot's messaging
 endpoint is `https://<host>/api/messages`. Every accepted request's body is
 recorded with the record's one writer, as an `arrived` entry, before Teams
 gets its response. The writer's sender table must let the relay's user send
-`arrived`. The relay keeps no record of its own, so it builds and runs
-compiled as well as from source.
+`arrived`. That kind keeps its old name until the writer takes a new one: an
+incoming Teams message is an event, not an arrival (Nick, 16 Nov). The relay
+keeps no record of its own, so it builds and runs compiled as well as from
+source.
 For the arm64 box:
 
 ```

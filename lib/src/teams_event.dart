@@ -93,7 +93,7 @@ ActorId? teamsActor(String? tenant, {TeamsUserId? user, EntraObjectId? entra}) {
 }
 
 /// What a Teams Reply quotes, read from its `quotedReply` entity: the shape
-/// seen in every witnessed reply so far, in a one-to-one chat and a group
+/// seen in every recorded reply so far, in a one-to-one chat and a group
 /// chat alike. Teams gives the quoted message's author only as a channel id
 /// and a display name, never an Entra object id.
 final class TeamsQuote {

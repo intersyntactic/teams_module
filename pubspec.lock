@@ -9,6 +9,15 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "111.0.0"
+  agent_loop:
+    dependency: transitive
+    description:
+      path: "."
+      ref: "207690a"
+      resolved-ref: "207690a4f542de3a8b7547da140c9f0d04410271"
+      url: "https://github.com/intersyntactic/agent_loop.git"
+    source: git
+    version: "0.0.0"
   analyzer:
     dependency: transitive
     description:
@@ -181,8 +190,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "4a78b64"
-      resolved-ref: "4a78b64da84ec16a8b158ec9a1deb1677b1c1698"
+      ref: "93248a4"
+      resolved-ref: "93248a4d23ae6941db4f98ff8d11a2210036b2a9"
       url: "https://github.com/intersyntactic/docking_port.git"
     source: git
     version: "0.0.1"
@@ -206,10 +215,10 @@ packages:
     dependency: "direct main"
     description:
       name: is_shapes
-      sha256: "8c018c3d827ef8d0cd1305af28be549d792b48eb5071707feee4be524a7c273f"
+      sha256: e67505aa1de76972b74ab0bbebaa536ad46883fcd0b80f669465caebe9dd5095
       url: "https://pub.dev"
     source: hosted
-    version: "0.4.0"
+    version: "0.4.3"
   lints:
     dependency: "direct dev"
     description:

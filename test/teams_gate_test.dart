@@ -8,7 +8,7 @@ import 'support/fixtures.dart';
 
 void main() {
   setUpAll(setUpKeys);
-  _witnessedTests();
+  _recordedTests();
 
   group('takes', () {
     test('a message in a one-to-one chat, with its text', () {
@@ -146,7 +146,7 @@ void main() {
 
     test('a quoted reply, with the entities that say what it quotes', () {
       // The quotedReply entity as a Reply in a one-to-one chat carried it,
-      // seen in a witnessed body on 2026-11-14. The gate passes entities on
+      // seen in a recorded body on 2026-11-14. The gate passes entities on
       // unread, which is what this proves.
       final entities = [
         {
@@ -472,8 +472,8 @@ void main() {
   });
 }
 
-void _witnessedTests() {
-  group('a witnessed body', () {
+void _recordedTests() {
+  group('a recorded body', () {
     final bodies = <String, Map<String, Object?>>{
       'message': {
         ...message(),
@@ -516,7 +516,7 @@ void _witnessedTests() {
       test('reads a $kind as the gate does', () {
         final body = utf8.encode(jsonEncode(activity));
         final gated = _gate(activity, body: body).event!;
-        expect(_described(teamsWitnessedEvent(body)!), _described(gated));
+        expect(_described(teamsRecordedEvent(body)!), _described(gated));
       });
     }
 
@@ -530,22 +530,22 @@ void _witnessedTests() {
       };
       final body = utf8.encode(jsonEncode(other));
       expect(_gate(other, body: body).status, 403);
-      expect(teamsWitnessedEvent(body)!.tenant, 'other-tenant');
+      expect(teamsRecordedEvent(body)!.tenant, 'other-tenant');
     });
 
     test('of a type no event is read as is null', () {
       final typing = {...message(), 'type': 'typing'}..remove('text');
-      expect(teamsWitnessedEvent(utf8.encode(jsonEncode(typing))), isNull);
+      expect(teamsRecordedEvent(utf8.encode(jsonEncode(typing))), isNull);
     });
 
     test('that is not an activity throws a FormatException', () {
       expect(
-        () => teamsWitnessedEvent(utf8.encode('[1]')),
+        () => teamsRecordedEvent(utf8.encode('[1]')),
         throwsFormatException,
       );
-      expect(() => teamsWitnessedEvent([0xff]), throwsFormatException);
+      expect(() => teamsRecordedEvent([0xff]), throwsFormatException);
       expect(
-        () => teamsWitnessedEvent(utf8.encode('{"type":"message"}')),
+        () => teamsRecordedEvent(utf8.encode('{"type":"message"}')),
         throwsFormatException,
       );
     });
