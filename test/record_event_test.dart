@@ -39,7 +39,7 @@ void main() {
     });
   });
 
-  group('recording an arrival', () {
+  group('recording an event', () {
     late Directory dir;
     late String path;
     ServerSocket? server;
@@ -83,7 +83,7 @@ void main() {
       Uint8List? request;
       await writer((_) => 'ok ab', sent: (r) => request = r);
       final bytes = Uint8List.fromList(utf8.encode('{  "text" :"x"}é'));
-      final a = await recordArrival(
+      final a = await recordEvent(
         path,
         source: 'teams',
         bytes: bytes,
@@ -103,24 +103,24 @@ void main() {
 
     test('reads the answer it gets back', () async {
       await writer((_) => 'failed disk full');
-      final a = await recordArrival(path, source: 'teams', bytes: Uint8List(1));
+      final a = await recordEvent(path, source: 'teams', bytes: Uint8List(1));
       expect((a as RecordFailed).why, 'disk full');
     });
 
     test('is unanswered when nothing listens', () async {
-      final a = await recordArrival(path, source: 'teams', bytes: Uint8List(1));
+      final a = await recordEvent(path, source: 'teams', bytes: Uint8List(1));
       expect(a, isA<RecordUnanswered>());
     });
 
     test('is unanswered when the writer closes without answering', () async {
       await writer((_) => null);
-      final a = await recordArrival(path, source: 'teams', bytes: Uint8List(1));
+      final a = await recordEvent(path, source: 'teams', bytes: Uint8List(1));
       expect((a as RecordUnanswered).why, 'closed before answering');
     });
 
     test('is unanswered when no answer comes in time', () async {
       await writer((_) => Completer<String?>().future);
-      final a = await recordArrival(
+      final a = await recordEvent(
         path,
         source: 'teams',
         bytes: Uint8List(1),

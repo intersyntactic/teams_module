@@ -7,8 +7,10 @@ import 'teams_gate.dart';
 import 'teams_ids.dart';
 import 'teams_translator.dart';
 
-/// The Teams module's reading, for the docking port: what each arrival from
-/// the Teams relay is, in the record's order.
+/// The Teams module's reading, for the docking port: what each event the
+/// Teams relay recorded is, in the record's order. The docking port hands
+/// each one over as an [Arrival], its name until it follows Nick's 16 Nov
+/// word, event.
 ///
 /// It describes and decides nothing (RULINGS, "The docking port admits
 /// arrivals under journey paths"): a message is [Said] with the [UserSaid]
@@ -48,7 +50,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
   (TeamsReadingState, Reading) step(TeamsReadingState state, Arrival arrival) {
     final TeamsEvent? event;
     try {
-      event = teamsWitnessedEvent(arrival.bytes);
+      event = teamsRecordedEvent(arrival.bytes);
     } on FormatException {
       // The gate took these bytes, so this is a body the gate and this
       // reading disagree about: nothing to admit, rather than a fold that
@@ -123,7 +125,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
   }
 }
 
-/// What the Teams reading carries from one arrival to the next: which Entra
+/// What the Teams reading carries from one event to the next: which Entra
 /// user each Teams channel id belongs to, as far as the record says. A
 /// quote names its author only by channel id, and so does a join, so
 /// either is named only if that person has been heard from.
@@ -133,7 +135,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
 final class TeamsReadingState {
   const TeamsReadingState._(this._entraIds);
 
-  /// Before any arrival.
+  /// Before any event.
   static const empty = TeamsReadingState._({});
 
   final Map<TeamsUserId, EntraObjectId> _entraIds;

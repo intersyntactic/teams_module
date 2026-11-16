@@ -85,7 +85,7 @@ void main() {
       entities: [for (final e in entities) JsonObject.of(e)],
     );
 
-    // As a group-chat Reply with @CAM carried it, witnessed 2026-11-15.
+    // As a group-chat Reply with @CAM carried it, recorded 2026-11-15.
     const mention = {
       'type': 'mention',
       'mentioned': {'id': '28:app-id', 'name': 'CAM'},

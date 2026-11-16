@@ -5,7 +5,7 @@
 ///       dart test test/record_live_test.dart
 ///
 /// It posts one signed message through [TeamsRelay], recorded through
-/// [recordArrival], and prints the status Teams would get, the relay's log
+/// [recordEvent], and prints the status Teams would get, the relay's log
 /// line and the writer's answer. The socket is named relative to
 /// RECORD_LIVE, since macOS caps a socket's path at 104 bytes.
 library;
@@ -40,8 +40,8 @@ void main() {
           now: () => now,
         ),
         onEvent: (_) async {},
-        witness: (body) async {
-          final a = await recordArrival(socket, source: 'teams', bytes: body);
+        record: (body) async {
+          final a = await recordEvent(socket, source: 'teams', bytes: body);
           answers.add(a);
           return a;
         },

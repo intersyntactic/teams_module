@@ -16,7 +16,7 @@ void main() {
   late List<TeamsEvent> events;
   late List<String> logged;
   late bool keysServed;
-  late List<Uint8List> witnessed;
+  late List<Uint8List> recorded;
 
   /// What the record answers next, the body already handed over.
   late RecordAnswer Function() answer;
@@ -25,7 +25,7 @@ void main() {
     events = [];
     logged = [];
     keysServed = true;
-    witnessed = [];
+    recorded = [];
     answer = () => const Recorded('ab12');
     final relay = TeamsRelay(
       spec: const TeamsSourceSpec(appId: appId, tenantAllowlist: {tenant}),
@@ -38,8 +38,8 @@ void main() {
         now: () => now,
       ),
       onEvent: (event) async => events.add(event),
-      witness: (body) async {
-        witnessed.add(body);
+      record: (body) async {
+        recorded.add(body);
         return answer();
       },
       now: () => now,
@@ -190,7 +190,7 @@ void main() {
     expect(after, lessThan(const Duration(milliseconds: 300)));
     expect(logged, ['teams relay: 401 token is not three parts']);
     expect(events, isEmpty);
-    expect(witnessed, isEmpty);
+    expect(recorded, isEmpty);
   });
 
   test('says "try again" while it has no keys', () async {
@@ -199,7 +199,7 @@ void main() {
     expect(events, isEmpty);
   });
 
-  group('the witness', () {
+  group('the record', () {
     test('records the body byte for byte, before responding', () async {
       // Spacing and key order no re-encoding would keep.
       final raw = utf8.encode(
@@ -207,23 +207,23 @@ void main() {
       );
       final (status, _, _) = await post(null, body: raw);
       expect(status, 200);
-      expect(witnessed.single, raw);
+      expect(recorded.single, raw);
     });
 
     test('records nothing a token does not vouch for', () async {
       await post(message(), token: 'nope');
-      expect(witnessed, isEmpty);
+      expect(recorded, isEmpty);
     });
 
     test('records a repeat once', () async {
       await post(message());
       await post(message());
-      expect(witnessed, hasLength(1));
+      expect(recorded, hasLength(1));
     });
 
     test('records nothing it does not hand on', () async {
       await post({...message(), 'type': 'typing'});
-      expect(witnessed, isEmpty);
+      expect(recorded, isEmpty);
     });
 
     test('unrecorded is a 500 and handed on to no one', () async {
@@ -247,7 +247,7 @@ void main() {
       ]);
     });
 
-    test('a witness that throws is unrecorded too', () async {
+    test('a record that throws is unrecorded too', () async {
       answer = () => throw const FileSystemException('gone');
       expect((await post(message())).$1, 500);
       expect(logged.single, endsWith('not recorded: FileSystemException'));
@@ -265,7 +265,7 @@ void main() {
       ]);
       // Teams' repeat is a repeat, not a second try at the record.
       await post(message());
-      expect(witnessed, hasLength(1));
+      expect(recorded, hasLength(1));
     });
 
     test(
@@ -276,7 +276,7 @@ void main() {
         answer = () => const Recorded('ab12');
         final (status, _, _) = await post(message());
         expect(status, 200);
-        expect(witnessed, hasLength(2));
+        expect(recorded, hasLength(2));
         expect(events, hasLength(1));
       },
     );

@@ -1,9 +1,11 @@
 /// The relay's way to the record: the journal writer's Unix socket.
 ///
-/// An arrival goes straight to the record (Nick, 15 Nov 17:04): nothing is
+/// An event goes straight to the record (Nick, 15 Nov 17:04): nothing is
 /// decided about it, so nothing stands between the relay and the writer.
 /// The writer knows the relay by the user at the other end of its socket,
-/// and its sender table says that user may send `arrived`.
+/// and its sender table says that user may send `arrived`, the kind's name
+/// until the writer takes a new one (Nick, 16 Nov: an event, not an
+/// arrival).
 ///
 /// The wire is `is_journal` 0.5.0's service: one connection per entry, the
 /// request `<kind>\n<follows>\n<body>` with the write side then closed, and
@@ -15,13 +17,13 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-/// What the writer said became of one arrival.
+/// What the writer said became of one event.
 sealed class RecordAnswer {
   const RecordAnswer();
 
   /// The writer's answer [line], read strictly: anything but one of its
   /// three answers is [RecordUnanswered], so Teams is sent a 5xx and tries
-  /// again. Sending it again can at worst record an arrival twice, which
+  /// again. Sending it again can at worst record an event twice, which
   /// whatever reads the record dedupes; reading an answer it can't read as
   /// recorded could lose one.
   static RecordAnswer read(String line) => switch (line.split(' ')) {
@@ -75,10 +77,10 @@ final class RecordUnanswered extends RecordAnswer {
 /// Records [bytes] from [source] at the writer's [socketPath], as an
 /// `arrived` entry that starts its own chain. The entry holds
 /// `{"at", "source", "bytes"}`, the bytes base64 and exactly as they came,
-/// the form the airlock gave arrivals, so reading one back doesn't change.
-/// Teams gives up on a request after 15 seconds, so [timeout] stays inside
-/// that.
-Future<RecordAnswer> recordArrival(
+/// the form the record's first entries took, so reading one back doesn't
+/// change. Teams gives up on a request after 15 seconds, so [timeout] stays
+/// inside that.
+Future<RecordAnswer> recordEvent(
   String socketPath, {
   required String source,
   required Uint8List bytes,

@@ -149,7 +149,7 @@ void main() {
   });
 
   group('a Reply', () {
-    /// [activity] quoting message [id] by [senderId], as a witnessed Reply
+    /// [activity] quoting message [id] by [senderId], as a recorded Reply
     /// carried it.
     Map<String, Object?> quoting(
       Map<String, Object?> activity, {
