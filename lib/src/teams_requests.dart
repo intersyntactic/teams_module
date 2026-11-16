@@ -3,7 +3,7 @@
 /// airlock decides the request and the driver signs it with [SignIn]'s
 /// token, so no secret is needed here.
 ///
-/// The paths are the Bot Connector's, the same ones [BotConnector] calls:
+/// The paths are the Bot Connector's:
 /// `{serviceUrl}/v3/conversations/{conversation}/activities[/{id}]`. The
 /// service URL's own path, the region (`/au/`, `/amer/`), goes in front.
 library;
