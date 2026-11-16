@@ -12,22 +12,19 @@
 ///                                     a deploy's rehearsal must add none.
 ///
 /// Built with the renderer's id, which it reports in every `rendered`
-/// entry; a build without one refuses to start. The id is the shasum of the
-/// `lib/*.dart` of the renderer and of every package it imports, each path
-/// under its package's name (is_shapes 0.4.5's `RendererId`). `lib/`
-/// imports no package, so that is this package's files alone, under
-/// `teams_reply/`. From this package's root:
+/// entry; a build without one refuses to start. The renderer is
+/// is_teams_reply, and its id is the sha256 of its archive on pub.dev, as
+/// this package's pubspec.lock records it. From this package's root:
 ///
-///     dart compile exe -Drenderer=$( (cd lib && find . -type f \
-///       -name '*.dart' -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256 \
-///       | sed 's|  \./|  ./teams_reply/|') | shasum -a 256 | cut -c1-64) \
-///       bin/teams_reply.dart
+///     dart pub get --enforce-lockfile
+///     dart compile exe -Drenderer=$(dart run render_follower:renderer_id \
+///       is_teams_reply) bin/teams_reply.dart
 library;
 
 import 'dart:io';
 
+import 'package:is_teams_reply/is_teams_reply.dart';
 import 'package:render_follower/render_follower.dart';
-import 'package:teams_reply/teams_reply.dart';
 
 Future<void> main() async {
   final env = Platform.environment;

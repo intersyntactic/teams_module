@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:teams_reply/teams_reply.dart';
+import 'package:is_teams_reply/is_teams_reply.dart';
 import 'package:test/test.dart';
 
 Entry _turn(Object? json) =>

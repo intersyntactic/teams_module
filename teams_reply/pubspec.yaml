@@ -1,21 +1,24 @@
 name: teams_reply
 description: >-
-  teams-reply, the renderer that draws a Teams reply's body from recorded
-  entries: a pure function in lib/, named by the shasum of its files, and
-  the follower it is built into in bin/.
-version: 0.0.1
-repository: https://github.com/intersyntactic/teams_module
+  The teams-reply program: the follower, built with is_teams_reply as its
+  renderer, and that renderer's id compiled in.
 publish_to: none
 
 environment:
   sdk: ^3.13.0
 
-# For bin/ only: lib/ imports nothing but the SDK (test/pure_test.dart).
 dependencies:
+  # Exactly one version: its archive's sha256 in pubspec.lock is the
+  # renderer's id (`dart run render_follower:renderer_id is_teams_reply`).
+  is_teams_reply: 0.1.0
   render_follower:
     path: ../render_follower
 
+# Until is_teams_reply 0.1.0 is on pub.dev. While this is here, the lockfile
+# says `source: path` and renderer_id refuses, so no build has an id.
+dependency_overrides:
+  is_teams_reply:
+    path: ../is_teams_reply
+
 dev_dependencies:
-  analyzer: ^14.7.0
   lints: ^6.1.0
-  test: ^1.33.0

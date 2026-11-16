@@ -2,13 +2,12 @@
 /// entries. Pure: entries in, a body or a refusal out, with no clock, no
 /// randomness and no I/O, so the same entries always draw the same body.
 ///
-/// It is named by its `RendererId`, the shasum of the `lib/*.dart` of this
-/// package and of every package it imports, each under its package's name
-/// (is_shapes 0.4.5; https://github.com/enspyrco/intersyntactic/issues/1147).
-/// It imports nothing but the SDK, so its id is its own files alone, and
-/// stays one command anyone can run. The pure list
-/// (https://github.com/enspyrco/intersyntactic/issues/1046) also admits
-/// checked_json; this does without it.
+/// It is named by its `RendererId`, the sha256 of this package's archive as
+/// published on pub.dev (https://github.com/enspyrco/intersyntactic/issues/1147).
+/// It imports nothing but the SDK, so that archive holds every line that
+/// can change what is drawn: no version resolved at build time can. The
+/// pure list (https://github.com/enspyrco/intersyntactic/issues/1046) also
+/// admits checked_json; this does without it.
 ///
 /// What it draws today: the reply to someone, from the one closing turn
 /// entry that holds a `ReplyText` node. Its bytes are pinned by agent_loop's

@@ -21,6 +21,7 @@ dependencies:
   is_content_id: ^0.2.0
   is_effects: ^0.2.1
   is_shapes: ^0.4.4
+  yaml: ^3.1.4
 
 dev_dependencies:
   lints: ^6.1.0

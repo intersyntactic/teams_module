@@ -1,0 +1,18 @@
+name: is_teams_reply
+description: >-
+  teams-reply, the intersyntactic renderer that draws a Teams reply's body
+  from recorded journal entries: a pure function, named by the sha256 of
+  this package's archive.
+version: 0.1.0
+repository: https://github.com/intersyntactic/teams_module/tree/main/is_teams_reply
+
+environment:
+  sdk: ^3.13.0
+
+# None, on purpose: lib/ imports only the SDK (test/pure_test.dart), so this
+# archive holds every line that can change what is drawn.
+
+dev_dependencies:
+  analyzer: ^14.7.0
+  lints: ^6.1.0
+  test: ^1.33.0

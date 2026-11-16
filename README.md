@@ -231,28 +231,30 @@ dart compile exe bin/teams_relay.dart --target-os linux --target-arch arm64 \
 
 The way back is drawn, not written: an agent's reply reaches Teams only as
 a body that the renderer `teams-reply` draws from entries already in the
-record (https://github.com/enspyrco/intersyntactic/issues/1147). It is two
+record (https://github.com/enspyrco/intersyntactic/issues/1147). It is three
 packages beside this one:
 
-- `teams_reply/`: the renderer. Its `lib/` is only the pure function from
-  entries to a body, and imports nothing but the SDK. Its `RendererId` is
-  the shasum of the `lib/*.dart` of the renderer and every package it
-  imports, each under its package's name (is_shapes 0.4.5), which here is
-  its own files alone, under `teams_reply/`: it names every line that can
-  change what it draws.
+- `is_teams_reply/`: the renderer, published on pub.dev. Its `lib/` is
+  only the pure function from entries to a body, and imports nothing but
+  the SDK. Its `RendererId` is the sha256 of its archive on pub.dev, so
+  that archive holds every line that can change what it draws, and anyone
+  checks the id with
+  `curl -sL https://pub.dev/api/archives/is_teams_reply-<version>.tar.gz | shasum -a 256`.
 - `render_follower/`: the program every renderer is built into. It
   follows the record for `post-decided` entries, answers each one the
   airlock allowed that names its renderer's id, and records a `rendered`
   entry following it. It keeps no state: on a restart it reads the record
-  again and answers only posts still at their tip.
+  again and answers only posts still at their tip. Its `renderer_id` tool
+  reads a renderer's id from a build's `pubspec.lock`, and refuses one that
+  isn't an archive on pub.dev.
+- `teams_reply/`: the teams-reply program, the follower built with
+  `is_teams_reply` at exactly one version.
 
 Build it with its id compiled in, from `teams_reply/`:
 
 ```
-dart pub get
-dart compile exe -Drenderer=$( (cd lib && find . -type f -name '*.dart' \
-  -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256 \
-  | sed 's|  \./|  ./teams_reply/|') | shasum -a 256 | cut -c1-64) \
+dart pub get --enforce-lockfile
+dart compile exe -Drenderer=$(dart run render_follower:renderer_id is_teams_reply) \
   bin/teams_reply.dart --target-os linux --target-arch arm64 \
   -o build/teams_reply-linux-arm64
 ```
@@ -267,11 +269,14 @@ JOURNAL_SOCKET=<the record's writer's Unix socket> build/teams_reply-linux-arm64
 The writer's sender table must let its user send `rendered`.
 `TEAMS_REPLY_DRY_RUN=1` renders and logs, and writes nothing.
 
+A new renderer version is a release: change `is_teams_reply`, bump its
+version, publish it, then move `teams_reply/`'s pin to it.
+
 ## Running the tests
 
 ```
 dart pub get
 dart test
-(cd teams_reply && dart pub get && dart test)
+(cd is_teams_reply && dart pub get && dart test)
 (cd render_follower && dart pub get && dart test)
 ```
