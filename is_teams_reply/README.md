@@ -9,8 +9,8 @@ in it (https://github.com/enspyrco/intersyntactic/issues/1147).
 import 'package:is_teams_reply/is_teams_reply.dart';
 
 switch (teamsReply([Entry('turn', bytes)])) {
-  case Body(:final text): // the activity JSON to send
-  case Refusal(:final why): // nothing is sent
+  case RenderedBody(:final text): // the activity JSON to send
+  case RenderRefused(:final why): // nothing is sent
 }
 ```
 
@@ -28,5 +28,5 @@ Check one without running anything:
 curl -sL https://pub.dev/api/archives/is_teams_reply-0.1.0.tar.gz | shasum -a 256
 ```
 
-It runs inside the follower in the `teams_reply/` app beside this package,
-built with that id compiled in.
+It runs inside the render runner in the `teams_reply/` app beside this
+package, built with that id compiled in.

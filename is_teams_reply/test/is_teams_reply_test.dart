@@ -19,25 +19,28 @@ Entry _reply(String text) => _turn({
   'provenance': {'kind': 'own'},
 });
 
-String _why(Drawn d) => (d as Refusal).why;
+String _why(RenderOutcome d) => (d as RenderRefused).why;
 
 void main() {
   test('draws a ReplyText turn as a Teams message activity', () {
     final drawn = teamsReply([_reply('Hi, Ada — done.')]);
-    expect((drawn as Body).text, '{"type":"message","text":"Hi, Ada — done."}');
+    expect(
+      (drawn as RenderedBody).text,
+      '{"type":"message","text":"Hi, Ada — done."}',
+    );
   });
 
   test('draws the same body from the same entry, every time', () {
     final entry = _reply('same');
     expect(
-      (teamsReply([entry]) as Body).text,
-      (teamsReply([entry]) as Body).text,
+      (teamsReply([entry]) as RenderedBody).text,
+      (teamsReply([entry]) as RenderedBody).text,
     );
   });
 
   test('carries the text exactly, whatever it holds', () {
     const text = '"quoted"\n<at>not a mention</at> \u0000 😀';
-    final body = (teamsReply([_reply(text)]) as Body).text;
+    final body = (teamsReply([_reply(text)]) as RenderedBody).text;
     expect(jsonDecode(body), {'type': 'message', 'text': text});
   });
 

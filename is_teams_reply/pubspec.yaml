@@ -3,7 +3,7 @@ description: >-
   teams-reply, the intersyntactic renderer that draws a Teams reply's body
   from recorded journal entries: a pure function, named by the sha256 of
   this package's archive.
-version: 0.1.0
+version: 0.2.0
 repository: https://github.com/intersyntactic/teams_module/tree/main/is_teams_reply
 
 environment:
