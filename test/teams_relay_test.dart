@@ -238,12 +238,12 @@ void main() {
     });
 
     test('refused by the record is a 500 too, saying why', () async {
-      answer = () => const RecordRefused('kind arrived for user 501');
+      answer = () => const RecordRefused('kind event for user 501');
       expect((await post(message())).$1, 500);
       expect(events, isEmpty);
       expect(logged, [
         'teams relay: 500 message: refused by the record: '
-            'kind arrived for user 501',
+            'kind event for user 501',
       ]);
     });
 

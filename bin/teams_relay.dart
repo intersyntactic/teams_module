@@ -13,7 +13,7 @@
 ///                                    the same machine.
 ///   JOURNAL_SOCKET=/run/...sock      the record's writer's Unix socket:
 ///                                    every accepted request's body is
-///                                    recorded through it as an `arrived`
+///                                    recorded through it as an `event`
 ///                                    entry, byte for byte, before Teams
 ///                                    gets a response. Required.
 ///
