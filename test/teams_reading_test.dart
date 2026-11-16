@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:is_annotation_shapes/is_annotation_shapes.dart'
-    show Approved, HeldOff;
+    show ApprovedVerdict, HeldOffVerdict;
 import 'package:is_conversation_shapes/is_conversation_shapes.dart';
-import 'package:is_docking_port/is_docking_port.dart';
+import 'package:is_docking_station/is_docking_station.dart';
 import 'package:is_journal/is_journal.dart';
 import 'package:is_shapes/is_shapes.dart';
 import 'package:is_teams_module/is_teams_module.dart';
@@ -12,9 +12,9 @@ import 'package:test/test.dart';
 
 import 'support/fixtures.dart';
 
-/// [activity] as the docking port hands it over: the body the relay
+/// [activity] as the docking station hands it over: the body the relay
 /// records, `{at, source, bytes}`, read back from its `event` entry.
-Event recorded(Map<String, Object?> activity) {
+RelayedEvent recorded(Map<String, Object?> activity) {
   final body = Uint8List.fromList(
     utf8.encode(
       jsonEncode({
@@ -24,17 +24,17 @@ Event recorded(Map<String, Object?> activity) {
       }),
     ),
   );
-  return Event.read(EntryHash.of(body), body)!;
+  return RelayedEvent.read(EntryHash.of(body), body)!;
 }
 
-/// Every one of [activities], folded from the start, as the docking port
+/// Every one of [activities], folded from the start, as the docking station
 /// folds them: the readings in order, and the state after the last.
-(TeamsReadingState, List<Reading>) fold(
+(TeamsReadingState, List<EventReading>) fold(
   Iterable<Map<String, Object?>> activities,
 ) {
   const reading = TeamsReading();
   var state = reading.start;
-  final readings = <Reading>[];
+  final readings = <EventReading>[];
   for (final a in activities) {
     final (next, r) = reading.step(state, recorded(a));
     state = next;
@@ -100,15 +100,18 @@ Map<String, Object?> added({
 
 void main() {
   group('something said', () {
-    test('is Said, with its UserSaid, in its conversation, under its id', () {
-      final (_, [r]) = fold([message()]);
-      final said = r as Said;
-      expect(said.conversation, Conversation.parse('teams:a:1personal'));
-      expect(said.key, EventKey.parse('message:1730881234567'));
-      expect(said.from, ada);
-      expect(said.message.value, 'a:1personal|1730881234567');
-      expect(said.node.text, 'Looks right to me');
-    });
+    test(
+      'is MessageSaid, with its UserSaid, in its conversation, under its id',
+      () {
+        final (_, [r]) = fold([message()]);
+        final said = r as MessageSaid;
+        expect(said.conversation, ConversationId.parse('teams:a:1personal'));
+        expect(said.key, EventKey.parse('message:1730881234567'));
+        expect(said.from, ada);
+        expect(said.message.value, 'a:1personal|1730881234567');
+        expect(said.node.text, 'Looks right to me');
+      },
+    );
 
     test('in a channel thread is in that thread, within its channel', () {
       // As a channel post arrived on 15 Nov: its conversation names the
@@ -130,20 +133,20 @@ void main() {
           },
         },
       ]);
-      final said = r as Said;
+      final said = r as MessageSaid;
       expect(said.conversation.value, 'teams:$thread');
-      expect(said.within, Conversation.parse('teams:$channel'));
+      expect(said.within, ConversationId.parse('teams:$channel'));
       expect(said.node.text, 'test');
     });
 
     test('in a chat sits inside nothing', () {
       final (_, [r]) = fold([message()]);
-      expect((r as Said).within, isNull);
+      expect((r as MessageSaid).within, isNull);
     });
 
     test('delivered twice has one key', () {
       final (_, [a, b]) = fold([message(), message()]);
-      expect((a as Said).key, (b as Said).key);
+      expect((a as MessageSaid).key, (b as MessageSaid).key);
     });
 
     test('quoting someone heard from names them, from the fold alone', () {
@@ -151,7 +154,7 @@ void main() {
         fromBea('act-1'),
         quotingBea(message(id: 'act-2', text: '<at>Bot</at>'), 'act-1'),
       ]);
-      final quotes = (r as Said).node.quotes!;
+      final quotes = (r as MessageSaid).node.quotes!;
       expect((quotes.author as KnownAuthor).actor, bea);
       expect(quotes.source.value, 'a:1personal|act-1');
     });
@@ -159,14 +162,17 @@ void main() {
     test('quoting themselves, the first time heard from, names them', () {
       // Bea's earlier message never reached the bot: no @-mention.
       final (_, [r]) = fold([quotingBea(fromBea('act-2'), 'act-1')]);
-      expect(((r as Said).node.quotes!.author as KnownAuthor).actor, bea);
+      expect(
+        ((r as MessageSaid).node.quotes!.author as KnownAuthor).actor,
+        bea,
+      );
     });
 
     test('quoting someone not yet heard from names them as Teams showed', () {
       final (_, [r]) = fold([
         quotingBea(message(id: 'act-2', text: '<at>Bot</at>'), 'act-1'),
       ]);
-      final author = (r as Said).node.quotes!.author as UnknownAuthor;
+      final author = (r as MessageSaid).node.quotes!.author as UnknownAuthor;
       expect(author.displayName, 'Bea');
     });
 
@@ -187,10 +193,10 @@ void main() {
   });
 
   group('a join', () {
-    test('of CAM is Joined, by whom it was added', () {
+    test('of CAM is ConversationJoined, by whom it was added', () {
       final (_, [r]) = fold([added()]);
-      final joined = r as Joined;
-      expect(joined.conversation, Conversation.parse('teams:a:1personal'));
+      final joined = r as ConversationJoined;
+      expect(joined.conversation, ConversationId.parse('teams:a:1personal'));
       expect(joined.key, EventKey.parse('conversationUpdate:f:24c8730b'));
       expect(joined.from, ada);
       expect(joined.joiners, [bot]);
@@ -215,8 +221,8 @@ void main() {
           },
         },
       ]);
-      final joined = r as Joined;
-      expect(joined.conversation, Conversation.parse('teams:$team'));
+      final joined = r as ConversationJoined;
+      expect(joined.conversation, ConversationId.parse('teams:$team'));
       expect(joined.within, isNull);
     });
 
@@ -238,7 +244,7 @@ void main() {
           },
         },
       ]);
-      expect((r as Joined).within, isNull);
+      expect((r as ConversationJoined).within, isNull);
     });
 
     test('names a person heard from, and leaves out one never heard from', () {
@@ -246,7 +252,7 @@ void main() {
         fromBea('act-1'),
         added(alsoAdded: ['29:1bea', '29:1cyd']),
       ]);
-      expect((r as Joined).joiners, [bot, bea]);
+      expect((r as ConversationJoined).joiners, [bot, bea]);
     });
 
     test('of no one it can name is nothing to admit', () {
@@ -263,25 +269,25 @@ void main() {
           ..['action'] = 'add'
           ..remove('text'),
       ]);
-      expect(a, isA<Joined>());
+      expect(a, isA<ConversationJoined>());
       expect(b, isA<NothingToAdmit>());
     });
   });
 
   group('a press on a card', () {
-    test('of Approve is Responded to that card: Approved', () {
+    test('of Approve is ShownMessageJudged for that card: ApprovedVerdict', () {
       final (_, [r]) = fold([pressed('approve')]);
-      final responded = r as Responded;
-      expect(responded.conversation, Conversation.parse('teams:a:1personal'));
+      final responded = r as ShownMessageJudged;
+      expect(responded.conversation, ConversationId.parse('teams:a:1personal'));
       expect(responded.key, EventKey.parse('invoke:f:9001'));
       expect(responded.from, ada);
       expect(responded.to.value, 'a:1personal|1730881000000');
-      expect(responded.response, isA<Approved>());
+      expect(responded.verdict, isA<ApprovedVerdict>());
     });
 
-    test('of Not yet is Responded to that card: HeldOff', () {
+    test('of Not yet is ShownMessageJudged for that card: HeldOffVerdict', () {
       final (_, [r]) = fold([pressed('notyet')]);
-      expect((r as Responded).response, isA<HeldOff>());
+      expect((r as ShownMessageJudged).verdict, isA<HeldOffVerdict>());
     });
 
     test('naming no card is nothing to admit', () {
@@ -307,7 +313,7 @@ void main() {
       };
       final (_, [a]) = fold([pressed('approve')]);
       final (_, [b]) = fold([forged]);
-      expect((b as Responded).to, (a as Responded).to);
+      expect((b as ShownMessageJudged).to, (a as ShownMessageJudged).to);
     });
   });
 
@@ -338,7 +344,7 @@ void main() {
       );
       final (state, r) = reading.step(
         reading.start,
-        Event.read(EntryHash.of(body), body)!,
+        RelayedEvent.read(EntryHash.of(body), body)!,
       );
       expect(r, isA<NothingToAdmit>());
       expect(state, same(reading.start));
@@ -369,11 +375,11 @@ void main() {
         quotingBea(message(id: 'act-2', text: '<at>Bot</at>'), 'act-1'),
         pressed('notyet'),
       ];
-      String described(Reading r) => switch (r) {
-        Said() => 'said ${r.key} ${r.from} ${r.node.quotes?.author}',
-        Joined() => 'joined ${r.key} ${r.joiners}',
-        Changed() => 'changed ${r.key}',
-        Responded() => 'responded ${r.key} ${r.to} ${r.response}',
+      String described(EventReading r) => switch (r) {
+        MessageSaid() => 'said ${r.key} ${r.from} ${r.node.quotes?.author}',
+        ConversationJoined() => 'joined ${r.key} ${r.joiners}',
+        MessageChanged() => 'changed ${r.key}',
+        ShownMessageJudged() => 'responded ${r.key} ${r.to} ${r.verdict}',
         NothingToAdmit() => 'nothing',
       };
       expect(

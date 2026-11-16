@@ -95,7 +95,7 @@ void main() {
 
   const planned = Example('example-3', Wording('as planned'));
 
-  test('Approve on a shown card writes an Approval of its node', () {
+  test('Approve on a shown card writes a NodeApproval of its node', () {
     final target = shown('card-1', planned);
     final written = write(press('card-1', 'approve'));
     expect(written.inOrder, hasLength(1));
@@ -156,7 +156,7 @@ void main() {
     expect(write(message).inOrder, isEmpty);
   });
 
-  test('Not yet with nothing approved writes only a Seen', () {
+  test('Not yet with nothing approved writes only a NodeSeenMark', () {
     final target = shown('card-1', planned);
     final written = write(press('card-1', 'notyet'));
     expect(written.inOrder, hasLength(1));
@@ -175,7 +175,7 @@ void main() {
     final written = write(press('card-2', 'notyet'));
 
     expect(written.seen!.target, later);
-    expect(written.inOrder.first, isA<Seen>());
+    expect(written.inOrder.first, isA<NodeSeenMark>());
     expect(written.withdrawn.map((w) => w.by).toSet(), {actor(ada)});
     expect(
       written.withdrawn.map((w) => w.target),
@@ -217,7 +217,9 @@ void main() {
     shown('card-1', planned);
     final approval = ids[write(press('card-1', 'approve')).approval]!;
     // Bea names Ada's approval: it counts for nothing.
-    journeyPath.append(Withdrawal<Approval>(target: approval, by: actor(bea)));
+    journeyPath.append(
+      Withdrawal<NodeApproval>(target: approval, by: actor(bea)),
+    );
     expect(write(press('card-1', 'notyet')).withdrawn.map((w) => w.target), [
       approval,
     ]);

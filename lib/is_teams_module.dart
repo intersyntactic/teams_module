@@ -7,7 +7,7 @@
 /// [recordEvent], which records each accepted body with the record's one
 /// writer; and [teamsRecordedEvent], which reads a recorded body back into
 /// the same event, for whatever reads the record; and [TeamsReading], which
-/// tells the docking port what each recorded event is. Then
+/// tells the docking station what each recorded event is. Then
 /// [TeamsReceiver], which reads each event as the annotation shapes it
 /// writes, and a [StandInJourneyPath] to write them to until the module meets
 /// a real journey path; and [TeamsTranslator], which turns a Teams message
