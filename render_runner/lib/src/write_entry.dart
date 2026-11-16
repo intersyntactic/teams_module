@@ -1,13 +1,13 @@
-/// The follower's way to the record: the journal writer's Unix socket.
+/// The runner's way to the record: the journal writer's Unix socket.
 ///
 /// The wire is `is_journal` 0.5.0's service: one connection per entry, the
 /// request `<kind>\n<follows>\n<body>` with the write side then closed, and
 /// one line back, `ok <entry hash>`, `refused <why>` or `failed <why>`. The
-/// writer knows the follower by the user at the other end of its socket, and
+/// writer knows the runner by the user at the other end of its socket, and
 /// its sender table says which kinds that user may send.
 ///
 /// The Teams relay has its own copy of this wire (teams_module's
-/// `recordEvent`), so the follower carries none of the relay's code. Both go
+/// `recordEvent`), so the runner carries none of the relay's code. Both go
 /// when the journal ships one client for its writer.
 library;
 

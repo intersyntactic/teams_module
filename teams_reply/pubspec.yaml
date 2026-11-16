@@ -1,6 +1,6 @@
 name: teams_reply
 description: >-
-  The teams-reply program: the follower, built with is_teams_reply as its
+  The teams-reply program: the render runner, built with is_teams_reply as its
   renderer, and that renderer's id compiled in.
 publish_to: none
 
@@ -9,10 +9,10 @@ environment:
 
 dependencies:
   # Exactly one version: its archive's sha256 in pubspec.lock is the
-  # renderer's id (`dart run render_follower:renderer_id is_teams_reply`).
+  # renderer's id (`dart run render_runner:renderer_id is_teams_reply`).
   is_teams_reply: 0.1.0
-  render_follower:
-    path: ../render_follower
+  render_runner:
+    path: ../render_runner
 
 dev_dependencies:
   lints: ^6.1.0

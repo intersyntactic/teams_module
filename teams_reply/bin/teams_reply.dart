@@ -1,6 +1,6 @@
-/// teams-reply: the follower built with this package's renderer. It follows
-/// the record for posts the airlock allowed naming it, and records each
-/// one's body. It holds no secret and reaches no network: only the record's
+/// teams-reply: the render runner built with is_teams_reply as its
+/// renderer. It follows the record for posts the airlock allowed naming it,
+/// and records each one's body. It holds no secret and reaches no network: only the record's
 /// read socket and its writer's socket, both Unix.
 ///
 ///   JOURNAL_READ_SOCKET=/run/...sock  the record's read socket. Required.
@@ -17,14 +17,14 @@
 /// this package's pubspec.lock records it. From this package's root:
 ///
 ///     dart pub get --enforce-lockfile
-///     dart compile exe -Drenderer=$(dart run render_follower:renderer_id \
+///     dart compile exe -Drenderer=$(dart run render_runner:renderer_id \
 ///       is_teams_reply) bin/teams_reply.dart
 library;
 
 import 'dart:io';
 
 import 'package:is_teams_reply/is_teams_reply.dart';
-import 'package:render_follower/render_follower.dart';
+import 'package:render_runner/render_runner.dart';
 
 Future<void> main() async {
   final env = Platform.environment;
@@ -45,7 +45,7 @@ Future<void> main() async {
   }
 
   final reader = JournalReader(read);
-  final follower = RenderFollower(
+  final runner = RenderRunner(
     name: 'teams-reply',
     renderer: renderer,
     follow: (kinds) => reader.follow(kinds),
@@ -68,7 +68,7 @@ Future<void> main() async {
   // However the follow ends, the service restarts it: a restart reads the
   // record from the start and answers only what is still unanswered.
   try {
-    await follower.run();
+    await runner.run();
     stderr.writeln('teams-reply: the record stopped the follow');
   } on Exception catch (e) {
     stderr.writeln('teams-reply: the follow failed: $e');

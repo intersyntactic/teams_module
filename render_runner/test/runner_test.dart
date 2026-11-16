@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:render_follower/render_follower.dart';
+import 'package:render_runner/render_runner.dart';
 import 'package:test/test.dart';
 
 /// An entry hash made of [c], so a test names entries by one character.
@@ -70,10 +70,10 @@ final class _Record {
 
   final log = <String>[];
 
-  RenderFollower follower({
+  RenderRunner runner({
     bool dryRun = false,
     Outcome<String> Function(List<FollowedEntry>)? render,
-  }) => RenderFollower(
+  }) => RenderRunner(
     name: 'teams-reply',
     renderer: _own,
     follow: (kinds) async* {
@@ -107,7 +107,7 @@ void main() {
   test('renders an allowed post naming its renderer, following it, as '
       'Rendered reads it back', () async {
     final r = _Record(decided: [_decided(d1)], entries: {_h('1'): turn});
-    await r.follower().run();
+    await r.runner().run();
     final w = r.written.single;
     expect(w.kind, 'rendered');
     expect(w.follows, d1);
@@ -132,7 +132,7 @@ void main() {
         _h('2'): GotEntry(_entry(_h('2'), 'turn', 'there')),
       },
     );
-    await r.follower().run();
+    await r.runner().run();
     expect((r.written.single.body['body']! as Map)['output'], 'there|hello');
   });
 
@@ -141,7 +141,7 @@ void main() {
       decided: [_decided(d1, renderer: _h('0'))],
       entries: {_h('1'): turn},
     );
-    await r.follower().run();
+    await r.runner().run();
     expect(r.written, isEmpty);
   });
 
@@ -150,13 +150,13 @@ void main() {
       decided: [_decided(d1, allow: false)],
       entries: {_h('1'): turn},
     );
-    await r.follower().run();
+    await r.runner().run();
     expect(r.written, isEmpty);
   });
 
   test('skips, and logs, an entry that is not a post', () async {
     final r = _Record(decided: [_entry(d1, 'post-decided', '{"x":1}')]);
-    await r.follower().run();
+    await r.runner().run();
     expect(r.written, isEmpty);
     expect(r.log.first, startsWith('teams-reply: skipped $d1: '));
   });
@@ -167,7 +167,7 @@ void main() {
       entries: {_h('1'): turn},
       tips: {d1: _h('2')},
     );
-    await r.follower().run();
+    await r.runner().run();
     expect(r.written, isEmpty);
   });
 
@@ -181,7 +181,7 @@ void main() {
         ],
         entries: {_h('1'): turn, _h('4'): const GotUnreadable('corrupt')},
       );
-      await r.follower().run();
+      await r.runner().run();
       expect(r.written.map((w) => w.body['body']), [
         {'kind': 'refused', 'why': 'entry ${_h('3')} was never recorded'},
         {'kind': 'refused', 'why': 'entry ${_h('4')} is corrupt'},
@@ -191,7 +191,7 @@ void main() {
 
   test("records the renderer's own refusal", () async {
     final r = _Record(decided: [_decided(d1)], entries: {_h('1'): turn});
-    await r.follower(render: (_) => const Refused('no text')).run();
+    await r.runner(render: (_) => const Refused('no text')).run();
     expect(r.written.single.body['body'], {
       'kind': 'refused',
       'why': 'no text',
@@ -200,7 +200,7 @@ void main() {
 
   test('a dry run renders and logs, and writes nothing', () async {
     final r = _Record(decided: [_decided(d1)], entries: {_h('1'): turn});
-    await r.follower(dryRun: true).run();
+    await r.runner(dryRun: true).run();
     expect(r.written, isEmpty);
     expect(r.log, contains('teams-reply: would render $d1 as a body of 5 B'));
   });
@@ -210,12 +210,12 @@ void main() {
     () async {
       final r = _Record(decided: [_decided(d1)], entries: {_h('1'): turn})
         ..answer = RecordRefused('not-tip ${_h('9')}');
-      await r.follower().run();
+      await r.runner().run();
       expect(r.log, contains('teams-reply: $d1 already answered'));
 
       final s = _Record(decided: [_decided(d1)], entries: {_h('1'): turn})
         ..answer = const RecordRefused('kind rendered for user 990');
-      await s.follower().run();
+      await s.runner().run();
       expect(
         s.log,
         contains(
@@ -228,7 +228,7 @@ void main() {
   test('a read that fails leaves the post unanswered, never refused', () async {
     final r = _Record(decided: [_decided(d1)], entries: {_h('1'): turn})
       ..tipFails = const SocketException('gone');
-    await r.follower().run();
+    await r.runner().run();
     expect(r.written, isEmpty);
     expect(r.log.first, startsWith('teams-reply: left $d1 unanswered'));
   });

@@ -1,4 +1,4 @@
-name: render_follower
+name: render_runner
 description: >-
   The one program every renderer is built into: it follows the record for
   posts the airlock allowed, reads the entries each draws from, hands them to

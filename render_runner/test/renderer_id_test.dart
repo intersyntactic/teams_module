@@ -1,4 +1,4 @@
-import 'package:render_follower/renderer_id.dart';
+import 'package:render_runner/renderer_id.dart';
 import 'package:test/test.dart';
 
 const _sha = '6177616c5b7c14354e9410551a1acb2d31177ffb014e1289b6ae48571f0dd82b';

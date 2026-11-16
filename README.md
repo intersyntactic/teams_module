@@ -240,21 +240,22 @@ packages beside this one:
   that archive holds every line that can change what it draws, and anyone
   checks the id with
   `curl -sL https://pub.dev/api/archives/is_teams_reply-<version>.tar.gz | shasum -a 256`.
-- `render_follower/`: the program every renderer is built into. It
-  follows the record for `post-decided` entries, answers each one the
-  airlock allowed that names its renderer's id, and records a `rendered`
-  entry following it. It keeps no state: on a restart it reads the record
+- `render_runner/`: the render runner, the program every renderer is
+  built into. It runs the renderer and records what it drew: it follows
+  the record for `post-decided` entries, answers each one the airlock
+  allowed that names its renderer's id, and records a `rendered` entry
+  following it. It keeps no state: on a restart it reads the record
   again and answers only posts still at their tip. Its `renderer_id` tool
   reads a renderer's id from a build's `pubspec.lock`, and refuses one that
   isn't an archive on pub.dev.
-- `teams_reply/`: the teams-reply program, the follower built with
+- `teams_reply/`: the teams-reply program, the render runner built with
   `is_teams_reply` at exactly one version.
 
 Build it with its id compiled in, from `teams_reply/`:
 
 ```
 dart pub get --enforce-lockfile
-dart compile exe -Drenderer=$(dart run render_follower:renderer_id is_teams_reply) \
+dart compile exe -Drenderer=$(dart run render_runner:renderer_id is_teams_reply) \
   bin/teams_reply.dart --target-os linux --target-arch arm64 \
   -o build/teams_reply-linux-arm64
 ```
@@ -278,5 +279,5 @@ version, publish it, then move `teams_reply/`'s pin to it.
 dart pub get
 dart test
 (cd is_teams_reply && dart pub get && dart test)
-(cd render_follower && dart pub get && dart test)
+(cd render_runner && dart pub get && dart test)
 ```

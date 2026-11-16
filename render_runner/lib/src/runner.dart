@@ -1,5 +1,6 @@
-/// The follower: the one program every renderer is built into (Nick, 16 Nov
-/// 13:49: the airlock doesn't call renderers; a renderer follows the record).
+/// The render runner: the one program every renderer is built into. It runs
+/// the renderer and records what it drew (Nick, 16 Nov 13:49: the airlock
+/// doesn't call renderers; a renderer follows the record).
 ///
 /// It follows the record for `post-decided` entries, and for each one the
 /// airlock allowed, naming this build's renderer, still unanswered, reads
@@ -7,7 +8,7 @@
 /// what it drew as a `rendered` entry following the `post-decided`. Each
 /// post is a chain of its own (decided, then rendered, then returned), so
 /// the writer's tip check refuses a second `rendered` for one post: two
-/// followers racing, or one restarting, cannot answer a post twice. On a
+/// runners racing, or one restarting, cannot answer a post twice. On a
 /// restart it reads the record from the start, asks each post's tip, and
 /// renders only those still at their tip; it keeps no state of its own.
 library;
@@ -21,10 +22,10 @@ import 'package:is_effects/is_effects.dart' show Outcome, Ran, Refused;
 import 'journal_reader.dart';
 import 'write_entry.dart';
 
-/// The renderer this follower was built with, from `-Drenderer=<id>`: the
+/// The renderer this runner was built with, from `-Drenderer=<id>`: the
 /// shasum of the renderer package's `lib/*.dart` (see [RendererId]). Null
 /// when the build named none, or named something that is not an id, and
-/// then the follower must not start: it would answer no post, or every
+/// then the runner must not start: it would answer no post, or every
 /// post named for a renderer it is not.
 RendererId? compiledRenderer() =>
     RendererId.parse(const String.fromEnvironment('renderer'));
@@ -36,10 +37,10 @@ typedef WriteEntry = Future<RecordAnswer> Function(
   Uint8List body,
 );
 
-/// The follower loop: everything it touches is handed in, so it runs the
+/// The runner loop: everything it touches is handed in, so it runs the
 /// same against the record and against a test's.
-final class RenderFollower {
-  RenderFollower({
+final class RenderRunner {
+  RenderRunner({
     required this.name,
     required this.renderer,
     required this.follow,
@@ -51,7 +52,7 @@ final class RenderFollower {
     this.log = _silent,
   });
 
-  /// What the log calls this follower, such as `teams-reply`.
+  /// What the log calls this runner, such as `teams-reply`.
   final String name;
 
   /// The renderer it was built with: it answers only posts naming this id,
@@ -139,7 +140,7 @@ final class RenderFollower {
     });
   }
 
-  /// [decided]'s id and post if this follower answers it, or null: denied,
+  /// [decided]'s id and post if this runner answers it, or null: denied,
   /// named for another renderer, or not a post's entry at all, which is
   /// logged, since the writer let it in under the kind.
   ({EntryId id, Post post})? _ours(FollowedEntry decided) {
