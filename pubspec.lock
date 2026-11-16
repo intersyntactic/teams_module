@@ -173,10 +173,10 @@ packages:
     dependency: "direct main"
     description:
       name: is_conversation_shapes
-      sha256: f9516e0b99d751886b7caf91e9da136a54ebc2544c0b0bc07dc02d2b41f3208d
+      sha256: "1588014d7ed7d76ec0b7cfc4491571c58d15d665f0599190b914fbd8cb09c48e"
       url: "https://pub.dev"
     source: hosted
-    version: "0.4.0"
+    version: "0.5.0"
   is_docking_port:
     dependency: "direct main"
     description:
