@@ -253,19 +253,19 @@ void main() {
       expect(logged.single, endsWith('not recorded: FileSystemException'));
     });
 
-    test('a record that failed partway is a 200, handed on, and said loudly: '
-        'it may be in, so it is not sent again', () async {
+    test('a record that failed partway is a 500, handed on to no one, and '
+        "Teams' retry is recorded: only ok is a 200", () async {
       answer = () => const RecordFailed('object not kept');
       final (status, _, _) = await post(message());
-      expect(status, 200);
-      expect(events, hasLength(1));
+      expect(status, 500);
+      expect(events, isEmpty);
       expect(logged, [
-        'teams relay: 200 message: RECORD FAILED, not resent, check the '
-            'record: object not kept',
+        'teams relay: 500 message: record failed partway: object not kept',
       ]);
-      // Teams' repeat is a repeat, not a second try at the record.
-      await post(message());
-      expect(recorded, hasLength(1));
+      answer = () => const Recorded('ab12');
+      expect((await post(message())).$1, 200);
+      expect(recorded, hasLength(2));
+      expect(events, hasLength(1));
     });
 
     test(
