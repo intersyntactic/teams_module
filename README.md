@@ -34,7 +34,7 @@ permissions, so an organisation's IT has one thing to do: upload the app.
 
 ## What Teams sends, and how it is read
 
-The docking port gives this module's reading every event the relay recorded,
+The docking station gives this module's reading every event the relay recorded,
 in the record's order, and the reading says what each one is: something
 said, a conversation joined, or nothing to admit. These are the facts about
 Teams that reading rests on. Each says whether it was **measured** (seen in
@@ -134,14 +134,14 @@ documentation or inference only).
 **Edits and deletes.** An edit is a `messageUpdate` reusing the message's
 id (`channelData.eventType` `editMessage`); a delete is a `messageDelete`
 (`softDeleteMessage`). Both shapes are from hand-written test bodies, so
-unmeasured. So is the docking port's key planned for them,
+unmeasured. So is the docking station's key planned for them,
 `<type>:<id>@<timestamp>`, which rests on a redelivery keeping its
 timestamp and a second edit getting a new one. A restored message
 arriving as a `messageUpdate` with `undeleteMessage` is unmeasured too.
 They are read as nothing to admit until there is a shape for what a
 message became.
 
-**Card presses (`Responded`).**
+**Card presses (`ShownMessageJudged`).**
 
 - A press is an `invoke` named `adaptiveCard/action`. It names its card
   only by the card's activity id, in `replyToId`, and says which button by
@@ -162,8 +162,6 @@ message became.
   the press is handled, Teams greys the card out. Measured, 10 Nov.
 - A press in a channel, and a card with inputs (a typed correction), are
   unmeasured.
-- Until the docking port's contract has `Responded`, the reading takes a
-  press as nothing to admit.
 
 ## Status
 

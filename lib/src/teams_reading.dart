@@ -1,20 +1,21 @@
 import 'package:is_annotation_shapes/is_annotation_shapes.dart'
-    show Approved, HeldOff, Proposed, Response;
-import 'package:is_docking_port/is_docking_port.dart';
+    show ApprovedVerdict, HeldOffVerdict, VerdictOnShownMessage;
+import 'package:is_docking_station/is_docking_station.dart';
 
 import 'teams_event.dart';
 import 'teams_gate.dart';
 import 'teams_ids.dart';
 import 'teams_translator.dart';
 
-/// The Teams module's reading, for the docking port: what each event the
+/// The Teams module's reading, for the docking station: what each event the
 /// Teams relay recorded is, in the record's order.
 ///
-/// It describes and decides nothing, since the docking port is what admits
-/// events under journey paths (RULINGS): a message is [Said] with the [UserSaid]
-/// made from it, CAM or a person added to a conversation is [Joined], a
-/// press of Approve or Not yet on a card is [Responded] to that card, and
-/// everything else is [NothingToAdmit] for now:
+/// It describes and decides nothing, since the docking station is what
+/// admits events under journey paths (RULINGS): a message is [MessageSaid]
+/// with the [UserSaid] made from it, CAM or a person added to a
+/// conversation is [ConversationJoined], a press of Approve or Not yet on a
+/// card is [ShownMessageJudged] for that card, and everything else is
+/// [NothingToAdmit] for now:
 ///
 /// - an `installationUpdate`, which Teams sends beside the
 ///   `conversationUpdate` of the same join, so one join is read once;
@@ -22,13 +23,13 @@ import 'teams_translator.dart';
 ///   message became;
 /// - a press of Edit, which only reopens the choice on a card, and any verb
 ///   the cards don't send. No card takes a typed correction yet; when one
-///   does, what was typed goes into [Proposed] as text, and the apex reads
-///   it as the shown shape's value.
+///   does, what was typed goes into [ProposedCorrectionVerdict] as text, and
+///   the apex reads it as the shown shape's value.
 ///
 /// A conversation is Teams' conversation id as Teams sends it. In a channel
 /// that names a thread, `<channel>;messageid=<the thread's first post>`, so
 /// each thread is a conversation of its own, and an answer sent back to it
-/// lands in the thread; it sits [Admissible.within] its channel, the
+/// lands in the thread; it sits [AdmissibleEvent.within] its channel, the
 /// journey whose journey path it is (Nick, 15 Nov 21:00 and 21:03).
 ///
 /// Event keys: `message:<id>` for something said,
@@ -46,14 +47,17 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
   TeamsReadingState get start => TeamsReadingState.empty;
 
   @override
-  (TeamsReadingState, Reading) step(TeamsReadingState state, Event recorded) {
+  (TeamsReadingState, EventReading) step(
+    TeamsReadingState state,
+    RelayedEvent recorded,
+  ) {
     final TeamsEvent? event;
     try {
       event = teamsRecordedEvent(recorded.bytes);
     } on FormatException {
       // The gate took these bytes, so this is a body the gate and this
       // reading disagree about: nothing to admit, rather than a fold that
-      // stops at it every time the docking port starts.
+      // stops at it every time the docking station starts.
       return (state, const NothingToAdmit());
     }
     if (event == null) return (state, const NothingToAdmit());
@@ -63,13 +67,13 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
     return (next, _read(event, next) ?? const NothingToAdmit());
   }
 
-  static Reading? _read(TeamsEvent event, TeamsReadingState state) {
-    final conversation = Conversation.parse('teams:${event.conversation}');
+  static EventReading? _read(TeamsEvent event, TeamsReadingState state) {
+    final conversation = ConversationId.parse('teams:${event.conversation}');
     if (conversation == null) return null;
     // A thread sits inside its channel. A team-wide event arrives in the
     // team's first channel itself, which sits inside nothing.
     final within = switch (event.channel) {
-      final c? when c != event.conversation => Conversation.parse('teams:$c'),
+      final c? when c != event.conversation => ConversationId.parse('teams:$c'),
       _ => null,
     };
     switch (event) {
@@ -77,7 +81,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
         final key = EventKey.parse('message:${event.id}');
         final node = teamsSaid(event, entraOf: state.entraIdOf);
         if (key == null || node == null) return null;
-        return Said(
+        return MessageSaid(
           conversation: conversation,
           within: within,
           key: key,
@@ -86,7 +90,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
       case TeamsConversationUpdate():
         final key = EventKey.parse('conversationUpdate:${event.id}');
         if (key == null) return null;
-        return Joined.of(
+        return ConversationJoined.of(
           conversation: conversation,
           within: within,
           from: event.actor,
@@ -104,19 +108,19 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
         final key = EventKey.parse('invoke:${event.id}');
         final to = TeamsMessageRef.of(event.conversation, card)?.source;
         // The verbs the cards send. Edit only reopens the choice on a card.
-        final Response? response = switch (event.verb) {
-          'approve' => const Approved(),
-          'notyet' => const HeldOff(),
+        final VerdictOnShownMessage? verdict = switch (event.verb) {
+          'approve' => const ApprovedVerdict(),
+          'notyet' => const HeldOffVerdict(),
           _ => null,
         };
-        if (key == null || to == null || response == null) return null;
-        return Responded(
+        if (key == null || to == null || verdict == null) return null;
+        return ShownMessageJudged(
           conversation: conversation,
           within: within,
           from: actor,
           key: key,
           to: to,
-          response: response,
+          verdict: verdict,
         );
       default:
         return null;
