@@ -212,11 +212,12 @@ JOURNAL_SOCKET=<the record's writer's Unix socket> \
 
 It listens on `127.0.0.1:8087` for a TLS proxy in front. The bot's messaging
 endpoint is `https://<host>/api/messages`. Every accepted request's body is
-recorded with the record's one writer, as an `arrived` entry, before Teams
+recorded with the record's one writer, as an `event` entry, before Teams
 gets its response. The writer's sender table must let the relay's user send
-`arrived`. That kind keeps its old name until the writer takes a new one: an
-incoming Teams message is an event, not an arrival (Nick, 16 Nov). The relay
-keeps no record of its own, so it builds and runs compiled as well as from
+`event`, so the writer's table changes before the relay deploys. Entries
+recorded before the switch (16 Nov) have the old kind, `arrived`, and keep
+it: anything reading the record's events reads both. The relay keeps no
+record of its own, so it builds and runs compiled as well as from
 source.
 For the arm64 box:
 

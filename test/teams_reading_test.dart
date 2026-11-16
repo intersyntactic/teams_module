@@ -13,7 +13,7 @@ import 'package:test/test.dart';
 import 'support/fixtures.dart';
 
 /// [activity] as the docking port hands it over: the body the relay
-/// records, `{at, source, bytes}`, read back from its `arrived` entry.
+/// records, `{at, source, bytes}`, read back from its `event` entry.
 Event recorded(Map<String, Object?> activity) {
   final body = Uint8List.fromList(
     utf8.encode(

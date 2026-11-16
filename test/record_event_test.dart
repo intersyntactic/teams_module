@@ -14,8 +14,8 @@ void main() {
     });
 
     test('refused, with why', () {
-      final a = RecordAnswer.read('refused kind arrived for user 501');
-      expect((a as RecordRefused).why, 'kind arrived for user 501');
+      final a = RecordAnswer.read('refused kind event for user 501');
+      expect((a as RecordRefused).why, 'kind event for user 501');
     });
 
     test('failed, with why: the entry may be in', () {
@@ -78,7 +78,7 @@ void main() {
       });
     }
 
-    test('sends an arrived entry starting its own chain: at, source, and '
+    test('sends an event entry starting its own chain: at, source, and '
         'the bytes exactly, in base64', () async {
       Uint8List? request;
       await writer((_) => 'ok ab', sent: (r) => request = r);
@@ -91,9 +91,9 @@ void main() {
       );
       expect((a as Recorded).entry, 'ab');
       final text = utf8.decode(request!);
-      expect(text, startsWith('arrived\n-\n'));
+      expect(text, startsWith('event\n-\n'));
       final entry = jsonDecode(
-        text.substring('arrived\n-\n'.length),
+        text.substring('event\n-\n'.length),
       ) as Map<String, Object?>;
       expect(entry.keys, ['at', 'source', 'bytes']);
       expect(entry['at'], '2026-11-15T06:00:00.000Z');
