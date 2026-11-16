@@ -87,14 +87,28 @@ Future<RecordAnswer> recordEvent(
   required Uint8List bytes,
   DateTime? at,
   Duration timeout = const Duration(seconds: 10),
-}) async {
-  final entry = utf8.encode(
+}) => writeEntry(
+  socketPath,
+  kind: 'event',
+  body: utf8.encode(
     jsonEncode({
       'at': (at ?? DateTime.now().toUtc()).toIso8601String(),
       'source': source,
       'bytes': base64Encode(bytes),
     }),
-  );
+  ),
+  timeout: timeout,
+);
+
+/// Records [body] as an entry of [kind] at the writer's [socketPath],
+/// following [follows], or starting a chain of its own when null.
+Future<RecordAnswer> writeEntry(
+  String socketPath, {
+  required String kind,
+  String? follows,
+  required List<int> body,
+  Duration timeout = const Duration(seconds: 10),
+}) async {
   Socket? socket;
   try {
     return await () async {
@@ -103,8 +117,8 @@ Future<RecordAnswer> recordEvent(
         0,
       );
       socket!
-        ..add(utf8.encode('event\n-\n'))
-        ..add(entry);
+        ..add(utf8.encode('$kind\n${follows ?? '-'}\n'))
+        ..add(body);
       // The writer reads the request to its end: closing the write side is
       // what tells it the request is whole.
       await socket!.close();
