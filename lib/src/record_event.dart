@@ -58,9 +58,10 @@ final class RecordRefused extends RecordAnswer {
 }
 
 /// The add failed partway, and the entry may be in anyway (the writer reads
-/// its chains back rather than guess). Sending it again could record it
-/// twice, so Teams is told it arrived, and the failure is logged for a
-/// person to look at.
+/// its chains back rather than guess). Only `ok` gets Teams a 200 (Nick,
+/// 16 Nov), so Teams is sent a 5xx and sends it again. That may record the
+/// event twice, which costs nothing: whatever reads the record takes one
+/// per key. Not sending it again could lose it.
 final class RecordFailed extends RecordAnswer {
   const RecordFailed(this.why);
   final String why;

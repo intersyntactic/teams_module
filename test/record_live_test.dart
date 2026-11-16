@@ -76,7 +76,7 @@ void main() {
       stdout.writeln('body   ${base64Encode(body)}');
       final (Type type, int status) = switch (expectation) {
         'recorded' => (Recorded, 200),
-        'failed' => (RecordFailed, 200),
+        'failed' => (RecordFailed, 500),
         'refused' => (RecordRefused, 500),
         'unanswered' => (RecordUnanswered, 500),
         _ => fail('RECORD_LIVE_EXPECT is $expectation'),
