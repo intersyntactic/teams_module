@@ -1,7 +1,7 @@
 name: render_runner
 description: >-
   The one program every renderer is built into: it follows the record for
-  posts the airlock allowed, reads the entries each draws from, hands them to
+  sends the airlock allowed, reads the entries each draws from, hands them to
   the renderer, and records what it drew.
 version: 0.0.1
 repository: https://github.com/intersyntactic/teams_module
@@ -11,13 +11,13 @@ environment:
   sdk: ^3.13.0
 
 dependencies:
-  # The post entries' wire forms (DecidedPost, Rendered): airlock_api PR 11,
-  # https://github.com/intersyntactic/airlock_api/pull/11, until 0.5.0 is
-  # published.
+  # The send entries' wire forms (DecidedSend, Rendered): airlock_api main
+  # at PR 11's merge, https://github.com/intersyntactic/airlock_api/pull/11,
+  # until 0.5.0 is published.
   is_airlock_api:
     git:
       url: https://github.com/intersyntactic/airlock_api.git
-      ref: b006b05424e11355bc067b74ac3c292a7a8b0478
+      ref: dbf9a44b9b7b8eb467b4df24f017a01fbe9e7c59
   is_content_id: ^0.2.0
   is_effects: ^0.2.1
   is_shapes: ^0.4.4

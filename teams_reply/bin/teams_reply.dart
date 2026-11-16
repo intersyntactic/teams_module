@@ -1,5 +1,5 @@
 /// teams-reply: the render runner built with is_teams_reply as its
-/// renderer. It follows the record for the airlock's decisions to post a
+/// renderer. It follows the record for the airlock's decisions to send a
 /// Teams reply naming it, and records the body each reply is to carry. It
 /// holds no secret and reaches no network: only the record's read socket
 /// and its writer's socket, both Unix.

@@ -149,8 +149,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: b006b05424e11355bc067b74ac3c292a7a8b0478
-      resolved-ref: b006b05424e11355bc067b74ac3c292a7a8b0478
+      ref: dbf9a44b9b7b8eb467b4df24f017a01fbe9e7c59
+      resolved-ref: dbf9a44b9b7b8eb467b4df24f017a01fbe9e7c59
       url: "https://github.com/intersyntactic/airlock_api.git"
     source: git
     version: "0.5.0"

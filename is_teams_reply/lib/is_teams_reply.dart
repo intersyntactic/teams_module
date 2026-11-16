@@ -13,7 +13,7 @@
 /// entry that holds a `ReplyText` node. Its bytes are pinned by agent_loop's
 /// `test/reply_text_envelope_test.dart`
 /// (https://github.com/intersyntactic/agent_loop/pull/11); this reads only
-/// `shape` and `text`, and ignores the rest. Streaming posts, which name
+/// `shape` and `text`, and ignores the rest. Streaming sends, which name
 /// every `ReplyChunk` in order, come when the chunk's kind and bytes are
 /// fixed. Until then any other entry is refused.
 library;
@@ -49,7 +49,7 @@ final class RenderRefused extends RenderOutcome {
   final String why;
 }
 
-/// The body of a Teams reply drawn from [entries], in the order the post
+/// The body of a Teams reply drawn from [entries], in the order the send
 /// names them.
 RenderOutcome teamsReply(List<Entry> entries) {
   if (entries case [Entry(kind: 'turn', :final body)]) {

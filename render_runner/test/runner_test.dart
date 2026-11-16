@@ -22,8 +22,8 @@ FollowedEntry _entry(
   Uint8List.fromList(utf8.encode('$kind\n${follows ?? '-'}\n$body')),
 );
 
-/// A `post-decided` entry as the airlock writes it (airlock_api PR 11's
-/// `DecidedPost.toJson`), written out by hand so the test holds the wire.
+/// A `send-decided` entry as the airlock writes it (is_airlock_api's
+/// `DecidedSend.toJson`), written out by hand so the test holds the wire.
 FollowedEntry _decided(
   String hash, {
   String? renderer,
@@ -31,11 +31,11 @@ FollowedEntry _decided(
   List<String>? entries,
 }) => _entry(
   hash,
-  'post-decided',
+  'send-decided',
   jsonEncode({
     'journeyPath': _h('9'),
     'place': null,
-    'post': {
+    'send': {
       'origin': 'https://smba.trafficmanager.net',
       'method': 'post',
       'path': '',
@@ -77,7 +77,7 @@ final class _Record {
     name: 'teams-reply',
     renderer: _own,
     follow: (kinds) async* {
-      expect(kinds, ['post-decided']);
+      expect(kinds, ['send-decided']);
       yield* Stream.fromIterable(decided);
       yield CaughtUp(decided.isEmpty ? null : decided.last.hash);
     },
@@ -104,7 +104,7 @@ void main() {
   final d1 = _h('d');
   final turn = GotEntry(_entry(_h('1'), 'turn', 'hello'));
 
-  test('renders an allowed post naming its renderer, following it, as '
+  test('renders an allowed send naming its renderer, following it, as '
       'Rendered reads it back', () async {
     final r = _Record(decided: [_decided(d1)], entries: {_h('1'): turn});
     await r.runner().run();
@@ -122,7 +122,7 @@ void main() {
     expect(r.log.last, 'teams-reply: caught up at $d1');
   });
 
-  test('draws from the entries in the order the post names them', () async {
+  test('draws from the entries in the order the send names them', () async {
     final r = _Record(
       decided: [
         _decided(d1, entries: [_h('2'), _h('1')]),
@@ -136,7 +136,7 @@ void main() {
     expect((r.written.single.body['body']! as Map)['output'], 'there|hello');
   });
 
-  test('leaves a post naming another renderer alone', () async {
+  test('leaves a send naming another renderer alone', () async {
     final r = _Record(
       decided: [_decided(d1, renderer: _h('0'))],
       entries: {_h('1'): turn},
@@ -145,7 +145,7 @@ void main() {
     expect(r.written, isEmpty);
   });
 
-  test('leaves a denied post alone: the airlock closes it', () async {
+  test('leaves a denied send alone: the airlock closes it', () async {
     final r = _Record(
       decided: [_decided(d1, allow: false)],
       entries: {_h('1'): turn},
@@ -154,14 +154,14 @@ void main() {
     expect(r.written, isEmpty);
   });
 
-  test('skips, and logs, an entry that is not a post', () async {
-    final r = _Record(decided: [_entry(d1, 'post-decided', '{"x":1}')]);
+  test('skips, and logs, an entry that is not a send', () async {
+    final r = _Record(decided: [_entry(d1, 'send-decided', '{"x":1}')]);
     await r.runner().run();
     expect(r.written, isEmpty);
     expect(r.log.first, startsWith('teams-reply: skipped $d1: '));
   });
 
-  test('leaves an answered post alone: its chain has moved past it', () async {
+  test('leaves an answered send alone: its chain has moved past it', () async {
     final r = _Record(
       decided: [_decided(d1)],
       entries: {_h('1'): turn},
@@ -225,7 +225,7 @@ void main() {
     },
   );
 
-  test('a read that fails leaves the post unanswered, never refused', () async {
+  test('a read that fails leaves the send unanswered, never refused', () async {
     final r = _Record(decided: [_decided(d1)], entries: {_h('1'): turn})
       ..tipFails = const SocketException('gone');
     await r.runner().run();
