@@ -13,12 +13,10 @@
 /// a real journey path; and [TeamsTranslator], which turns a Teams message
 /// into a `UserSaid` and the agent's `ReplyText` into a [TeamsPost]. And the
 /// way out: [teamsPostRequest] and [teamsUpdateRequest], which describe a
-/// message as a request for a web driver to sign and send; and, until that
-/// driver runs, [BotConnector], which holds the bot's secret and speaks as
-/// it.
+/// message as a request for a web driver to sign and send. The module holds
+/// no bot secret and sends nothing itself.
 library;
 
-export 'src/bot_connector.dart';
 export 'src/bot_framework_keys.dart';
 export 'src/key_source.dart';
 export 'src/record_event.dart';

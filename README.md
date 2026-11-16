@@ -172,27 +172,19 @@ serves `POST /api/messages`, fetches Microsoft's keys and refreshes them every
 reads each event as the annotation shapes it writes: an approval, a
 holding off, a withdrawal. Until the module meets a real journey path it
 writes them to a stand-in (`lib/src/stand_in_journey_path.dart`). The way out
-is here too: `lib/src/bot_connector.dart` gets the bot's token and posts,
-replies to and edits messages. Still to come: cards drawn from a shape's
-fields.
+is described, never sent: `lib/src/teams_requests.dart` turns a post, a
+reply or an edit into a request the airlock decides and the web driver signs
+and sends. The module holds no bot secret. Still to come: cards drawn from a
+shape's fields.
 
-## Testing on a test tenant
-
-`bin/teams_echo.dart` is a test bot, not the module's shape: the relay with a
-handler that responds through the Connector. It echoes text, sends a card with
-Approve and Not yet when told "card", and edits the card when one is pressed.
+## Installing the bot in a tenant
 
 ```
-TEAMS_APP_ID=<the bot's app id> TEAMS_APP_SECRET=<its client secret> \
-  TEAMS_TENANT_ID=<the tenant it is registered in> dart run bin/teams_echo.dart
-cloudflared tunnel --url http://127.0.0.1:8087   # a public https address
 dart run tool/app_package.dart <app id> "Intersyntactic" 0.0.1   # build/appPackage.zip
 ```
 
-Hand the secret over from wherever you keep secrets rather than typing it,
-so it stays out of your shell's history. Set the bot's endpoint to the
-tunnel's address plus `/api/messages`, upload the zip in the test tenant's
-Teams, and message the bot. To replace a
+Set the bot's endpoint to the relay's address plus `/api/messages`, upload
+the zip in the tenant's Teams, and message the bot. To replace a
 package already uploaded, build it with a higher version: Teams refuses one
 that isn't.
 
