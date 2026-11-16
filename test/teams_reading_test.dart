@@ -14,7 +14,7 @@ import 'support/fixtures.dart';
 
 /// [activity] as the docking port hands it over: the body the relay
 /// records, `{at, source, bytes}`, read back from its `arrived` entry.
-Arrival arrived(Map<String, Object?> activity) {
+Event recorded(Map<String, Object?> activity) {
   final body = Uint8List.fromList(
     utf8.encode(
       jsonEncode({
@@ -24,7 +24,7 @@ Arrival arrived(Map<String, Object?> activity) {
       }),
     ),
   );
-  return Arrival.read(EntryHash.of(body), body)!;
+  return Event.read(EntryHash.of(body), body)!;
 }
 
 /// Every one of [activities], folded from the start, as the docking port
@@ -36,7 +36,7 @@ Arrival arrived(Map<String, Object?> activity) {
   var state = reading.start;
   final readings = <Reading>[];
   for (final a in activities) {
-    final (next, r) = reading.step(state, arrived(a));
+    final (next, r) = reading.step(state, recorded(a));
     state = next;
     readings.add(r);
   }
@@ -104,7 +104,7 @@ void main() {
       final (_, [r]) = fold([message()]);
       final said = r as Said;
       expect(said.conversation, Conversation.parse('teams:a:1personal'));
-      expect(said.key, ArrivalKey.parse('message:1730881234567'));
+      expect(said.key, EventKey.parse('message:1730881234567'));
       expect(said.from, ada);
       expect(said.message.value, 'a:1personal|1730881234567');
       expect(said.node.text, 'Looks right to me');
@@ -191,7 +191,7 @@ void main() {
       final (_, [r]) = fold([added()]);
       final joined = r as Joined;
       expect(joined.conversation, Conversation.parse('teams:a:1personal'));
-      expect(joined.key, ArrivalKey.parse('conversationUpdate:f:24c8730b'));
+      expect(joined.key, EventKey.parse('conversationUpdate:f:24c8730b'));
       expect(joined.from, ada);
       expect(joined.joiners, [bot]);
     });
@@ -273,7 +273,7 @@ void main() {
       final (_, [r]) = fold([pressed('approve')]);
       final responded = r as Responded;
       expect(responded.conversation, Conversation.parse('teams:a:1personal'));
-      expect(responded.key, ArrivalKey.parse('invoke:f:9001'));
+      expect(responded.key, EventKey.parse('invoke:f:9001'));
       expect(responded.from, ada);
       expect(responded.to.value, 'a:1personal|1730881000000');
       expect(responded.response, isA<Approved>());
@@ -338,7 +338,7 @@ void main() {
       );
       final (state, r) = reading.step(
         reading.start,
-        Arrival.read(EntryHash.of(body), body)!,
+        Event.read(EntryHash.of(body), body)!,
       );
       expect(r, isA<NothingToAdmit>());
       expect(state, same(reading.start));
@@ -349,20 +349,20 @@ void main() {
     test('given to a step is never changed by it', () {
       const reading = TeamsReading();
       final before = reading.start;
-      reading.step(before, arrived(fromBea('act-1')));
+      reading.step(before, recorded(fromBea('act-1')));
       expect(before.entraIdOf(TeamsUserId.parse('29:1bea')!), isNull);
     });
 
-    test('is the same one back when the arrival teaches nothing new', () {
+    test('is the same one back when the event teaches nothing new', () {
       final (state, _) = fold([fromBea('act-1')]);
       final (again, _) = const TeamsReading().step(
         state,
-        arrived(fromBea('act-2')),
+        recorded(fromBea('act-2')),
       );
       expect(again, same(state));
     });
 
-    test('folded again from the start reads every arrival the same', () {
+    test('folded again from the start reads every event the same', () {
       final activities = [
         added(),
         fromBea('act-1'),

@@ -343,23 +343,24 @@ TeamsGateDecision _decide(
   );
 }
 
-/// The event in a body the relay witnessed: the same reading the gate gives
+/// The event in a body the relay recorded: the same reading the gate gives
 /// an activity it takes, without the gate's checks.
 ///
-/// It trusts that [body] passed [teamsGate] before it was witnessed, and
+/// It trusts that [body] passed [teamsGate] before it was recorded, and
 /// checks none of that again: not the token, its `serviceurl` claim, the
-/// channel, nor the tenant allowlist. The relay witnesses only bodies the gate
+/// channel, nor the tenant allowlist. The relay records only bodies the gate
 /// read an event from, so this is for reading those back, never for anything
-/// that arrived any other way.
+/// that came any other way.
 ///
-/// The same activity can be witnessed more than once: the relay forgets what
-/// it has seen when it restarts, and a witness that failed is retried. Take
-/// an event once per [TeamsEvent.conversation] and [TeamsEvent.id].
+/// The same activity can be recorded more than once, as two events with one
+/// activity: the relay forgets what it has seen when it restarts, and a
+/// record that failed is retried. Act on one per [TeamsEvent.conversation]
+/// and [TeamsEvent.id].
 ///
 /// Null for an activity type no event is read as. Throws a
-/// [FormatException] for a body that isn't an activity, which a witnessed
+/// [FormatException] for a body that isn't an activity, which a recorded
 /// one never is.
-TeamsEvent? teamsWitnessedEvent(List<int> body) {
+TeamsEvent? teamsRecordedEvent(List<int> body) {
   final a = JsonObject.decode(utf8.decode(body));
   final conversation = a.object('conversation');
   return _read(

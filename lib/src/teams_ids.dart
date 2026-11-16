@@ -63,7 +63,7 @@ final class TeamsUserId {
   final String value;
 
   /// [s] as a channel account id; null unless it is `28:` or `29:` and more,
-  /// with no whitespace, the only two kinds seen in a witnessed body.
+  /// with no whitespace, the only two kinds seen in a recorded body.
   static TeamsUserId? parse(String s) =>
       RegExp(r'^2[89]:\S+$').hasMatch(s) ? TeamsUserId._(s) : null;
 

@@ -7,11 +7,11 @@ import 'teams_gate.dart';
 import 'teams_ids.dart';
 import 'teams_translator.dart';
 
-/// The Teams module's reading, for the docking port: what each arrival from
-/// the Teams relay is, in the record's order.
+/// The Teams module's reading, for the docking port: what each event the
+/// Teams relay recorded is, in the record's order.
 ///
-/// It describes and decides nothing (RULINGS, "The docking port admits
-/// arrivals under journey paths"): a message is [Said] with the [UserSaid]
+/// It describes and decides nothing, since the docking port is what admits
+/// events under journey paths (RULINGS): a message is [Said] with the [UserSaid]
 /// made from it, CAM or a person added to a conversation is [Joined], a
 /// press of Approve or Not yet on a card is [Responded] to that card, and
 /// everything else is [NothingToAdmit] for now:
@@ -31,9 +31,10 @@ import 'teams_translator.dart';
 /// lands in the thread; it sits [Admissible.within] its channel, the
 /// journey whose journey path it is (Nick, 15 Nov 21:00 and 21:03).
 ///
-/// Arrival keys: `message:<id>` for something said,
-/// `conversationUpdate:<id>` for a join, and `invoke:<id>` for a press. Teams sends a redelivery with the
-/// same activity id, and two activities with two.
+/// Event keys: `message:<id>` for something said,
+/// `conversationUpdate:<id>` for a join, and `invoke:<id>` for a press. Teams
+/// sends a redelivery with the same activity id, so the two events it makes
+/// share a key; two activities have two.
 final class TeamsReading implements ModuleReading<TeamsReadingState> {
   const TeamsReading();
 
@@ -45,10 +46,10 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
   TeamsReadingState get start => TeamsReadingState.empty;
 
   @override
-  (TeamsReadingState, Reading) step(TeamsReadingState state, Arrival arrival) {
+  (TeamsReadingState, Reading) step(TeamsReadingState state, Event recorded) {
     final TeamsEvent? event;
     try {
-      event = teamsWitnessedEvent(arrival.bytes);
+      event = teamsRecordedEvent(recorded.bytes);
     } on FormatException {
       // The gate took these bytes, so this is a body the gate and this
       // reading disagree about: nothing to admit, rather than a fold that
@@ -73,7 +74,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
     };
     switch (event) {
       case TeamsMessage():
-        final key = ArrivalKey.parse('message:${event.id}');
+        final key = EventKey.parse('message:${event.id}');
         final node = teamsSaid(event, entraOf: state.entraIdOf);
         if (key == null || node == null) return null;
         return Said(
@@ -83,7 +84,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
           node: node,
         );
       case TeamsConversationUpdate():
-        final key = ArrivalKey.parse('conversationUpdate:${event.id}');
+        final key = EventKey.parse('conversationUpdate:${event.id}');
         if (key == null) return null;
         return Joined.of(
           conversation: conversation,
@@ -100,7 +101,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
           ],
         );
       case TeamsCardAction(:final card?, :final actor?):
-        final key = ArrivalKey.parse('invoke:${event.id}');
+        final key = EventKey.parse('invoke:${event.id}');
         final to = TeamsMessageRef.of(event.conversation, card)?.source;
         // The verbs the cards send. Edit only reopens the choice on a card.
         final Response? response = switch (event.verb) {
@@ -123,7 +124,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
   }
 }
 
-/// What the Teams reading carries from one arrival to the next: which Entra
+/// What the Teams reading carries from one event to the next: which Entra
 /// user each Teams channel id belongs to, as far as the record says. A
 /// quote names its author only by channel id, and so does a join, so
 /// either is named only if that person has been heard from.
@@ -133,7 +134,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
 final class TeamsReadingState {
   const TeamsReadingState._(this._entraIds);
 
-  /// Before any arrival.
+  /// Before any event.
   static const empty = TeamsReadingState._({});
 
   final Map<TeamsUserId, EntraObjectId> _entraIds;

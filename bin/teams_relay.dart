@@ -29,8 +29,8 @@ import 'dart:io';
 
 import 'package:is_teams_module/is_teams_module.dart';
 
-/// The source the relay's arrivals are recorded under: the same as before,
-/// so old and new arrivals read alike.
+/// The source the relay's events are recorded under: the same as before,
+/// so old and new events read alike.
 const _source = 'teams';
 
 Future<void> main() async {
@@ -92,7 +92,7 @@ Future<void> main() async {
   final relay = TeamsRelay(
     spec: TeamsSourceSpec(appId: appId, tenantAllowlist: allow),
     keys: keys,
-    witness: (body) => recordArrival(record, source: _source, bytes: body),
+    record: (body) => recordEvent(record, source: _source, bytes: body),
   );
   final server = await HttpServer.bind(address, port);
   stdout.writeln('teams relay listening on ${address.address}:${server.port}');

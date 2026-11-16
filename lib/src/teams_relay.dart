@@ -15,7 +15,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'record_arrival.dart';
+import 'record_event.dart';
 import 'key_source.dart';
 import 'teams_event.dart';
 import 'teams_gate.dart';
@@ -25,7 +25,7 @@ final class TeamsRelay {
     required this.spec,
     required this.keys,
     this.onEvent = _logEvent,
-    this.witness,
+    this.record,
     DateTime Function()? now,
     this.bodyTimeout = const Duration(seconds: 10),
     this.maxBodyBytes = 1024 * 1024,
@@ -46,12 +46,12 @@ final class TeamsRelay {
 
   /// Records the body of each accepted request, its bytes exactly as they
   /// came, before Teams gets a response and before anything downstream
-  /// reads it: in the relay, [recordArrival]. A 200 then means "recorded",
-  /// or "may be recorded" after a [RecordFailed], which is logged. A
+  /// reads it: in the relay, [recordEvent]. A 200 then means "recorded":
+  /// only the writer's `ok` gets one (Nick, 16 Nov). A [RecordFailed],
   /// [RecordRefused] or [RecordUnanswered], or a throw, sends Teams a 500
   /// and forgets the activity was seen, so its retry is taken. None in
   /// tests.
-  final Future<RecordAnswer> Function(Uint8List body)? witness;
+  final Future<RecordAnswer> Function(Uint8List body)? record;
 
   final Duration bodyTimeout;
   final int maxBodyBytes;
@@ -155,11 +155,11 @@ final class TeamsRelay {
     // One line per request, written once its status is decided, so it says
     // what Teams was sent. The reason, never the content: the log is not a
     // copy of anyone's words.
-    var line = 'teams relay: ${d.status} ${d.reason}';
-    if (d.event != null && witness != null) {
+    final line = 'teams relay: ${d.status} ${d.reason}';
+    if (d.event != null && record != null) {
       RecordAnswer answer;
       try {
-        answer = await witness!(Uint8List.fromList(body));
+        answer = await record!(Uint8List.fromList(body));
       } on Object catch (e) {
         answer = RecordUnanswered('${e.runtimeType}');
       }
@@ -167,9 +167,7 @@ final class TeamsRelay {
         case Recorded():
           break;
         case RecordFailed(:final why):
-          // It may be in the record already, so it is not sent again: Teams
-          // is told it arrived, and a person is told it may not have.
-          line = '$line: RECORD FAILED, not resent, check the record: $why';
+          return _unrecorded(req, d, 'record failed partway: $why');
         case RecordRefused(:final why):
           return _unrecorded(req, d, 'refused by the record: $why');
         case RecordUnanswered(:final why):
