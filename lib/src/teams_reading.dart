@@ -8,12 +8,10 @@ import 'teams_ids.dart';
 import 'teams_translator.dart';
 
 /// The Teams module's reading, for the docking port: what each event the
-/// Teams relay recorded is, in the record's order. The docking port hands
-/// each one over as an [Arrival], its name until it follows Nick's 16 Nov
-/// word, event.
+/// Teams relay recorded is, in the record's order.
 ///
-/// It describes and decides nothing (RULINGS, "The docking port admits
-/// arrivals under journey paths"): a message is [Said] with the [UserSaid]
+/// It describes and decides nothing, since the docking port is what admits
+/// events under journey paths (RULINGS): a message is [Said] with the [UserSaid]
 /// made from it, CAM or a person added to a conversation is [Joined], a
 /// press of Approve or Not yet on a card is [Responded] to that card, and
 /// everything else is [NothingToAdmit] for now:
@@ -33,9 +31,10 @@ import 'teams_translator.dart';
 /// lands in the thread; it sits [Admissible.within] its channel, the
 /// journey whose journey path it is (Nick, 15 Nov 21:00 and 21:03).
 ///
-/// Arrival keys: `message:<id>` for something said,
-/// `conversationUpdate:<id>` for a join, and `invoke:<id>` for a press. Teams sends a redelivery with the
-/// same activity id, and two activities with two.
+/// Event keys: `message:<id>` for something said,
+/// `conversationUpdate:<id>` for a join, and `invoke:<id>` for a press. Teams
+/// sends a redelivery with the same activity id, so the two events it makes
+/// share a key; two activities have two.
 final class TeamsReading implements ModuleReading<TeamsReadingState> {
   const TeamsReading();
 
@@ -47,10 +46,10 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
   TeamsReadingState get start => TeamsReadingState.empty;
 
   @override
-  (TeamsReadingState, Reading) step(TeamsReadingState state, Arrival arrival) {
+  (TeamsReadingState, Reading) step(TeamsReadingState state, Event recorded) {
     final TeamsEvent? event;
     try {
-      event = teamsRecordedEvent(arrival.bytes);
+      event = teamsRecordedEvent(recorded.bytes);
     } on FormatException {
       // The gate took these bytes, so this is a body the gate and this
       // reading disagree about: nothing to admit, rather than a fold that
@@ -75,7 +74,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
     };
     switch (event) {
       case TeamsMessage():
-        final key = ArrivalKey.parse('message:${event.id}');
+        final key = EventKey.parse('message:${event.id}');
         final node = teamsSaid(event, entraOf: state.entraIdOf);
         if (key == null || node == null) return null;
         return Said(
@@ -85,7 +84,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
           node: node,
         );
       case TeamsConversationUpdate():
-        final key = ArrivalKey.parse('conversationUpdate:${event.id}');
+        final key = EventKey.parse('conversationUpdate:${event.id}');
         if (key == null) return null;
         return Joined.of(
           conversation: conversation,
@@ -102,7 +101,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
           ],
         );
       case TeamsCardAction(:final card?, :final actor?):
-        final key = ArrivalKey.parse('invoke:${event.id}');
+        final key = EventKey.parse('invoke:${event.id}');
         final to = TeamsMessageRef.of(event.conversation, card)?.source;
         // The verbs the cards send. Edit only reopens the choice on a card.
         final Response? response = switch (event.verb) {
