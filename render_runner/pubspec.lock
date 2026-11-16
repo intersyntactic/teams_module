@@ -148,11 +148,10 @@ packages:
   is_airlock_api:
     dependency: "direct main"
     description:
-      path: "."
-      ref: dbf9a44b9b7b8eb467b4df24f017a01fbe9e7c59
-      resolved-ref: dbf9a44b9b7b8eb467b4df24f017a01fbe9e7c59
-      url: "https://github.com/intersyntactic/airlock_api.git"
-    source: git
+      name: is_airlock_api
+      sha256: "7db39ad06b60416a1f49ceb520fc4d68b216ba31b73d3b3d818bd40178c00edd"
+      url: "https://pub.dev"
+    source: hosted
     version: "0.5.0"
   is_content_id:
     dependency: "direct main"

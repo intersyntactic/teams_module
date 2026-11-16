@@ -11,13 +11,7 @@ environment:
   sdk: ^3.13.0
 
 dependencies:
-  # The send entries' wire forms (DecidedSend, Rendered): airlock_api main
-  # at PR 11's merge, https://github.com/intersyntactic/airlock_api/pull/11,
-  # until 0.5.0 is published.
-  is_airlock_api:
-    git:
-      url: https://github.com/intersyntactic/airlock_api.git
-      ref: dbf9a44b9b7b8eb467b4df24f017a01fbe9e7c59
+  is_airlock_api: ^0.5.0
   is_content_id: ^0.2.0
   is_effects: ^0.2.1
   is_shapes: ^0.4.4
