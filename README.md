@@ -235,9 +235,11 @@ record (https://github.com/enspyrco/intersyntactic/issues/1147). It is two
 packages beside this one:
 
 - `teams_reply/`: the renderer. Its `lib/` is only the pure function from
-  entries to a body, and imports nothing but the SDK, so its `RendererId`,
-  the shasum of `lib/*.dart`, names every line that can change what it
-  draws.
+  entries to a body, and imports nothing but the SDK. Its `RendererId` is
+  the shasum of the `lib/*.dart` of the renderer and every package it
+  imports, each under its package's name (is_shapes 0.4.5), which here is
+  its own files alone, under `teams_reply/`: it names every line that can
+  change what it draws.
 - `render_follower/`: the program every renderer is built into. It
   follows the record for `post-decided` entries, answers each one the
   airlock allowed that names its renderer's id, and records a `rendered`
@@ -248,9 +250,10 @@ Build it with its id compiled in, from `teams_reply/`:
 
 ```
 dart pub get
-dart compile exe -Drenderer=$(cd lib && find . -type f -name '*.dart' \
-  -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256 | shasum -a 256 \
-  | cut -c1-64) bin/teams_reply.dart --target-os linux --target-arch arm64 \
+dart compile exe -Drenderer=$( (cd lib && find . -type f -name '*.dart' \
+  -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256 \
+  | sed 's|  \./|  ./teams_reply/|') | shasum -a 256 | cut -c1-64) \
+  bin/teams_reply.dart --target-os linux --target-arch arm64 \
   -o build/teams_reply-linux-arm64
 ```
 

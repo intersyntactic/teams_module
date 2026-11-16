@@ -11,13 +11,17 @@
 ///                                     record keeps whatever is added, so
 ///                                     a deploy's rehearsal must add none.
 ///
-/// Built with the renderer's id, the shasum of `lib/*.dart`, which it
-/// reports in every `rendered` entry; a build without one refuses to start.
-/// From this package's root:
+/// Built with the renderer's id, which it reports in every `rendered`
+/// entry; a build without one refuses to start. The id is the shasum of the
+/// `lib/*.dart` of the renderer and of every package it imports, each path
+/// under its package's name (is_shapes 0.4.5's `RendererId`). `lib/`
+/// imports no package, so that is this package's files alone, under
+/// `teams_reply/`. From this package's root:
 ///
-///     dart compile exe -Drenderer=$(cd lib && find . -type f \
+///     dart compile exe -Drenderer=$( (cd lib && find . -type f \
 ///       -name '*.dart' -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256 \
-///       | shasum -a 256 | cut -c1-64) bin/teams_reply.dart
+///       | sed 's|  \./|  ./teams_reply/|') | shasum -a 256 | cut -c1-64) \
+///       bin/teams_reply.dart
 library;
 
 import 'dart:io';

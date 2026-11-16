@@ -2,20 +2,21 @@
 /// entries. Pure: entries in, a body or a refusal out, with no clock, no
 /// randomness and no I/O, so the same entries always draw the same body.
 ///
-/// It is named by its `RendererId`, the shasum of this package's
-/// `lib/*.dart` (https://github.com/enspyrco/intersyntactic/issues/1147).
-/// That hash covers only this package's own files, so it imports nothing
-/// but the SDK: a package import would let a dependency change what is
-/// drawn without changing the id. The pure list
-/// (https://github.com/enspyrco/intersyntactic/issues/1046) would admit
-/// checked_json, but the id could not see which version ran.
+/// It is named by its `RendererId`, the shasum of the `lib/*.dart` of this
+/// package and of every package it imports, each under its package's name
+/// (is_shapes 0.4.5; https://github.com/enspyrco/intersyntactic/issues/1147).
+/// It imports nothing but the SDK, so its id is its own files alone, and
+/// stays one command anyone can run. The pure list
+/// (https://github.com/enspyrco/intersyntactic/issues/1046) also admits
+/// checked_json; this does without it.
 ///
 /// What it draws today: the reply to someone, from the one closing turn
-/// entry that holds a `ReplyText` node (is_conversation_shapes; agent-loop-b6
-/// has not pinned its bytes yet, so this reads only `shape` and `text`, and
-/// ignores the rest). Streaming posts, which name every `ReplyChunk` in
-/// order, come when the chunk's kind and bytes are fixed. Until then any
-/// other entry is refused.
+/// entry that holds a `ReplyText` node. Its bytes are pinned by agent_loop's
+/// `test/reply_text_envelope_test.dart`
+/// (https://github.com/intersyntactic/agent_loop/pull/11); this reads only
+/// `shape` and `text`, and ignores the rest. Streaming posts, which name
+/// every `ReplyChunk` in order, come when the chunk's kind and bytes are
+/// fixed. Until then any other entry is refused.
 library;
 
 import 'dart:convert';
