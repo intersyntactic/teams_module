@@ -11,12 +11,15 @@ environment:
 
 dependencies:
   checked_json: ^0.2.1
-  is_annotation_shapes: ^0.2.1
-  is_conversation_shapes: ^0.5.0
-  is_docking_port:
+  is_annotation_shapes:
     git:
-      url: https://github.com/intersyntactic/docking_port.git
-      ref: 93248a4
+      url: https://github.com/intersyntactic/annotation_shapes.git
+      ref: dbcc23399b7a678b397e6c2470d470523aee6b14
+  is_conversation_shapes: ^0.8.0
+  is_docking_station:
+    git:
+      url: https://github.com/intersyntactic/docking_station.git
+      ref: dc8aa087675ee76dc9f66510eacaabdca329b4e1
   is_effects: ^0.1.0
   is_shapes: ^0.4.0
   pointycastle: ^4.0.0

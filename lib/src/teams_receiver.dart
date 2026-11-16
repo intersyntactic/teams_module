@@ -12,21 +12,21 @@ final class Annotations {
   static const none = Annotations();
 
   /// The mark that the presser considered the version on the card.
-  final Seen? seen;
+  final NodeSeenMark? seen;
 
   /// The presser's standing approvals of that version, taken back.
-  final List<Withdrawal<Approval>> withdrawn;
+  final List<Withdrawal<NodeApproval>> withdrawn;
 
   /// An approval of the version on the card.
-  final Approval? approval;
+  final NodeApproval? approval;
 
   /// Every node to append, in order.
   List<Object> get inOrder => [?seen, ...withdrawn, ?approval];
 }
 
-/// Turns Teams events into annotation shapes: Approve on a card becomes an
-/// [Approval], and Not yet a [Seen] and the withdrawals it asks for: having
-/// looked and held off is not the same as not having looked yet.
+/// Turns Teams events into annotation shapes: Approve on a card becomes a
+/// [NodeApproval], and Not yet a [NodeSeenMark] and the withdrawals it asks
+/// for: having looked and held off is not the same as not having looked yet.
 ///
 /// It knows two things, each from its source. Which node a card shows, and in
 /// which conversation, from the cards it was told it [show]s: a press names
@@ -51,8 +51,8 @@ final class TeamsReceiver {
   final void Function(String) log;
 
   final _showing = <String, ({String conversation, Target target})>{};
-  final _standing = <TurnId, Approval>{};
-  final _seen = <Seen>[];
+  final _standing = <TurnId, NodeApproval>{};
+  final _seen = <NodeSeenMark>[];
 
   /// The card with activity id [card], sent to [conversation], now shows the
   /// node at [target].
@@ -65,12 +65,12 @@ final class TeamsReceiver {
   /// Takes in a node the journey path delivered, named by its exact [id].
   void delivered(TurnId id, Object node) {
     switch (node) {
-      case Approval():
+      case NodeApproval():
         _standing[id] = node;
-      case Withdrawal<Approval>(:final target, :final by):
+      case Withdrawal<NodeApproval>(:final target, :final by):
         // A withdrawal counts only from the approval's own author.
         if (_standing[target]?.by == by) _standing.remove(target);
-      case Seen():
+      case NodeSeenMark():
         _seen.add(node);
     }
   }
@@ -126,18 +126,18 @@ final class TeamsReceiver {
     switch (verb) {
       case 'approve':
         return Annotations(
-          approval: Approval(target: target, by: by),
+          approval: NodeApproval(target: target, by: by),
         );
       case 'notyet':
-        // The Seen is written even when nothing is withdrawn: when a pass
+        // The NodeSeenMark is written even when nothing is withdrawn: when a pass
         // says something new, it is the only trace that he looked.
         return Annotations(
-          seen: Seen(target: target, by: by),
+          seen: NodeSeenMark(target: target, by: by),
           withdrawn: [
             for (final MapEntry(key: id, value: approval) in _standing.entries)
               if (approval.by == by &&
                   sameVersion(approval.target.exact, target.exact))
-                Withdrawal<Approval>(target: id, by: by),
+                Withdrawal<NodeApproval>(target: id, by: by),
           ],
         );
       case 'edit':
