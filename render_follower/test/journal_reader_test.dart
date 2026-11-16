@@ -4,7 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:is_content_id/is_content_id.dart' show sha256;
-import 'package:is_teams_module/is_teams_module.dart';
+import 'package:render_follower/render_follower.dart';
 import 'package:test/test.dart';
 
 String _hex(List<int> bytes) =>

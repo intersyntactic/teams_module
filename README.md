@@ -227,9 +227,48 @@ dart compile exe bin/teams_relay.dart --target-os linux --target-arch arm64 \
   -o build/teams_relay-linux-arm64
 ```
 
+## Running teams-reply
+
+The way back is drawn, not written: an agent's reply reaches Teams only as
+a body that the renderer `teams-reply` draws from entries already in the
+record (https://github.com/enspyrco/intersyntactic/issues/1147). It is two
+packages beside this one:
+
+- `teams_reply/`: the renderer. Its `lib/` is only the pure function from
+  entries to a body, and imports nothing but the SDK, so its `RendererId`,
+  the shasum of `lib/*.dart`, names every line that can change what it
+  draws.
+- `render_follower/`: the program every renderer is built into. It
+  follows the record for `post-decided` entries, answers each one the
+  airlock allowed that names its renderer's id, and records a `rendered`
+  entry following it. It keeps no state: on a restart it reads the record
+  again and answers only posts still at their tip.
+
+Build it with its id compiled in, from `teams_reply/`:
+
+```
+dart pub get
+dart compile exe -Drenderer=$(cd lib && find . -type f -name '*.dart' \
+  -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256 | shasum -a 256 \
+  | cut -c1-64) bin/teams_reply.dart --target-os linux --target-arch arm64 \
+  -o build/teams_reply-linux-arm64
+```
+
+and run it with the record's two sockets:
+
+```
+JOURNAL_READ_SOCKET=<the record's read socket> \
+JOURNAL_SOCKET=<the record's writer's Unix socket> build/teams_reply-linux-arm64
+```
+
+The writer's sender table must let its user send `rendered`.
+`TEAMS_REPLY_DRY_RUN=1` renders and logs, and writes nothing.
+
 ## Running the tests
 
 ```
 dart pub get
 dart test
+(cd teams_reply && dart pub get && dart test)
+(cd render_follower && dart pub get && dart test)
 ```

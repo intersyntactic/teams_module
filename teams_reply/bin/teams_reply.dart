@@ -1,4 +1,5 @@
-/// teams-reply: follows the record for posts naming it, and records each
+/// teams-reply: the follower built with this package's renderer. It follows
+/// the record for posts the airlock allowed naming it, and records each
 /// one's body. It holds no secret and reaches no network: only the record's
 /// read socket and its writer's socket, both Unix.
 ///
@@ -10,25 +11,28 @@
 ///                                     record keeps whatever is added, so
 ///                                     a deploy's rehearsal must add none.
 ///
-/// Built with the source it was compiled from, recorded in every `rendered`
-/// entry; a build without one refuses to start:
+/// Built with the renderer's id, the shasum of `lib/*.dart`, which it
+/// reports in every `rendered` entry; a build without one refuses to start.
+/// From this package's root:
 ///
-///     dart compile exe $(dart run tool/source_id.dart) bin/teams_reply.dart
+///     dart compile exe -Drenderer=$(cd lib && find . -type f \
+///       -name '*.dart' -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256 \
+///       | shasum -a 256 | cut -c1-64) bin/teams_reply.dart
 library;
 
 import 'dart:io';
 
-import 'package:is_teams_module/teams_reply.dart';
-
-const _source = String.fromEnvironment('teams_reply.source');
+import 'package:render_follower/render_follower.dart';
+import 'package:teams_reply/teams_reply.dart';
 
 Future<void> main() async {
   final env = Platform.environment;
   final dryRun = env['TEAMS_REPLY_DRY_RUN'] == '1';
   final read = env['JOURNAL_READ_SOCKET'] ?? '';
   final write = env['JOURNAL_SOCKET'] ?? '';
-  if (_source.isEmpty) {
-    stderr.writeln('abort: built without -Dteams_reply.source');
+  final renderer = compiledRenderer();
+  if (renderer == null) {
+    stderr.writeln('abort: built without -Drenderer=<RendererId>');
     exit(78);
   }
   if (read.isEmpty || (!dryRun && write.isEmpty)) {
@@ -40,28 +44,30 @@ Future<void> main() async {
   }
 
   final reader = JournalReader(read);
-  final reply = TeamsReply(
+  final follower = RenderFollower(
+    name: 'teams-reply',
+    renderer: renderer,
     follow: (kinds) => reader.follow(kinds),
     tip: reader.tip,
     get: reader.get,
     write: (kind, follows, body) =>
         writeEntry(write, kind: kind, follows: follows, body: body),
-    // Until is_airlock_api 0.5.0 gives Decided its wire form, no post is
-    // read as naming teams-reply, so it follows and answers nothing.
-    drawsFrom: (_) => null,
-    render: (_) => const RenderRefused('no Teams rendering yet'),
-    source: _source,
+    render: (entries) =>
+        switch (teamsReply([for (final e in entries) Entry(e.kind, e.body)])) {
+          Body(:final text) => Ran(text),
+          Refusal(:final why) => Refused(why),
+        },
     dryRun: dryRun,
     log: stdout.writeln,
   );
   stdout.writeln(
-    'teams-reply: following $read as $_source'
+    'teams-reply: following $read as ${renderer.hex}'
     '${dryRun ? ', dry run' : ''}',
   );
   // However the follow ends, the service restarts it: a restart reads the
   // record from the start and answers only what is still unanswered.
   try {
-    await reply.run();
+    await follower.run();
     stderr.writeln('teams-reply: the record stopped the follow');
   } on Exception catch (e) {
     stderr.writeln('teams-reply: the follow failed: $e');

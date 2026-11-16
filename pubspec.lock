@@ -171,7 +171,7 @@ packages:
     source: hosted
     version: "0.2.1"
   is_content_id:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: is_content_id
       sha256: "40381247bf99e093eab9951d070ab2b416e526a9639ec85f80179ee26ef35e12"

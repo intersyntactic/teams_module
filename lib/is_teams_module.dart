@@ -20,7 +20,6 @@ library;
 
 export 'src/bot_connector.dart';
 export 'src/bot_framework_keys.dart';
-export 'src/journal_reader.dart';
 export 'src/key_source.dart';
 export 'src/record_event.dart';
 export 'src/stand_in_journey_path.dart';
@@ -32,7 +31,6 @@ export 'src/teams_conversation.dart';
 export 'src/teams_translator.dart';
 export 'src/teams_post.dart';
 export 'src/teams_reading.dart';
-export 'src/teams_reply.dart';
 export 'src/teams_requests.dart';
 export 'src/teams_receiver.dart';
 export 'src/teams_relay.dart';
