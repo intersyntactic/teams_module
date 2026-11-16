@@ -10,14 +10,15 @@
 ///                                     record keeps whatever is added, so
 ///                                     a deploy's rehearsal must add none.
 ///
-/// Built with `dart compile exe -Dteams_reply.source=<FileSetId>`: the
-/// source it was compiled from, recorded in every `rendered` entry. A build
-/// without one refuses to start.
+/// Built with the source it was compiled from, recorded in every `rendered`
+/// entry; a build without one refuses to start:
+///
+///     dart compile exe $(dart run tool/source_id.dart) bin/teams_reply.dart
 library;
 
 import 'dart:io';
 
-import 'package:is_teams_module/is_teams_module.dart';
+import 'package:is_teams_module/teams_reply.dart';
 
 const _source = String.fromEnvironment('teams_reply.source');
 
