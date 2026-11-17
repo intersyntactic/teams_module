@@ -44,23 +44,23 @@ Map<String, Object?> through(String url, Map<String, Object?> activity) =>
 void main() {
   setUpAll(setUpKeys);
 
-  late StandInJourneyPath journeyPath;
+  late StandInTrajectory trajectory;
   late TeamsTranslator teams;
   late List<TeamsPost> posted;
 
-  /// Every node appended, in order, as a journey path's store keeps them.
+  /// Every node appended, in order, as a trajectory's store keeps them.
   late List<(TurnId, Object)> stored;
 
   /// What the agent does when a [UserSaid] reaches it, if anything.
   void Function(TurnId id, UserSaid said)? agent;
 
   /// What the composition does with a Teams message: the translator reads it, and
-  /// the journey path appends what it read, the conversation first.
+  /// the trajectory appends what it read, the conversation first.
   TurnId? say(Map<String, Object?> activity) {
     final read = teams.said(messageOf(activity));
     if (read == null) return null;
-    if (read.joined case final joined?) journeyPath.append(joined);
-    return journeyPath.append(read.said);
+    if (read.joined case final joined?) trajectory.append(joined);
+    return trajectory.append(read.said);
   }
 
   /// The composition delivering [node] to the module's acceptors.
@@ -82,7 +82,7 @@ void main() {
     teams = TeamsTranslator(authors: TeamsAuthors());
     // The composition: each node goes to the acceptor bound to its shape,
     // and a post the module describes goes to the airlock (here, a list).
-    journeyPath = StandInJourneyPath(
+    trajectory = StandInTrajectory(
       deliver: (id, node) {
         stored.add((id, node));
         deliverTo(teams, id, node);
@@ -235,7 +235,7 @@ void main() {
           )!
           .said;
       expect((got.quotes!.author as UnknownAuthor).displayName, 'Bea');
-      // The only words of it the journey path has, since it never got there.
+      // The only words of it the trajectory has, since it never got there.
       expect(got.quotes!.preview, 'Good morning!');
     });
 
@@ -369,7 +369,7 @@ void main() {
       expect(got?.joined?.serviceUrl, Uri.parse(moved));
     });
 
-    test('is joined only when the journey path delivers it', () {
+    test('is joined only when the trajectory delivers it', () {
       teams.said(messageOf(message(id: 'act-1')));
       expect(teams.said(messageOf(message(id: 'act-2')))?.joined, isNotNull);
     });
@@ -378,9 +378,7 @@ void main() {
   group('a reply', () {
     test('to what was said here is described as a post under it', () {
       final asked = say(message(id: 'act-1'))!;
-      journeyPath.append(
-        ReplyText(by: agentId, answers: asked, text: 'It is.'),
-      );
+      trajectory.append(ReplyText(by: agentId, answers: asked, text: 'It is.'));
       expect(posted.single.serviceUrl, Uri.parse(serviceUrl));
       expect(posted.single.conversation, 'a:1personal');
       expect(posted.single.replyToId, 'act-1');
@@ -390,7 +388,7 @@ void main() {
     test('given while what it answers is still being delivered is posted', () {
       // An agent that answers at once, inside the delivery of what it
       // answers: before the append that wrote it has returned.
-      agent = (id, said) => journeyPath.append(
+      agent = (id, said) => trajectory.append(
         ReplyText(by: agentId, answers: id, text: 'At once.'),
       );
       say(message(id: 'act-2'));
@@ -398,9 +396,9 @@ void main() {
       expect(posted.single.activity['text'], 'At once.');
     });
 
-    test('after a restart is posted, from what the journey path replays', () {
+    test('after a restart is posted, from what the trajectory replays', () {
       final asked = say(message(id: 'act-3'))!;
-      // A new module, knowing only what the journey path hands it back:
+      // A new module, knowing only what the trajectory hands it back:
       // copies, as a store would read them, not the nodes appended.
       final restarted = TeamsTranslator(authors: TeamsAuthors());
       for (final (id, node) in stored) {
@@ -430,21 +428,19 @@ void main() {
       final asked = say(message(id: 'act-1'))!;
       final moved = 'https://smba.trafficmanager.net/emea/';
       say(through(moved, message(id: 'act-2')));
-      journeyPath.append(
-        ReplyText(by: agentId, answers: asked, text: 'Moved.'),
-      );
+      trajectory.append(ReplyText(by: agentId, answers: asked, text: 'Moved.'));
       expect(posted.single.serviceUrl, Uri.parse(moved));
     });
 
     test('to what was said by someone not in Teams is not posted', () {
-      final elsewhere = journeyPath.append(
+      final elsewhere = trajectory.append(
         UserSaid(
           author: ActorId.parse('slack:T1/U1')!,
           source: SourceMessageId.parse('C0123|1731456789.000100')!,
           text: 'hello',
         ),
       );
-      journeyPath.append(
+      trajectory.append(
         ReplyText(by: agentId, answers: elsewhere, text: 'Hi.'),
       );
       expect(posted, isEmpty);
@@ -456,13 +452,13 @@ void main() {
         source: SourceMessageId.parse('a:9never|act-1')!,
         text: 'hello',
       );
-      expect(() => journeyPath.append(unjoined), throwsStateError);
+      expect(() => trajectory.append(unjoined), throwsStateError);
     });
 
     test('goes to the conversation of what it answers, not the newest', () {
       final first = say(message(id: 'act-1'))!;
       say(inConversation('a:2other', message(id: 'act-9')));
-      journeyPath.append(
+      trajectory.append(
         ReplyText(by: agentId, answers: first, text: 'To the first.'),
       );
       expect(posted.single.conversation, 'a:1personal');
@@ -471,7 +467,7 @@ void main() {
 
     test('finds its conversation even if the id has a bar in it', () {
       final asked = say(inConversation('19:a|b@thread.v2', message()))!;
-      journeyPath.append(
+      trajectory.append(
         ReplyText(by: agentId, answers: asked, text: 'Still here.'),
       );
       expect(posted.single.conversation, '19:a|b@thread.v2');
@@ -484,7 +480,7 @@ void main() {
       final second = say(
         inConversation('19:group@thread.v2', message(id: '1794558994313')),
       )!;
-      journeyPath.append(
+      trajectory.append(
         ReplyText(by: agentId, answers: second, text: 'To the group.'),
       );
       expect(posted.single.conversation, '19:group@thread.v2');

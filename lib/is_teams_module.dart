@@ -1,5 +1,5 @@
 /// The Teams module: what people say and press in Microsoft Teams, taken in
-/// as nodes on a journey path, and the way back out to them.
+/// as nodes on a trajectory, and the way back out to them.
 ///
 /// So far, the way in: [TeamsRelay], the endpoint Teams posts to; [teamsGate],
 /// which every delivery passes first; and the keys it checks signatures
@@ -9,8 +9,8 @@
 /// the same event, for whatever reads the record; and [TeamsReading], which
 /// tells the docking station what each recorded event is. Then
 /// [TeamsReceiver], which reads each event as the annotation shapes it
-/// writes, and a [StandInJourneyPath] to write them to until the module meets
-/// a real journey path; and [TeamsTranslator], which turns a Teams message
+/// writes, and a [StandInTrajectory] to write them to until the module meets
+/// a real trajectory; and [TeamsTranslator], which turns a Teams message
 /// into a `UserSaid` and the agent's `ReplyText` into a [TeamsPost]. And the
 /// way out: [teamsPostRequest] and [teamsUpdateRequest], which describe a
 /// message as a request for a web driver to sign and send. The module holds
@@ -20,7 +20,7 @@ library;
 export 'src/bot_framework_keys.dart';
 export 'src/key_source.dart';
 export 'src/record_event.dart';
-export 'src/stand_in_journey_path.dart';
+export 'src/stand_in_trajectory.dart';
 export 'src/teams_event.dart';
 export 'src/teams_gate.dart';
 export 'src/teams_ids.dart';

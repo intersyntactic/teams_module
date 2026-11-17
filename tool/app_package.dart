@@ -22,8 +22,8 @@ const manifestVersion = '1.21';
 // (0.075) and differs only in hue, spread around the wheel and skipping the
 // greens the background already holds. So no colour shouts over another.
 const accent = (0x18, 0x47, 0x35); // forest green, behind it all
-const _cream = (0xf5, 0xee, 0xe0); // the branches
-const _butter = (0xeb, 0xd1, 0x9c); // the journey path, hue 85
+const _cream = (0xf5, 0xee, 0xe0); // the trajectories launched from it
+const _butter = (0xeb, 0xd1, 0x9c); // the trajectory, hue 85
 
 Future<void> main(List<String> args) async {
   if (args.isEmpty || args.length > 3) {
@@ -111,9 +111,9 @@ Map<String, Object?> manifest(String appId, String name, String version) => {
   'validDomains': <String>[],
 };
 
-/// A journey path drawn as a transit map. The path runs in butter from its
-/// root up to its tip, and at two of its nodes a new path branches off in
-/// cream, as a branch is: a new path from a node, never a fork of the old.
+/// A trajectory drawn as a transit map. It runs in butter from its root up
+/// to its tip, and from two of its nodes a new trajectory is launched in
+/// cream: a new trajectory from a node, never a fork of the old.
 /// Every node is a station coloured by who wrote it, people in rose and
 /// periwinkle, agents in aqua and lavender, ringed in the background colour
 /// so it stands clear of its line.
@@ -121,16 +121,17 @@ Map<String, Object?> manifest(String appId, String name, String version) => {
 /// Points are in unit coordinates, on a transit map's right angles and
 /// diagonals.
 const _root = (0.28, 0.84);
-const _path = [_root, (0.28, 0.60), (0.50, 0.38), (0.50, 0.16)];
-const _branches = [
+const _trajectory = [_root, (0.28, 0.60), (0.50, 0.38), (0.50, 0.16)];
+const _launchedTrajectories = [
   ((0.28, 0.60), (0.28, 0.16)), // straight up from the first node
   ((0.50, 0.38), (0.72, 0.16)), // up and right from the second
 ];
 
-/// Who wrote each node, in [_path] order after the root, then each branch's
-/// tip in [_branches] order: the path's tip is the agent whose path it is.
-const _pathActors = [_rose, _periwinkle, _aqua];
-const _branchActors = [_lavender, _lavender];
+/// Who wrote each node, in [_trajectory] order after the root, then each
+/// launched trajectory's tip in [_launchedTrajectories] order: a
+/// trajectory's tip is the agent whose trajectory it is.
+const _trajectoryActors = [_rose, _periwinkle, _aqua];
+const _launchedTrajectoryActors = [_lavender, _lavender];
 const _rose = (0xff, 0xc1, 0xc4); // a person, hue 15: green's complement
 const _periwinkle = (0xbc, 0xd4, 0xff); // another person, hue 265
 const _aqua = (0x98, 0xe4, 0xe8); // an agent, hue 200
@@ -143,24 +144,27 @@ typedef _Rgb = (int, int, int);
 /// The transit map on forest green for the colour icon; white on transparent
 /// for the outline icon, as Teams requires of each.
 Uint8List icon(int size, {required bool outline}) {
-  // The journey path, root to tip, and the paths branching off it.
-  final path = <_Stroke>[
-    for (var i = 0; i < _path.length - 1; i++) (_path[i], _path[i + 1]),
+  // The trajectory, root to tip, and the trajectories launched from it.
+  final trajectory = <_Stroke>[
+    for (var i = 0; i < _trajectory.length - 1; i++)
+      (_trajectory[i], _trajectory[i + 1]),
   ];
-  const branches = _branches;
+  const launchedTrajectories = _launchedTrajectories;
 
   // At 32 pixels a thin stroke vanishes, so the outline icon draws heavier,
-  // with nodes only a little wider than the strokes. In colour the path is
-  // heavier than its branches: path first, branches second, stations third.
-  final pathHalf = (outline ? 0.085 : 0.064) * size / 2;
-  final branchHalf = (outline ? 0.085 : 0.042) * size / 2;
+  // with nodes only a little wider than the strokes. In colour the trajectory
+  // is heavier than those launched from it: it first, they second, stations
+  // third.
+  final trajectoryHalf = (outline ? 0.085 : 0.064) * size / 2;
+  final launchedTrajectoryHalf = (outline ? 0.085 : 0.042) * size / 2;
   final dot = (outline ? 0.06 : 0.045) * size;
   final ring = outline ? 0.0 : 0.016 * size;
   final stations = <(_Point, _Rgb, double)>[
     (_root, _butter, dot * 1.25),
-    for (var i = 1; i < _path.length; i++) (_path[i], _pathActors[i - 1], dot),
-    for (var i = 0; i < _branches.length; i++)
-      (_branches[i].$2, _branchActors[i], dot),
+    for (var i = 1; i < _trajectory.length; i++)
+      (_trajectory[i], _trajectoryActors[i - 1], dot),
+    for (var i = 0; i < _launchedTrajectories.length; i++)
+      (_launchedTrajectories[i].$2, _launchedTrajectoryActors[i], dot),
   ];
 
   final rgba = Uint8List(size * size * 4);
@@ -191,7 +195,10 @@ Uint8List icon(int size, {required bool outline}) {
 
       final o = (y * size + x) * 4;
       if (outline) {
-        var ink = max(inked(path, pathHalf), inked(branches, branchHalf));
+        var ink = max(
+          inked(trajectory, trajectoryHalf),
+          inked(launchedTrajectories, launchedTrajectoryHalf),
+        );
         for (final (at, _, r) in stations) {
           ink = max(ink, within(r, from(at)));
         }
@@ -204,8 +211,8 @@ Uint8List icon(int size, {required bool outline}) {
         (under.$2 + (top.$2 - under.$2) * a).round(),
         (under.$3 + (top.$3 - under.$3) * a).round(),
       );
-      c = over(c, _cream, inked(branches, branchHalf));
-      c = over(c, _butter, inked(path, pathHalf));
+      c = over(c, _cream, inked(launchedTrajectories, launchedTrajectoryHalf));
+      c = over(c, _butter, inked(trajectory, trajectoryHalf));
       for (final (at, colour, r) in stations) {
         final d = from(at);
         c = over(c, accent, within(r + ring, d));

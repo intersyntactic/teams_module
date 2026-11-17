@@ -7,15 +7,15 @@ import 'teams_event.dart';
 import 'teams_conversation.dart';
 import 'teams_post.dart';
 
-/// Translates between Teams and a journey path, one per path.
+/// Translates between Teams and a trajectory, one per trajectory.
 ///
-/// In: [said] turns a Teams message into a [UserSaid], for the journey path
+/// In: [said] turns a Teams message into a [UserSaid], for the trajectory
 /// to append. Out: [answer] turns the agent's [ReplyText] into a [TeamsPost],
 /// for the airlock to decide. It appends and sends nothing itself.
 ///
 /// To answer, it has to know which chat each message came from. It learns
-/// that only from what the journey path delivers back, through [joined] and
-/// [heard], so replaying the path after a restart rebuilds it.
+/// that only from what the trajectory delivers back, through [joined] and
+/// [heard], so replaying the trajectory after a restart rebuilds it.
 ///
 /// To name who wrote a quoted message, it reads [authors], which every
 /// message given to [said] teaches. Share one [TeamsAuthors] between every
@@ -34,7 +34,7 @@ final class TeamsTranslator {
   final _heard = <TurnId, TeamsMessageRef>{};
 
   /// [message] as a [UserSaid], with a [TeamsConversation] to append before
-  /// it when the chat is new to this journey path or Teams has moved it.
+  /// it when the chat is new to this trajectory or Teams has moved it.
   /// A Reply carries what it quotes, and may then have no words of its own:
   /// an @-mention of the bot on a quoted message says "look at this". Null
   /// when Teams named no sender, or the message has no words and quotes
@@ -64,8 +64,8 @@ final class TeamsTranslator {
   /// Teams user is ignored.
   ///
   /// Throws a [StateError] for a Teams message from a chat never joined:
-  /// the journey path delivers a [TeamsConversation] before any [UserSaid]
-  /// from it, so that can only mean the path was put together wrong, and
+  /// the trajectory delivers a [TeamsConversation] before any [UserSaid]
+  /// from it, so that can only mean the trajectory was put together wrong, and
   /// every reply to it would be lost.
   void heard(TurnId id, UserSaid said) {
     if (!said.author.value.startsWith('teams:')) return;
@@ -116,7 +116,7 @@ UserSaid? teamsSaid(
 
 /// What [message] quotes, its author named when the record knows them and
 /// otherwise by the name Teams showed, with Teams' preview of its text: the
-/// only words of it the journey path has when the quoted message never
+/// only words of it the trajectory has when the quoted message never
 /// reached it. A quote is always of a message in the same chat.
 Quote? _quote(
   TeamsMessage message,
