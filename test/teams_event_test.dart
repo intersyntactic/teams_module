@@ -20,7 +20,7 @@ void main() {
         'action': {'verb': 'approve'},
       }),
     );
-    expect(pressed.verb, 'approve');
+    expect(pressed.verb, CardActionVerb.approve);
   });
 
   test('the actor is the tenant and Entra user, in lower case', () {

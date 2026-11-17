@@ -73,6 +73,7 @@ final class BotFrameworkKeySource {
       final jwks = Uri.parse(
         JsonObject.decode(await get(metadata)).string('jwks_uri'),
       );
+      // wire-ok: a URI scheme, checked against the one we accept.
       if (jwks.scheme != 'https') {
         throw FormatException('jwks_uri is not https: $jwks');
       }

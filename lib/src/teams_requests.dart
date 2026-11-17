@@ -50,6 +50,7 @@ Request _request(
   Map<String, Object?> activity,
   SignIn signIn,
 ) {
+  // wire-ok: a URI scheme, checked against the one we accept.
   if (serviceUrl.scheme != 'https') {
     throw ArgumentError.value(serviceUrl, 'serviceUrl', 'is not https');
   }
