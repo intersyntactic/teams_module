@@ -151,6 +151,7 @@ final class TeamsMessage extends TeamsEvent {
   /// no [replyTo], so this is the only place Teams says what it is about.
   TeamsQuote? get quote {
     for (final e in entities ?? const <JsonObject>[]) {
+      // wire-ok: Teams' entity type, an open set; only this one is read.
       if (e.stringOrNull('type') != 'quotedReply') continue;
       final q = e.objectOrNull('quotedReply');
       final messageId = q?.stringOrNull('messageId');
@@ -243,8 +244,28 @@ final class TeamsCardAction extends TeamsEvent {
   /// What was submitted: the action's verb and any inputs.
   final JsonObject? value;
 
-  /// The action's verb, such as `approve`.
-  String? get verb => value?.objectOrNull('action')?.stringOrNull('verb');
+  /// The action's verb, when it is one our cards send.
+  CardActionVerb? get verb =>
+      CardActionVerb.parse(value?.objectOrNull('action')?.stringOrNull('verb'));
+}
+
+/// The verbs our cards send, read once from the string Teams carries.
+enum CardActionVerb {
+  approve('approve'),
+  notYet('notyet'),
+
+  /// Reopens the choice on a card, and writes nothing.
+  edit('edit');
+
+  const CardActionVerb(this.asSent);
+
+  /// The verb as the card sends it.
+  final String asSent;
+
+  static final _byAsSent = {for (final v in values) v.asSent: v};
+
+  /// The verb [asSent] names, or null for one our cards don't send.
+  static CardActionVerb? parse(String? asSent) => _byAsSent[asSent];
 }
 
 /// Any other `invoke` the gate was told to take.

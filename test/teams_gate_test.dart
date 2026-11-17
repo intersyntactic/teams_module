@@ -102,7 +102,7 @@ void main() {
       });
       final pressed = d.event! as TeamsCardAction;
       expect(pressed.card, '1730881000000');
-      expect(pressed.verb, 'approve');
+      expect(pressed.verb, CardActionVerb.approve);
     });
 
     test('an audience given as a list', () {

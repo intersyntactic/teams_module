@@ -107,11 +107,11 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
       case TeamsCardAction(:final card?, :final actor?):
         final key = EventKey.parse('invoke:${event.id}');
         final to = TeamsMessageRef.of(event.conversation, card)?.source;
-        // The verbs the cards send. Edit only reopens the choice on a card.
+        // Edit only reopens the choice on a card.
         final VerdictOnShownMessage? verdict = switch (event.verb) {
-          'approve' => const ApprovedVerdict(),
-          'notyet' => const HeldOffVerdict(),
-          _ => null,
+          CardActionVerb.approve => const ApprovedVerdict(),
+          CardActionVerb.notYet => const HeldOffVerdict(),
+          CardActionVerb.edit || null => null,
         };
         if (key == null || to == null || verdict == null) return null;
         return ShownMessageJudged(
@@ -122,7 +122,11 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
           to: to,
           verdict: verdict,
         );
-      default:
+      case TeamsCardAction() ||
+          TeamsMessageUpdate() ||
+          TeamsMessageDelete() ||
+          TeamsInvoke() ||
+          TeamsInstallationUpdate():
         return null;
     }
   }

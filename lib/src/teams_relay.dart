@@ -72,9 +72,11 @@ final class TeamsRelay {
 
   Future<void> handle(HttpRequest req) async {
     try {
+      // wire-ok: the HTTP method, checked against the one we accept.
+      final isPost = req.method == 'POST';
       if (req.uri.path != path) {
         await _refuseUnread(req, HttpStatus.notFound);
-      } else if (req.method != 'POST') {
+      } else if (!isPost) {
         await _refuseUnread(req, HttpStatus.methodNotAllowed);
       } else {
         await _messages(req);

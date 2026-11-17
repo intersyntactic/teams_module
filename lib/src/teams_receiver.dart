@@ -122,13 +122,12 @@ final class TeamsReceiver {
       return Annotations.none;
     }
     final target = shown.target;
-    final verb = event.verb;
-    switch (verb) {
-      case 'approve':
+    switch (event.verb) {
+      case CardActionVerb.approve:
         return Annotations(
           approval: NodeApproval(target: target, by: by),
         );
-      case 'notyet':
+      case CardActionVerb.notYet:
         // The NodeSeenMark is written even when nothing is withdrawn: when a pass
         // says something new, it is the only trace that he looked.
         return Annotations(
@@ -140,11 +139,11 @@ final class TeamsReceiver {
                 Withdrawal<NodeApproval>(target: id, by: by),
           ],
         );
-      case 'edit':
+      case CardActionVerb.edit:
         // Edit reopens the choice on the card and writes nothing.
         return Annotations.none;
-      default:
-        log('teams receiver: a press with verb $verb');
+      case null:
+        log('teams receiver: a press with a verb our cards do not send');
         return Annotations.none;
     }
   }

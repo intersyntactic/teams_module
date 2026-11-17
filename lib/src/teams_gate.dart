@@ -267,6 +267,7 @@ TeamsGateDecision _decide(
   // The endorsement is what makes channelId trustworthy: a key Microsoft
   // has not endorsed for Teams may not sign a Teams activity.
   final channel = a.string('channelId');
+  // wire-ok: Bot Framework's channelId; this is the one check made of it.
   if (channel != 'msteams') {
     return TeamsGateDecision._reject(403, 'channel $channel is not msteams');
   }
@@ -304,13 +305,15 @@ TeamsGateDecision _decide(
 
   final type = a.string('type');
   final name = a.stringOrNull('name');
+  // wire-ok: Teams' activity type, an open set; read once here.
+  final isInvoke = type == 'invoke';
   final seenKey = jsonEncode([
     conversation.string('id'),
     type,
     a.string('id'),
     a.stringOrNull('timestamp'),
   ]);
-  final invokeResponse = type == 'invoke' && spec.wakeInvokes.contains(name)
+  final invokeResponse = isInvoke && spec.wakeInvokes.contains(name)
       ? JsonObject.of({
           'statusCode': 200,
           'type': 'application/vnd.microsoft.activity.message',
@@ -329,7 +332,7 @@ TeamsGateDecision _decide(
   if (invokeResponse == null && !spec.wakeActivityTypes.contains(type)) {
     return TeamsGateDecision._(
       TeamsGateOutcome.ignore,
-      type == 'invoke' ? 'quiet invoke $name' : 'quiet activity $type',
+      isInvoke ? 'quiet invoke $name' : 'quiet activity $type',
       seenKey: seenKey,
     );
   }
@@ -344,7 +347,7 @@ TeamsGateDecision _decide(
   }
   return TeamsGateDecision._(
     TeamsGateOutcome.trigger,
-    type == 'invoke' ? 'invoke $name' : type,
+    isInvoke ? 'invoke $name' : type,
     event: event,
     invokeResponse: invokeResponse,
     seenKey: seenKey,
@@ -430,6 +433,7 @@ TeamsEvent? _read(
     for (final m in a.objectsOrNull(k) ?? const <JsonObject>[])
       ?user(m.string('id')),
   ];
+  // wire-ok: the activity type and invoke name, parsed here into TeamsEvent.
   return switch (type) {
     'message' => TeamsMessage(
       conversation: conversationId,
@@ -477,6 +481,7 @@ TeamsEvent? _read(
       team: team,
       channelEventType: channelEventType,
     ),
+    // wire-ok: the activity type and invoke name, parsed here into TeamsEvent.
     'invoke' when name == 'adaptiveCard/action' => TeamsCardAction(
       conversation: conversationId,
       id: id,
@@ -570,6 +575,7 @@ _Check _verify(
     // something public, is the classic way past a verifier that trusts the
     // header's choice of algorithm.
     final alg = header.stringOrNull('alg');
+    // wire-ok: the JWT header's alg, checked against the one we accept.
     if (alg != 'RS256') return _Refused('token alg $alg is not RS256');
     final kid = header.stringOrNull('kid') ?? header.stringOrNull('x5t');
     if (kid == null) return _Refused('token names no key');
