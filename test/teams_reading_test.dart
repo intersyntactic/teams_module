@@ -105,7 +105,10 @@ void main() {
       () {
         final (_, [r]) = fold([message()]);
         final said = r as MessageSaid;
-        expect(said.conversation, ConversationId.parse('teams:a:1personal'));
+        expect(
+          said.addressInExternalSystem,
+          AddressInExternalSystem.parse('teams:a:1personal'),
+        );
         expect(said.key, EventKey.parse('message:1730881234567'));
         expect(said.from, ada);
         expect(said.message.value, 'a:1personal|1730881234567');
@@ -134,14 +137,17 @@ void main() {
         },
       ]);
       final said = r as MessageSaid;
-      expect(said.conversation.value, 'teams:$thread');
-      expect(said.within, ConversationId.parse('teams:$channel'));
+      expect(said.addressInExternalSystem.value, 'teams:$thread');
+      expect(
+        said.containingAddress,
+        AddressInExternalSystem.parse('teams:$channel'),
+      );
       expect(said.node.text, 'test');
     });
 
     test('in a chat sits inside nothing', () {
       final (_, [r]) = fold([message()]);
-      expect((r as MessageSaid).within, isNull);
+      expect((r as MessageSaid).containingAddress, isNull);
     });
 
     test('delivered twice has one key', () {
@@ -193,10 +199,13 @@ void main() {
   });
 
   group('a join', () {
-    test('of CAM is ConversationJoined, by whom it was added', () {
+    test('of CAM is ActorsJoinedAddress, by whom it was added', () {
       final (_, [r]) = fold([added()]);
-      final joined = r as ConversationJoined;
-      expect(joined.conversation, ConversationId.parse('teams:a:1personal'));
+      final joined = r as ActorsJoinedAddress;
+      expect(
+        joined.addressInExternalSystem,
+        AddressInExternalSystem.parse('teams:a:1personal'),
+      );
       expect(joined.key, EventKey.parse('conversationUpdate:f:24c8730b'));
       expect(joined.from, ada);
       expect(joined.joiners, [bot]);
@@ -221,9 +230,12 @@ void main() {
           },
         },
       ]);
-      final joined = r as ConversationJoined;
-      expect(joined.conversation, ConversationId.parse('teams:$team'));
-      expect(joined.within, isNull);
+      final joined = r as ActorsJoinedAddress;
+      expect(
+        joined.addressInExternalSystem,
+        AddressInExternalSystem.parse('teams:$team'),
+      );
+      expect(joined.containingAddress, isNull);
     });
 
     test('naming its own conversation as its channel sits inside nothing', () {
@@ -244,7 +256,7 @@ void main() {
           },
         },
       ]);
-      expect((r as ConversationJoined).within, isNull);
+      expect((r as ActorsJoinedAddress).containingAddress, isNull);
     });
 
     test('names a person heard from, and leaves out one never heard from', () {
@@ -252,7 +264,7 @@ void main() {
         fromBea('act-1'),
         added(alsoAdded: ['29:1bea', '29:1cyd']),
       ]);
-      expect((r as ConversationJoined).joiners, [bot, bea]);
+      expect((r as ActorsJoinedAddress).joiners, [bot, bea]);
     });
 
     test('of no one it can name is nothing to admit', () {
@@ -269,7 +281,7 @@ void main() {
           ..['action'] = 'add'
           ..remove('text'),
       ]);
-      expect(a, isA<ConversationJoined>());
+      expect(a, isA<ActorsJoinedAddress>());
       expect(b, isA<NothingToAdmit>());
     });
   });
@@ -278,7 +290,10 @@ void main() {
     test('of Approve is ShownMessageJudged for that card: ApprovedVerdict', () {
       final (_, [r]) = fold([pressed('approve')]);
       final responded = r as ShownMessageJudged;
-      expect(responded.conversation, ConversationId.parse('teams:a:1personal'));
+      expect(
+        responded.addressInExternalSystem,
+        AddressInExternalSystem.parse('teams:a:1personal'),
+      );
       expect(responded.key, EventKey.parse('invoke:f:9001'));
       expect(responded.from, ada);
       expect(responded.to.value, 'a:1personal|1730881000000');
@@ -377,7 +392,7 @@ void main() {
       ];
       String described(EventReading r) => switch (r) {
         MessageSaid() => 'said ${r.key} ${r.from} ${r.node.quotes?.author}',
-        ConversationJoined() => 'joined ${r.key} ${r.joiners}',
+        ActorsJoinedAddress() => 'joined ${r.key} ${r.joiners}',
         MessageChanged() => 'changed ${r.key}',
         ShownMessageJudged() => 'responded ${r.key} ${r.to} ${r.verdict}',
         NothingToAdmit() => 'nothing',

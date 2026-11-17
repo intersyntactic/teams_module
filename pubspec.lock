@@ -9,15 +9,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "111.0.0"
-  agent_loop:
-    dependency: transitive
-    description:
-      path: "."
-      ref: "207690a"
-      resolved-ref: "207690a4f542de3a8b7547da140c9f0d04410271"
-      url: "https://github.com/intersyntactic/agent_loop.git"
-    source: git
-    version: "0.0.0"
   analyzer:
     dependency: transitive
     description:
@@ -190,27 +181,44 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: d660d34f37a3902c5b96d5fcd22f29ea3040f665
-      resolved-ref: d660d34f37a3902c5b96d5fcd22f29ea3040f665
+      ref: a3672b0702df34cae61c00f76345facf7fca519e
+      resolved-ref: a3672b0702df34cae61c00f76345facf7fca519e
       url: "https://github.com/intersyntactic/docking_station.git"
     source: git
     version: "0.0.1"
   is_effects:
     dependency: "direct main"
     description:
-      name: is_effects
-      sha256: "8c5af555fc6d3461f4120c470d0199e66c15a23e5bbb3e5509b9fb5f4e5a0295"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.1.0"
+      path: "."
+      ref: b313ac87188fb553b9a07ad31407dc1de9c4a610
+      resolved-ref: b313ac87188fb553b9a07ad31407dc1de9c4a610
+      url: "https://github.com/intersyntactic/effects.git"
+    source: git
+    version: "0.7.0"
   is_journal:
     dependency: "direct dev"
     description:
       name: is_journal
-      sha256: e662f4ceff4bbfced819526588c3d629559bc3e52afeea51fe7b691181b6c443
+      sha256: "840f95b972e1384599e08e3892f99ed1d64359522b68400cc98b49d445d9cb13"
       url: "https://pub.dev"
     source: hosted
-    version: "0.5.0"
+    version: "0.9.0"
+  is_journal_client:
+    dependency: transitive
+    description:
+      name: is_journal_client
+      sha256: "720a46cf7abbd06a595da01412d1cdad2aa24b735c286b295658d26a467a208a"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.1.2"
+  is_path_confinement:
+    dependency: transitive
+    description:
+      name: is_path_confinement
+      sha256: b09d4b18aa39366b63497117be8adbd9f0cfb987a3eb2db437d053f3bc11ea45
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.1.0"
   is_shapes:
     dependency: "direct main"
     description:

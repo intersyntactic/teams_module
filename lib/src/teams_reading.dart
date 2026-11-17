@@ -13,7 +13,7 @@ import 'teams_translator.dart';
 /// It describes and decides nothing, since the docking station is what
 /// admits events under trajectories (RULINGS): a message is [MessageSaid]
 /// with the [UserSaid] made from it, CAM or a person added to a
-/// conversation is [ConversationJoined], a press of Approve or Not yet on a
+/// conversation is [ActorsJoinedAddress], a press of Approve or Not yet on a
 /// card is [ShownMessageJudged] for that card, and everything else is
 /// [NothingToAdmit] for now:
 ///
@@ -26,10 +26,10 @@ import 'teams_translator.dart';
 ///   does, what was typed goes into [ProposedCorrectionVerdict] as text, and
 ///   the apex reads it as the shown shape's value.
 ///
-/// A conversation is Teams' conversation id as Teams sends it. In a channel
+/// An address is Teams' conversation id as Teams sends it. In a channel
 /// that names a thread, `<channel>;messageid=<the thread's first post>`, so
-/// each thread is a conversation of its own, and an answer sent back to it
-/// lands in the thread; it sits [AdmissibleEvent.within] its channel, the
+/// each thread is an address of its own, and an answer sent back to it
+/// lands in the thread; its [AdmissibleEvent.containingAddress] is its channel, the
 /// mission whose trajectory it is (Nick, 15 Nov 21:00 and 21:03).
 ///
 /// Event keys: `message:<id>` for something said,
@@ -68,12 +68,16 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
   }
 
   static EventReading? _read(TeamsEvent event, TeamsReadingState state) {
-    final conversation = ConversationId.parse('teams:${event.conversation}');
-    if (conversation == null) return null;
+    final address = AddressInExternalSystem.parse(
+      'teams:${event.conversation}',
+    );
+    if (address == null) return null;
     // A thread sits inside its channel. A team-wide event arrives in the
     // team's first channel itself, which sits inside nothing.
-    final within = switch (event.channel) {
-      final c? when c != event.conversation => ConversationId.parse('teams:$c'),
+    final containingAddress = switch (event.channel) {
+      final c? when c != event.conversation => AddressInExternalSystem.parse(
+        'teams:$c',
+      ),
       _ => null,
     };
     switch (event) {
@@ -82,17 +86,17 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
         final node = teamsSaid(event, entraOf: state.entraIdOf);
         if (key == null || node == null) return null;
         return MessageSaid(
-          conversation: conversation,
-          within: within,
+          addressInExternalSystem: address,
+          containingAddress: containingAddress,
           key: key,
           node: node,
         );
       case TeamsConversationUpdate():
         final key = EventKey.parse('conversationUpdate:${event.id}');
         if (key == null) return null;
-        return ConversationJoined.of(
-          conversation: conversation,
-          within: within,
+        return ActorsJoinedAddress.of(
+          addressInExternalSystem: address,
+          containingAddress: containingAddress,
           from: event.actor,
           key: key,
           joiners: [
@@ -115,8 +119,8 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
         };
         if (key == null || to == null || verdict == null) return null;
         return ShownMessageJudged(
-          conversation: conversation,
-          within: within,
+          addressInExternalSystem: address,
+          containingAddress: containingAddress,
           from: actor,
           key: key,
           to: to,

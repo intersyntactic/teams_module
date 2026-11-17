@@ -67,12 +67,17 @@ Request _request(
   final region = serviceUrl.path.endsWith('/')
       ? serviceUrl.path.substring(0, serviceUrl.path.length - 1)
       : serviceUrl.path;
+  final path = WebPath.parse(
+    '$region/v3/conversations/${Uri.encodeComponent(conversation)}'
+    '/activities${activityId == null ? '' : '/${Uri.encodeComponent(activityId)}'}',
+  );
+  if (path == null) {
+    throw ArgumentError.value(conversation, 'conversation', 'leaves the site');
+  }
   return Request(
     origin,
     method: method,
-    path:
-        '$region/v3/conversations/${Uri.encodeComponent(conversation)}'
-        '/activities${activityId == null ? '' : '/${Uri.encodeComponent(activityId)}'}',
+    path: path,
     signIn: signIn,
     headers: const {'content-type': 'application/json; charset=utf-8'},
     body: jsonEncode(activity),
