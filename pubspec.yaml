@@ -18,7 +18,7 @@ dependencies:
       url: https://github.com/intersyntactic/docking_station.git
       ref: a3672b0702df34cae61c00f76345facf7fca519e
   is_effects: ^0.7.0
-  is_shapes: ^0.4.0
+  is_shapes: '>=0.4.0 <0.6.0'
   pointycastle: ^4.0.0
 
 dev_dependencies:
