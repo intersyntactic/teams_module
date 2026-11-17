@@ -133,7 +133,7 @@ void main() {
   });
 
   group('a message ref', () {
-    test('is a journey path source and back, unchanged', () {
+    test('is a trajectory source and back, unchanged', () {
       final ref = TeamsMessageRef.of('19:chat@thread.v2', '1794727863400')!;
       expect(ref.source.value, '19:chat@thread.v2|1794727863400');
       expect(TeamsMessageRef.fromSource(ref.source), ref);

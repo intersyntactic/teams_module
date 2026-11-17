@@ -1,9 +1,9 @@
 # is_teams_module
 
-The Teams module for intersyntactic. It lets a journey take part in Microsoft
-Teams: what a journey shows a person arrives as a message or a card, and what
-they say and press there comes back as nodes on its journey path. The modules
-on that path never learn Teams exists; a module that wants a person's review
+The Teams module for intersyntactic. It lets a Microsoft Teams chat take part
+in a mission: what a mission shows a person arrives as a message or a card,
+and what they say and press there comes back as nodes on its trajectory. The
+modules on that trajectory never learn Teams exists; a module that wants a person's review
 or approval plugs into this one rather than speaking Teams itself.
 
 ## Shape
@@ -11,7 +11,7 @@ or approval plugs into this one rather than speaking Teams itself.
 ```
 Teams ──POST (Bot Framework JWT)──▶ Teams relay ──event, with content────▶ receiver
                                      │  checks the token against            │  writes nodes,
-                                     │  Microsoft's public keys; responds   │  feeds the journey
+                                     │  Microsoft's public keys; responds   │  feeds the mission
                                      │  a card action with "Got it"         ▼
                                      │  at once; drops repeats       Bot Connector REST
                                      │  by activity id               (posts and edits cards)
@@ -109,7 +109,7 @@ documentation or inference only).
   no Entra object id for is no one, so their message is not admitted.
   Measured: every person's message so far carried one.
 - A bot is `28:<app id>` with no Entra object id, and is attributed as
-  `teams:<tenant>/bot:<app id>`. To a journey, another bot is a user like
+  `teams:<tenant>/bot:<app id>`. To a mission, another bot is a user like
   anyone else. Measured for this bot in `membersAdded`, 15 Nov. A message
   *from* another bot is unmeasured.
 - A quote names its author only by channel id and display name, never an
@@ -170,8 +170,8 @@ serves `POST /api/messages`, fetches Microsoft's keys and refreshes them every
 12 hours (`lib/src/key_source.dart`), and passes each delivery through the gate
 (`lib/src/teams_gate.dart`). The receiver (`lib/src/teams_receiver.dart`)
 reads each event as the annotation shapes it writes: an approval, a
-holding off, a withdrawal. Until the module meets a real journey path it
-writes them to a stand-in (`lib/src/stand_in_journey_path.dart`). The way out
+holding off, a withdrawal. Until the module meets a real trajectory it
+writes them to a stand-in (`lib/src/stand_in_trajectory.dart`). The way out
 is described, never sent: `lib/src/teams_requests.dart` turns a post, a
 reply or an edit into a request the airlock decides and the web driver signs
 and sends. The module holds no bot secret. Still to come: cards drawn from a
@@ -188,8 +188,8 @@ the zip in the tenant's Teams, and message the bot. To replace a
 package already uploaded, build it with a higher version: Teams refuses one
 that isn't.
 
-The icon is a journey path drawn as a transit map: the path in gold from its
-root to its tip, two new paths branching off it at its nodes, and every node
+The icon is a trajectory drawn as a transit map: the trajectory in gold from
+its root to its tip, two new trajectories launched from its nodes, and every node
 a station coloured by who wrote it, people and agents alike.
 
 ## Running the relay

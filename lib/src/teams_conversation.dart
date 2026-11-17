@@ -1,4 +1,4 @@
-/// Where a Teams conversation is reached: offered to the journey path the
+/// Where a Teams conversation is reached: offered to the trajectory the
 /// first time the bot hears from it, and again whenever Teams moves it, so
 /// a module that restarts reads it back with everything else.
 final class TeamsConversation {

@@ -71,7 +71,7 @@ sealed class TeamsEvent {
   ActorId? get actor => teamsActor(tenant, user: from, entra: fromAadObjectId);
 }
 
-/// A Teams user's id on a journey path. To a journey everyone but the agent
+/// A Teams user's id on a trajectory. To a mission everyone but the agent
 /// is a user, another bot included, so both have an id, in lower case:
 ///
 /// - a person, `teams:<tenant>/<Entra object id>`, from [entra];

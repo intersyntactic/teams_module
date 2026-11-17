@@ -46,7 +46,7 @@ TeamsCardAction press(
 );
 
 void main() {
-  late StandInJourneyPath journeyPath;
+  late StandInTrajectory trajectory;
   late TeamsReceiver receiver;
   late List<String> logged;
   late Map<Object, TurnId> ids;
@@ -55,10 +55,10 @@ void main() {
     logged = [];
     ids = Map.identity();
     receiver = TeamsReceiver(
-      sameVersion: (a, b) => journeyPath.sameVersion(a, b),
+      sameVersion: (a, b) => trajectory.sameVersion(a, b),
       log: logged.add,
     );
-    journeyPath = StandInJourneyPath(
+    trajectory = StandInTrajectory(
       deliver: (id, node) {
         ids[node] = id;
         receiver.delivered(id, node);
@@ -79,7 +79,7 @@ void main() {
   /// Appends [example] as one pass would, and shows it on [card].
   Target shown(String card, Example example, {String conversation = chat}) {
     final target = Target(
-      exact: journeyPath.append(example),
+      exact: trajectory.append(example),
       anchor: SemanticAnchor.of(utf8.encode(example.key)),
     );
     receiver.show(card, target, conversation: conversation);
@@ -89,7 +89,7 @@ void main() {
   /// Reads [event] and appends what it writes, as the module does.
   Annotations write(TeamsEvent event) {
     final written = receiver.read(event);
-    written.inOrder.forEach(journeyPath.append);
+    written.inOrder.forEach(trajectory.append);
     return written;
   }
 
@@ -217,7 +217,7 @@ void main() {
     shown('card-1', planned);
     final approval = ids[write(press('card-1', 'approve')).approval]!;
     // Bea names Ada's approval: it counts for nothing.
-    journeyPath.append(
+    trajectory.append(
       Withdrawal<NodeApproval>(target: approval, by: actor(bea)),
     );
     expect(write(press('card-1', 'notyet')).withdrawn.map((w) => w.target), [
@@ -285,25 +285,25 @@ void main() {
     });
   });
 
-  group('the stand-in journey path', () {
+  group('the stand-in trajectory', () {
     test('names the same bytes on two passes differently, as one version', () {
-      final a = journeyPath.append(planned);
-      final b = journeyPath.append(planned);
+      final a = trajectory.append(planned);
+      final b = trajectory.append(planned);
       expect(a, isNot(b));
-      expect(journeyPath.sameVersion(a, b), isTrue);
+      expect(trajectory.sameVersion(a, b), isTrue);
     });
 
     test('tells apart two nodes that say different things', () {
-      final a = journeyPath.append(planned);
-      final b = journeyPath.append(const Example('example-3', Wording('done')));
-      expect(journeyPath.sameVersion(a, b), isFalse);
+      final a = trajectory.append(planned);
+      final b = trajectory.append(const Example('example-3', Wording('done')));
+      expect(trajectory.sameVersion(a, b), isFalse);
     });
 
     test('knows no version of a node it never appended', () {
-      final a = journeyPath.append(planned);
+      final a = trajectory.append(planned);
       final stranger = TurnId.of(utf8.encode('elsewhere'));
-      expect(journeyPath.sameVersion(stranger, stranger), isFalse);
-      expect(journeyPath.sameVersion(a, stranger), isFalse);
+      expect(trajectory.sameVersion(stranger, stranger), isFalse);
+      expect(trajectory.sameVersion(a, stranger), isFalse);
     });
   });
 }

@@ -5,7 +5,7 @@ import 'package:is_conversation_shapes/is_conversation_shapes.dart';
 /// millisecond the message was sent, in digits), so one alone can name two
 /// messages in two chats.
 ///
-/// On a journey path it is a [SourceMessageId], `<conversation>|<message>`,
+/// On a trajectory it is a [SourceMessageId], `<conversation>|<message>`,
 /// and this is the one way to that string and back: split at the last `|`,
 /// so only the message id has to be free of one.
 final class TeamsMessageRef {
@@ -34,7 +34,7 @@ final class TeamsMessageRef {
     return of(s.substring(0, bar), s.substring(bar + 1));
   }
 
-  /// This message as a journey path names it.
+  /// This message as a trajectory names it.
   SourceMessageId get source =>
       SourceMessageId.parse('$conversation|$message')!;
 

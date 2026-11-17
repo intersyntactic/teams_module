@@ -11,7 +11,7 @@ import 'teams_translator.dart';
 /// Teams relay recorded is, in the record's order.
 ///
 /// It describes and decides nothing, since the docking station is what
-/// admits events under journey paths (RULINGS): a message is [MessageSaid]
+/// admits events under trajectories (RULINGS): a message is [MessageSaid]
 /// with the [UserSaid] made from it, CAM or a person added to a
 /// conversation is [ConversationJoined], a press of Approve or Not yet on a
 /// card is [ShownMessageJudged] for that card, and everything else is
@@ -30,7 +30,7 @@ import 'teams_translator.dart';
 /// that names a thread, `<channel>;messageid=<the thread's first post>`, so
 /// each thread is a conversation of its own, and an answer sent back to it
 /// lands in the thread; it sits [AdmissibleEvent.within] its channel, the
-/// journey whose journey path it is (Nick, 15 Nov 21:00 and 21:03).
+/// mission whose trajectory it is (Nick, 15 Nov 21:00 and 21:03).
 ///
 /// Event keys: `message:<id>` for something said,
 /// `conversationUpdate:<id>` for a join, and `invoke:<id>` for a press. Teams

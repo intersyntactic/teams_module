@@ -3,7 +3,7 @@ import 'package:is_shapes/is_shapes.dart';
 
 import 'teams_event.dart';
 
-/// What one event writes, in the order the journey path takes it: a [seen], then
+/// What one event writes, in the order the trajectory takes it: a [seen], then
 /// the approvals [withdrawn], then an [approval].
 final class Annotations {
   const Annotations({this.seen, this.withdrawn = const [], this.approval});
@@ -32,9 +32,9 @@ final class Annotations {
 /// which conversation, from the cards it was told it [show]s: a press names
 /// its card by activity id and its verb, and the data on a card is not read,
 /// since it comes back from the Teams client and a client can be made to send
-/// any. And what each actor has written, from the nodes the journey path
+/// any. And what each actor has written, from the nodes the trajectory
 /// [delivered] to it, each with its exact id. Whether two nodes say the same
-/// thing is the journey path's to answer, as [sameVersion].
+/// thing is the trajectory's to answer, as [sameVersion].
 ///
 /// So a card is drawn from what is written, never from the last button
 /// pressed on it: an approval stands for every pass that says the same, so
@@ -62,7 +62,7 @@ final class TeamsReceiver {
   /// The node card [card] shows, or null for a card it was never shown.
   Target? targetOf(String card) => _showing[card]?.target;
 
-  /// Takes in a node the journey path delivered, named by its exact [id].
+  /// Takes in a node the trajectory delivered, named by its exact [id].
   void delivered(TurnId id, Object node) {
     switch (node) {
       case NodeApproval():
