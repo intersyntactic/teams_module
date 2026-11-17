@@ -180,12 +180,11 @@ packages:
   is_docking_station:
     dependency: "direct main"
     description:
-      path: "."
-      ref: db91a4a09330eb1266939d36ed502b400a269f89
-      resolved-ref: db91a4a09330eb1266939d36ed502b400a269f89
-      url: "https://github.com/intersyntactic/docking_station.git"
-    source: git
-    version: "0.0.1"
+      name: is_docking_station
+      sha256: "18d390a6bda5c6c6b88b38e455918424a053f1a163e89b455de7eeb80f52c3ba"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.1.0"
   is_effects:
     dependency: "direct main"
     description:
