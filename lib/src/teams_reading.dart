@@ -24,7 +24,7 @@ import 'teams_translator.dart';
 /// - a press of Edit, which only reopens the choice on a card, and any verb
 ///   the cards don't send. No card takes a typed correction yet; when one
 ///   does, what was typed goes into [ProposedCorrectionVerdict] as text, and
-///   the apex reads it as the shown shape's value.
+///   the crux reads it as the shown shape's value.
 ///
 /// A conversation is Teams' conversation id as Teams sends it. In a channel
 /// that names a thread, `<channel>;messageid=<the thread's first post>`, so
