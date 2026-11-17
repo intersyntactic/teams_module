@@ -5,7 +5,7 @@ import 'package:is_annotation_shapes/is_annotation_shapes.dart'
     show ApprovedVerdict, HeldOffVerdict;
 import 'package:is_conversation_shapes/is_conversation_shapes.dart';
 import 'package:is_docking_station/is_docking_station.dart';
-import 'package:is_journal/is_journal.dart';
+import 'package:is_logbook_client/is_logbook_client.dart' show ObjectId;
 import 'package:is_shapes/is_shapes.dart';
 import 'package:is_teams_module/is_teams_module.dart';
 import 'package:test/test.dart';
@@ -24,8 +24,13 @@ RelayedEvent recorded(Map<String, Object?> activity) {
       }),
     ),
   );
-  return RelayedEvent.read(EntryHash.of(body), body)!;
+  return RelayedEvent.read(_recordedId(body), body)!;
 }
+
+/// The id the logbook gives an `event` entry holding [body]: the hash of
+/// its whole text, header included.
+ObjectId _recordedId(Uint8List body) =>
+    ObjectId.of(Uint8List.fromList([...utf8.encode('event\n-\n'), ...body]));
 
 /// Every one of [activities], folded from the start, as the docking station
 /// folds them: the readings in order, and the state after the last.
@@ -359,7 +364,7 @@ void main() {
       );
       final (state, r) = reading.step(
         reading.start,
-        RelayedEvent.read(EntryHash.of(body), body)!,
+        RelayedEvent.read(_recordedId(body), body)!,
       );
       expect(r, isA<NothingToAdmit>());
       expect(state, same(reading.start));

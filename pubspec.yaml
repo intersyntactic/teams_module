@@ -16,12 +16,12 @@ dependencies:
   is_docking_station:
     git:
       url: https://github.com/intersyntactic/docking_station.git
-      ref: a3672b0702df34cae61c00f76345facf7fca519e
+      ref: 8f299f352734ba40599e3933eb3418d8c3256ddb
   is_effects: ^0.7.0
   is_shapes: '>=0.4.0 <0.6.0'
   pointycastle: ^4.0.0
 
 dev_dependencies:
-  is_journal: ^0.9.0
+  is_logbook_client: ^0.2.0
   lints: ^6.1.0
   test: ^1.33.0
