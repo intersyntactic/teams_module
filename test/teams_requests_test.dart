@@ -21,7 +21,7 @@ void main() {
     expect(r.origin, Origin.parse('https://smba.trafficmanager.net'));
     expect(r.method, Method.post);
     expect(
-      r.path,
+      r.path.value,
       '/amer/v3/conversations/a%3A1personal%3Bmessageid%3D17/activities',
     );
     expect(r.signIn, bot);
@@ -31,7 +31,7 @@ void main() {
   test('a reply posts to the message it answers', () {
     final r = teamsPostRequest(post(replyToId: '1730881000000'), bot);
     expect(r.method, Method.post);
-    expect(r.path, endsWith('/activities/1730881000000'));
+    expect(r.path.value, endsWith('/activities/1730881000000'));
   });
 
   test('an update puts to the message, carrying its id', () {
@@ -43,18 +43,37 @@ void main() {
       signIn: bot,
     );
     expect(r.method, Method.put);
-    expect(r.path, endsWith('/activities/card-1'));
+    expect(r.path.value, endsWith('/activities/card-1'));
     expect(jsonDecode(r.body!), {'type': 'message', 'id': 'card-1'});
   });
 
   test('a service URL with no region path, or no trailing slash', () {
     expect(
-      teamsPostRequest(post(url: Uri.parse('https://x.example')), bot).path,
+      teamsPostRequest(
+        post(url: Uri.parse('https://x.example')),
+        bot,
+      ).path.value,
       startsWith('/v3/conversations/'),
     );
     expect(
-      teamsPostRequest(post(url: Uri.parse('https://x.example/au')), bot).path,
+      teamsPostRequest(
+        post(url: Uri.parse('https://x.example/au')),
+        bot,
+      ).path.value,
       startsWith('/au/v3/conversations/'),
+    );
+  });
+
+  test('a conversation id that would climb out of the path is refused', () {
+    expect(
+      () => teamsUpdateRequest(
+        serviceUrl: serviceUrl,
+        conversation: '..',
+        activityId: 'card-1',
+        activity: {'type': 'message'},
+        signIn: bot,
+      ),
+      throwsArgumentError,
     );
   });
 
