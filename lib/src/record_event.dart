@@ -7,9 +7,11 @@
 /// event, not an arrival). Entries written before that are `arrived`, and
 /// keep it: whatever reads the record's events reads both kinds.
 ///
-/// The wire is `is_journal` 0.5.0's service: one connection per entry, the
-/// request `<kind>\n<follows>\n<body>` with the write side then closed, and
-/// one line back, `ok <entry hash>`, `refused <why>` or `failed <why>`.
+/// The wire is `is_logbook` 0.2.0's service: one connection per entry, the
+/// request `<kind>\n<previous>\n<body>` with the write side then closed, and
+/// one line back, `ok <entry id>`, `refused <why>` or `failed <why>`. The id
+/// is the hash of the whole request; each entry's own `at` keeps a resent
+/// event from being refused as a duplicate.
 library;
 
 import 'dart:async';

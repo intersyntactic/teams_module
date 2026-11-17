@@ -157,10 +157,10 @@ packages:
     dependency: "direct main"
     description:
       name: is_annotation_shapes
-      sha256: e087e951c9184a83ad3c1707139ab2097013bb6d8958c9cbc57b3077d69b3e37
+      sha256: eaba8ab69040d0612d12bbec7315b567015d4369dd19c91c2b4dd14223c7a2f5
       url: "https://pub.dev"
     source: hosted
-    version: "0.3.0"
+    version: "0.3.2"
   is_content_id:
     dependency: transitive
     description:
@@ -173,16 +173,16 @@ packages:
     dependency: "direct main"
     description:
       name: is_conversation_shapes
-      sha256: "257dfddd83a660beb9e1ed99774e37b868bf36d4951c1efa9f7a1b3f97872d16"
+      sha256: "9cc49a7f1bf6ddb077a86516533b706b6c2ac08856b036a7cfcec67286ba09c1"
       url: "https://pub.dev"
     source: hosted
-    version: "0.8.0"
+    version: "0.8.3"
   is_docking_station:
     dependency: "direct main"
     description:
       path: "."
-      ref: a3672b0702df34cae61c00f76345facf7fca519e
-      resolved-ref: a3672b0702df34cae61c00f76345facf7fca519e
+      ref: "8f299f352734ba40599e3933eb3418d8c3256ddb"
+      resolved-ref: "8f299f352734ba40599e3933eb3418d8c3256ddb"
       url: "https://github.com/intersyntactic/docking_station.git"
     source: git
     version: "0.0.1"
@@ -194,22 +194,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.7.0"
-  is_journal:
-    dependency: "direct dev"
-    description:
-      name: is_journal
-      sha256: "840f95b972e1384599e08e3892f99ed1d64359522b68400cc98b49d445d9cb13"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.9.0"
-  is_journal_client:
+  is_logbook:
     dependency: transitive
     description:
-      name: is_journal_client
-      sha256: "720a46cf7abbd06a595da01412d1cdad2aa24b735c286b295658d26a467a208a"
+      name: is_logbook
+      sha256: b1b848bb127e2453508dced234c298a95013a3fee56911cb98ddd750715b9e31
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.2"
+    version: "0.2.1"
+  is_logbook_client:
+    dependency: "direct dev"
+    description:
+      name: is_logbook_client
+      sha256: "885f9e932fc058e8aa05cf75b3be3e48ca0618c1d9023586aec3e0c41ad31ce3"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.0"
   is_path_confinement:
     dependency: transitive
     description:
@@ -222,10 +222,10 @@ packages:
     dependency: "direct main"
     description:
       name: is_shapes
-      sha256: e67505aa1de76972b74ab0bbebaa536ad46883fcd0b80f669465caebe9dd5095
+      sha256: "0c589d832c1386014c076452d6a3ff91799cb5cf322474ce4c65d4a552183e51"
       url: "https://pub.dev"
     source: hosted
-    version: "0.4.3"
+    version: "0.5.0"
   lints:
     dependency: "direct dev"
     description:
