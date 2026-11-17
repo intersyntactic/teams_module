@@ -189,11 +189,10 @@ packages:
   is_effects:
     dependency: "direct main"
     description:
-      path: "."
-      ref: b313ac87188fb553b9a07ad31407dc1de9c4a610
-      resolved-ref: b313ac87188fb553b9a07ad31407dc1de9c4a610
-      url: "https://github.com/intersyntactic/effects.git"
-    source: git
+      name: is_effects
+      sha256: f0aa06542e242e3ae0888710a878ad5123aaf78672309a551026a3e366f1c674
+      url: "https://pub.dev"
+    source: hosted
     version: "0.7.0"
   is_journal:
     dependency: "direct dev"
