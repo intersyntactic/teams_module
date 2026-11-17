@@ -181,8 +181,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "8f299f352734ba40599e3933eb3418d8c3256ddb"
-      resolved-ref: "8f299f352734ba40599e3933eb3418d8c3256ddb"
+      ref: db91a4a09330eb1266939d36ed502b400a269f89
+      resolved-ref: db91a4a09330eb1266939d36ed502b400a269f89
       url: "https://github.com/intersyntactic/docking_station.git"
     source: git
     version: "0.0.1"
@@ -190,10 +190,10 @@ packages:
     dependency: "direct main"
     description:
       name: is_effects
-      sha256: f0aa06542e242e3ae0888710a878ad5123aaf78672309a551026a3e366f1c674
+      sha256: "3ab745e8d01af33d9db6934d39d9ed6d69c1da089ed5d6c465e938a26e63234d"
       url: "https://pub.dev"
     source: hosted
-    version: "0.7.0"
+    version: "0.8.0"
   is_logbook:
     dependency: transitive
     description:
@@ -222,10 +222,10 @@ packages:
     dependency: "direct main"
     description:
       name: is_shapes
-      sha256: "0c589d832c1386014c076452d6a3ff91799cb5cf322474ce4c65d4a552183e51"
+      sha256: aa5d5f37840ab8a09517bcf7313418bdb6ffab2dea29b3ac06d2e95875f8c2e8
       url: "https://pub.dev"
     source: hosted
-    version: "0.5.0"
+    version: "0.6.0"
   lints:
     dependency: "direct dev"
     description:
