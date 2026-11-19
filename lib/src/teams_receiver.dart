@@ -142,6 +142,9 @@ final class TeamsReceiver {
       case CardActionVerb.edit:
         // Edit reopens the choice on the card and writes nothing.
         return Annotations.none;
+      case CardActionVerb.close:
+        // Closing a trajectory is the docking station's to decide, not a mark.
+        return Annotations.none;
       case null:
         log('teams receiver: a press with a verb our cards do not send');
         return Annotations.none;
