@@ -1,10 +1,14 @@
-/// Builds the Teams app package: the zip an admin uploads, holding the
-/// manifest and the two icons Teams requires.
+/// Builds Teams app packages: for each bot, the zip an admin uploads,
+/// holding the manifest and the two icons Teams requires.
 ///
-///     dart run tool/app_package.dart BOT_APP_ID [DISPLAY_NAME]
+///     dart run tool/app_package.dart [--version 1.2.3] [--settings-action]
+///         APP_ID=NAME [APP_ID=NAME ...]
 ///
-/// writes `build/appPackage/` and `build/appPackage.zip`. The display name
-/// is what people see in Teams; the registration's own name is not.
+/// writes `build/appPackage/<app id>/` and `build/<name>.zip` for each, so
+/// a pool of agent bots (researcher1, reviewer1, …) is one run. NAME is what
+/// people see in Teams and @mention; the registration's own name is not.
+/// `--settings-action` adds the message action that opens call settings
+/// from a message's "..." menu, for the bot that coordinates.
 ///
 /// Manifest 1.21, not the newest: this app uses nothing newer than a bot in
 /// personal and group-chat scopes, and an older version is the one an
@@ -16,6 +20,8 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:is_teams_module/is_teams_module.dart';
+
 const manifestVersion = '1.21';
 // The icon's palette, worked out in OKLCH so that equal numbers look
 // equally light: every pastel has the same lightness (0.87) and chroma
@@ -26,63 +32,101 @@ const _cream = (0xf5, 0xee, 0xe0); // the trajectories launched from it
 const _butter = (0xeb, 0xd1, 0x9c); // the trajectory, hue 85
 
 Future<void> main(List<String> args) async {
-  if (args.isEmpty || args.length > 3) {
-    stderr.writeln(
-      'usage: dart run tool/app_package.dart BOT_APP_ID [NAME] [VERSION]',
-    );
-    exit(64);
-  }
-  final appId = args[0].toLowerCase();
-  if (!RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
-      .hasMatch(appId)) {
-    stderr.writeln('abort: "$appId" is not a GUID');
-    exit(64);
-  }
-  final name = args.length >= 2 ? args[1] : 'Intersyntactic';
-  if (name.isEmpty || name.length > 30) {
-    stderr.writeln('abort: a short name is 1 to 30 characters');
-    exit(64);
-  }
+  const usage =
+      'usage: dart run tool/app_package.dart [--version 1.2.3] '
+      '[--settings-action] APP_ID=NAME [APP_ID=NAME ...]';
   // Teams takes a replacement package only if its version is higher than
   // the one already uploaded, so a re-upload names the next version.
-  final version = args.length == 3 ? args[2] : '0.0.1';
+  var version = '0.0.1';
+  var settingsAction = false;
+  final bots = <(BotAppId, String)>[];
+  for (var i = 0; i < args.length; i++) {
+    // wire-ok: command-line flags, read once here.
+    switch (args[i]) {
+      case '--version' when i + 1 < args.length:
+        version = args[++i];
+      case '--settings-action':
+        settingsAction = true;
+      case final pair:
+        final eq = pair.indexOf('=');
+        final id = eq < 0 ? null : BotAppId.parse(pair.substring(0, eq));
+        if (id == null) {
+          stderr.writeln(
+            'abort: "$pair" is not APP_ID=NAME with a GUID\n$usage',
+          );
+          exit(64);
+        }
+        final name = pair.substring(eq + 1);
+        if (name.isEmpty || name.length > 30) {
+          stderr.writeln('abort: "$name": a short name is 1 to 30 characters');
+          exit(64);
+        }
+        bots.add((id, name));
+    }
+  }
+  if (bots.isEmpty) {
+    stderr.writeln(usage);
+    exit(64);
+  }
   if (!RegExp(r'^\d+\.\d+\.\d+$').hasMatch(version)) {
     stderr.writeln('abort: "$version" is not a version like 1.2.3');
     exit(64);
   }
-
-  final dir = Directory('build/appPackage')..createSync(recursive: true);
-  File('${dir.path}/manifest.json').writeAsStringSync(
-    const JsonEncoder.withIndent('  ').convert(manifest(appId, name, version)),
-  );
-  File('${dir.path}/color.png').writeAsBytesSync(icon(192, outline: false));
-  File('${dir.path}/outline.png').writeAsBytesSync(icon(32, outline: true));
-
-  final zip = File('build/appPackage.zip');
-  if (zip.existsSync()) zip.deleteSync();
-  // -j: the three files sit at the zip's root, where Teams looks for them.
-  final r = await Process.run('zip', [
-    '-j',
-    '-X',
-    zip.path,
-    '${dir.path}/manifest.json',
-    '${dir.path}/color.png',
-    '${dir.path}/outline.png',
-  ]);
-  if (r.exitCode != 0) {
-    stderr.writeln('abort: zip failed: ${r.stderr}');
-    exit(1);
+  final zipNames = {for (final (_, name) in bots) _fileName(name)};
+  if (zipNames.length != bots.length) {
+    stderr.writeln('abort: two names make the same file name');
+    exit(64);
   }
-  stdout.writeln('wrote ${zip.path} for "$name" ($appId)');
+
+  final colour = icon(192, outline: false);
+  final outlined = icon(32, outline: true);
+  for (final (appId, name) in bots) {
+    final dir = Directory('build/appPackage/$appId')
+      ..createSync(recursive: true);
+    File('${dir.path}/manifest.json').writeAsStringSync(
+      const JsonEncoder.withIndent(
+        '  ',
+      ).convert(manifest(appId, name, version, settingsAction: settingsAction)),
+    );
+    File('${dir.path}/color.png').writeAsBytesSync(colour);
+    File('${dir.path}/outline.png').writeAsBytesSync(outlined);
+
+    final zip = File('build/${_fileName(name)}.zip');
+    if (zip.existsSync()) zip.deleteSync();
+    // -j: the three files sit at the zip's root, where Teams looks for them.
+    final r = await Process.run('zip', [
+      '-j',
+      '-X',
+      zip.path,
+      '${dir.path}/manifest.json',
+      '${dir.path}/color.png',
+      '${dir.path}/outline.png',
+    ]);
+    if (r.exitCode != 0) {
+      stderr.writeln('abort: zip failed for "$name": ${r.stderr}');
+      exit(1);
+    }
+    stdout.writeln('wrote ${zip.path} for "$name" ($appId)');
+  }
 }
 
-Map<String, Object?> manifest(String appId, String name, String version) => {
+/// [name] as a file name: lower case, anything but letters and digits a
+/// hyphen.
+String _fileName(String name) =>
+    name.toLowerCase().replaceAll(RegExp('[^a-z0-9]+'), '-');
+
+Map<String, Object?> manifest(
+  BotAppId appId,
+  String name,
+  String version, {
+  bool settingsAction = false,
+}) => {
   r'$schema':
       'https://developer.microsoft.com/json-schemas/teams/'
       'v$manifestVersion/MicrosoftTeams.schema.json',
   'manifestVersion': manifestVersion,
   'version': version,
-  'id': appId,
+  'id': appId.value,
   'developer': {
     'name': 'Enspyr',
     'websiteUrl': 'https://enspyr.co',
@@ -102,12 +146,28 @@ Map<String, Object?> manifest(String appId, String name, String version) => {
       '#${[accent.$1, accent.$2, accent.$3].map((c) => c.toRadixString(16).padLeft(2, '0')).join()}',
   'bots': [
     {
-      'botId': appId,
+      'botId': appId.value,
       'scopes': ['personal', 'groupChat'],
       'isNotificationOnly': false,
       'supportsFiles': false,
     },
   ],
+  if (settingsAction)
+    'composeExtensions': [
+      {
+        'botId': appId.value,
+        'commands': [
+          {
+            'id': callSettingsCommandId,
+            'type': 'action',
+            'context': ['message'],
+            'fetchTask': true,
+            'title': 'Call settings',
+            'description': 'Choose the model and effort the agent runs with',
+          },
+        ],
+      },
+    ],
   'validDomains': <String>[],
 };
 

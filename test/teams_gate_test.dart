@@ -92,6 +92,35 @@ void main() {
       expect(invoked.value!.object('action').string('verb'), 'approve');
     });
 
+    test('a message action submitted, with the message it was opened on', () {
+      // As the docs give a message action's submitAction; not yet measured.
+      final d = _gate({
+        ...cardAction(),
+        'name': 'composeExtension/submitAction',
+        'value': {
+          'commandId': callSettingsCommandId,
+          'commandContext': 'message',
+          'messagePayload': {
+            'id': '1730881000000',
+            'body': <String, Object?>{},
+          },
+          'data': {'model': 'opus', 'effort': 'high'},
+        },
+      });
+      expect(d.outcome, TeamsGateOutcome.trigger);
+      expect(d.invokeResponse, isNull);
+      final submitted = d.event! as TeamsMessageActionSubmit;
+      expect(submitted.command, callSettingsCommandId);
+      expect(
+        submitted.messageRef,
+        TeamsMessageRef.of('a:1personal', '1730881000000'),
+      );
+      expect(submitted.data!.asUncheckedMap(), {
+        'model': 'opus',
+        'effort': 'high',
+      });
+    });
+
     test('a card action, responded to with the acknowledgement', () {
       final d = _gate(cardAction());
       expect(d.outcome, TeamsGateOutcome.trigger);
@@ -260,6 +289,40 @@ void main() {
       final d = _gate({...cardAction(), 'name': 'composeExtension/query'});
       expect(d.outcome, TeamsGateOutcome.ignore);
       expect(d.invokeResponse, isNull);
+    });
+
+    test('an invoke it answers with a dialog, waking no one', () {
+      final card = JsonObject.of({'type': 'AdaptiveCard', 'version': '1.5'});
+      final spec = TeamsSourceSpec(
+        botAppIds: {appBot},
+        tenantAllowlist: {tenant},
+        invokeResponses: {
+          'composeExtension/fetchTask': teamsDialog(
+            title: 'Call settings',
+            card: card,
+          ),
+        },
+      );
+      final fetch = {...cardAction(), 'name': 'composeExtension/fetchTask'};
+      final d = _gate(fetch, spec: spec);
+      expect(d.outcome, TeamsGateOutcome.ignore);
+      expect(d.reason, 'answered invoke composeExtension/fetchTask');
+      expect(d.event, isNull);
+      expect(d.invokeResponse!.asUncheckedMap(), {
+        'task': {
+          'type': 'continue',
+          'value': {
+            'title': 'Call settings',
+            'card': {
+              'contentType': 'application/vnd.microsoft.card.adaptive',
+              'content': {'type': 'AdaptiveCard', 'version': '1.5'},
+            },
+          },
+        },
+      });
+      // Teams re-sends what it got no response to; the retry gets the same.
+      final again = _gate(fetch, spec: spec, hasSeen: {d.seenKey!}.contains);
+      expect(again.invokeResponse, isNotNull);
     });
 
     test('an activity already seen', () {
@@ -680,6 +743,11 @@ String _described(TeamsEvent e) => jsonEncode({
     TeamsMessageDelete() => {'channelEventType': e.channelEventType},
     TeamsCardAction() => {'card': e.card, 'value': e.value?.asUncheckedMap()},
     TeamsInvoke() => {'name': e.name, 'value': e.value?.asUncheckedMap()},
+    TeamsMessageActionSubmit() => {
+      'command': e.command,
+      'message': e.message,
+      'data': e.data?.asUncheckedMap(),
+    },
     TeamsConversationUpdate() => {
       'added': [for (final u in e.added) u.value],
       'removed': [for (final u in e.removed) u.value],

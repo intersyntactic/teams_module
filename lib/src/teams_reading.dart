@@ -130,6 +130,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
           TeamsMessageUpdate() ||
           TeamsMessageDelete() ||
           TeamsInvoke() ||
+          TeamsMessageActionSubmit() ||
           TeamsInstallationUpdate():
         return null;
     }

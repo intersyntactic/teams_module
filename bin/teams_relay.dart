@@ -17,6 +17,10 @@
 ///                                    recorded through it as an `event`
 ///                                    entry, byte for byte, before Teams
 ///                                    gets a response. Required.
+///   TEAMS_SETTINGS_DIALOG=card.json  optional; an Adaptive Card the call
+///                                    settings message action opens, read
+///                                    once at boot, so Teams' wait for it
+///                                    asks no agent. Unreadable aborts
 ///
 /// The relay keeps no record of its own: the record has one writer, which
 /// knows the relay by its user, and the relay sends it what arrives.
@@ -28,6 +32,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:checked_json/checked_json.dart';
 import 'package:is_teams_module/is_teams_module.dart';
 
 /// The source the relay's events are recorded under: the same as before,
@@ -83,6 +88,17 @@ Future<void> main() async {
     exit(78);
   }
 
+  final dialogPath = env['TEAMS_SETTINGS_DIALOG'] ?? '';
+  JsonObject? settingsCard;
+  if (dialogPath.isNotEmpty) {
+    try {
+      settingsCard = JsonObject.decode(File(dialogPath).readAsStringSync());
+    } on Exception catch (e) {
+      stderr.writeln('abort: TEAMS_SETTINGS_DIALOG "$dialogPath": $e');
+      exit(78);
+    }
+  }
+
   final record = env['JOURNAL_SOCKET'] ?? '';
   if (record.isEmpty) {
     // A relay that can't record what arrives must not respond 200 to it.
@@ -104,7 +120,17 @@ Future<void> main() async {
   }
 
   final relay = TeamsRelay(
-    spec: TeamsSourceSpec(botAppIds: botAppIds, tenantAllowlist: allow),
+    spec: TeamsSourceSpec(
+      botAppIds: botAppIds,
+      tenantAllowlist: allow,
+      invokeResponses: {
+        if (settingsCard case final card?)
+          'composeExtension/fetchTask': teamsDialog(
+            title: 'Call settings',
+            card: card,
+          ),
+      },
+    ),
     keys: keys,
     record: (body) => recordEvent(record, source: _source, bytes: body),
   );

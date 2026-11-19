@@ -180,8 +180,12 @@ shape's fields.
 ## Installing the bot in a tenant
 
 ```
-dart run tool/app_package.dart <app id> "Intersyntactic" 0.0.1   # build/appPackage.zip
+dart run tool/app_package.dart --version 0.0.1 --settings-action "<app id>=CAM"   # build/cam.zip
+dart run tool/app_package.dart "<id 1>=researcher1" "<id 2>=reviewer1"           # one zip per bot
 ```
+
+`--settings-action` adds "Call settings" to a message's "..." menu. Its
+dialog is the Adaptive Card the relay reads from `TEAMS_SETTINGS_DIALOG`.
 
 Set the bot's endpoint to the relay's address plus `/api/messages`, upload
 the zip in the tenant's Teams, and message the bot. To replace a
