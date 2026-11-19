@@ -93,10 +93,6 @@ final class EntraObjectId {
   static EntraObjectId? parse(String s) =>
       _guid.hasMatch(s) ? EntraObjectId._(s.toLowerCase()) : null;
 
-  static final _guid = RegExp(
-    r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
-  );
-
   @override
   bool operator ==(Object other) =>
       other is EntraObjectId && other.value == value;
@@ -107,3 +103,34 @@ final class EntraObjectId {
   @override
   String toString() => value;
 }
+
+/// A bot's Microsoft app id: the GUID of its Entra app registration, the
+/// audience of every token sent to it, and what Teams names it by as
+/// `28:<app id>`. Held in lower case.
+final class BotAppId {
+  const BotAppId._(this.value);
+
+  /// The GUID, in lower case.
+  final String value;
+
+  /// [s] as a bot's app id; null unless it is a GUID, in either case.
+  static BotAppId? parse(String s) =>
+      _guid.hasMatch(s) ? BotAppId._(s.toLowerCase()) : null;
+
+  /// The bot [account] names, when it is a bot's channel account id.
+  static BotAppId? ofChannelAccount(TeamsUserId account) =>
+      account.isBot ? parse(account.value.substring(3)) : null;
+
+  @override
+  bool operator ==(Object other) => other is BotAppId && other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => value;
+}
+
+final _guid = RegExp(
+  r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+);

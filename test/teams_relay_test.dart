@@ -28,7 +28,7 @@ void main() {
     recorded = [];
     answer = () => const Recorded('ab12');
     final relay = TeamsRelay(
-      spec: const TeamsSourceSpec(appId: appId, tenantAllowlist: {tenant}),
+      spec: TeamsSourceSpec(botAppIds: {appBot}, tenantAllowlist: {tenant}),
       keys: BotFrameworkKeySource(
         get: (url) async => !keysServed
             ? throw HttpException('down', uri: url)

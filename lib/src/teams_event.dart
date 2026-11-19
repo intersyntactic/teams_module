@@ -16,12 +16,12 @@ sealed class TeamsEvent {
     required this.conversation,
     required this.id,
     required this.serviceUrl,
+    required this.bot,
     this.tenant,
     this.conversationType,
     this.timestamp,
     this.from,
     this.fromAadObjectId,
-    this.recipient,
     this.channel,
     this.team,
   });
@@ -54,8 +54,9 @@ sealed class TeamsEvent {
   /// The sender's Entra object id: a person's, never a bot's.
   final EntraObjectId? fromAadObjectId;
 
-  /// The bot's channel account id in this conversation.
-  final TeamsUserId? recipient;
+  /// The bot it was sent to: the token's audience, which the gate holds the
+  /// activity's recipient to.
+  final BotAppId bot;
 
   /// In a team, the channel it happened in, as Teams names it in
   /// `channelData`. A channel message's [conversation] is a thread in this
@@ -128,7 +129,7 @@ final class TeamsMessage extends TeamsEvent {
     super.timestamp,
     super.from,
     super.fromAadObjectId,
-    super.recipient,
+    required super.bot,
     super.channel,
     super.team,
     this.text,
@@ -182,7 +183,7 @@ final class TeamsMessageUpdate extends TeamsEvent {
     super.timestamp,
     super.from,
     super.fromAadObjectId,
-    super.recipient,
+    required super.bot,
     super.channel,
     super.team,
     this.text,
@@ -209,7 +210,7 @@ final class TeamsMessageDelete extends TeamsEvent {
     super.timestamp,
     super.from,
     super.fromAadObjectId,
-    super.recipient,
+    required super.bot,
     super.channel,
     super.team,
     this.channelEventType,
@@ -231,7 +232,7 @@ final class TeamsCardAction extends TeamsEvent {
     super.timestamp,
     super.from,
     super.fromAadObjectId,
-    super.recipient,
+    required super.bot,
     super.channel,
     super.team,
     this.card,
@@ -279,7 +280,7 @@ final class TeamsInvoke extends TeamsEvent {
     super.timestamp,
     super.from,
     super.fromAadObjectId,
-    super.recipient,
+    required super.bot,
     super.channel,
     super.team,
     this.name,
@@ -302,15 +303,15 @@ final class TeamsConversationUpdate extends TeamsEvent {
     super.timestamp,
     super.from,
     super.fromAadObjectId,
-    super.recipient,
+    required super.bot,
     super.channel,
     super.team,
     this.added = const [],
     this.removed = const [],
   });
 
-  /// The channel account ids of those added; the bot's own is its
-  /// [recipient].
+  /// The channel account ids of those added; the bot's own is
+  /// `28:<`[bot]`>`.
   final List<TeamsUserId> added;
   final List<TeamsUserId> removed;
 }
@@ -327,7 +328,7 @@ final class TeamsInstallationUpdate extends TeamsEvent {
     super.timestamp,
     super.from,
     super.fromAadObjectId,
-    super.recipient,
+    required super.bot,
     super.channel,
     super.team,
     this.action,

@@ -4,6 +4,7 @@ import 'package:is_teams_module/is_teams_module.dart';
 import 'package:test/test.dart';
 
 final _url = Uri.parse('https://smba.trafficmanager.net/amer/');
+final _bot = BotAppId.parse('00000000-0000-0000-0000-00000000b07a')!;
 
 /// [s] as the gate would read it.
 TeamsUserId? _user(String s) => TeamsUserId.parse(s);
@@ -15,6 +16,7 @@ void main() {
       conversation: 'a:1',
       id: 'act-4',
       serviceUrl: _url,
+      bot: _bot,
       card: 'card-1',
       value: JsonObject.of({
         'action': {'verb': 'approve'},
@@ -28,6 +30,7 @@ void main() {
       conversation: 'a:1',
       id: 'act-1',
       serviceUrl: _url,
+      bot: _bot,
       tenant: 'TENANT-1',
       fromAadObjectId: _entra('ADA00000-0000-4000-8000-000000000001'),
     );
@@ -42,6 +45,7 @@ void main() {
       conversation: 'a:1',
       id: 'act-1',
       serviceUrl: _url,
+      bot: _bot,
       tenant: 'TENANT-1',
       from: _user('28:App-Id'),
     );
@@ -53,6 +57,7 @@ void main() {
       conversation: 'a:1',
       id: 'act-1',
       serviceUrl: _url,
+      bot: _bot,
       tenant: 'tenant-1',
       from: _user('28:app-id'),
       fromAadObjectId: _entra('ada00000-0000-4000-8000-000000000001'),
@@ -68,6 +73,7 @@ void main() {
       conversation: 'a:1',
       id: 'a',
       serviceUrl: _url,
+      bot: _bot,
       tenant: tenant,
       from: from == null ? null : _user(from),
     );
@@ -82,6 +88,7 @@ void main() {
       conversation: '19:chat@thread.v2',
       id: '1794712228139',
       serviceUrl: _url,
+      bot: _bot,
       entities: [for (final e in entities) JsonObject.of(e)],
     );
 
@@ -114,7 +121,12 @@ void main() {
     test('is absent from a message that quotes nothing', () {
       expect(replying([mention]).quote, isNull);
       expect(
-        TeamsMessage(conversation: 'a:1', id: 'a', serviceUrl: _url).quote,
+        TeamsMessage(
+          conversation: 'a:1',
+          id: 'a',
+          serviceUrl: _url,
+          bot: _bot,
+        ).quote,
         isNull,
       );
     });
@@ -176,6 +188,7 @@ void main() {
         conversation: 'a:1',
         id: '42',
         serviceUrl: _url,
+        bot: _bot,
       );
       expect(said.ref, TeamsMessageRef.of('a:1', '42'));
     });

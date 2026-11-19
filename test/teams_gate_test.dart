@@ -37,7 +37,7 @@ void main() {
         said.fromAadObjectId,
         EntraObjectId.parse('ada00000-0000-4000-8000-000000000001'),
       );
-      expect(said.recipient, TeamsUserId.parse('28:$appId'));
+      expect(said.bot, appBot);
       expect(said.text, 'Looks right to me');
       expect(said.entities, isNull);
       expect(said.replyTo, isNull);
@@ -81,8 +81,8 @@ void main() {
     test('another invoke it was told to take, by its name', () {
       final d = _gate(
         {...cardAction(), 'name': 'task/fetch'},
-        spec: const TeamsSourceSpec(
-          appId: appId,
+        spec: TeamsSourceSpec(
+          botAppIds: {appBot},
           tenantAllowlist: {tenant},
           wakeInvokes: {'task/fetch'},
         ),
@@ -113,6 +113,22 @@ void main() {
         },
       );
       expect(_gate(message(), token: t).outcome, TeamsGateOutcome.trigger);
+    });
+
+    test('a second bot from the same endpoint, named by its token', () {
+      final d = _gate(
+        {
+          ...message(),
+          'recipient': {'id': '28:${otherAppId.toUpperCase()}', 'name': 'B'},
+        },
+        token: signedToken(claims: {...tokenClaims(), 'aud': otherAppId}),
+        spec: TeamsSourceSpec(
+          botAppIds: {appBot, otherBot},
+          tenantAllowlist: {tenant},
+        ),
+      );
+      expect(d.outcome, TeamsGateOutcome.trigger);
+      expect(d.event!.bot, otherBot);
     });
 
     test('the claim spelled serviceUrl, as the docs spell it', () {
@@ -195,7 +211,7 @@ void main() {
         'channelData': {
           'tenant': {'id': upper},
         },
-      }, spec: TeamsSourceSpec(appId: appId, tenantAllowlist: {upper}));
+      }, spec: TeamsSourceSpec(botAppIds: {appBot}, tenantAllowlist: {upper}));
       expect(d.outcome, TeamsGateOutcome.trigger);
       expect(d.event!.tenant, tenant);
     });
@@ -228,8 +244,8 @@ void main() {
     test('a type it was told to wake on that no event is read as', () {
       final d = _gate(
         {...message(), 'type': 'typing'}..remove('text'),
-        spec: const TeamsSourceSpec(
-          appId: appId,
+        spec: TeamsSourceSpec(
+          botAppIds: {appBot},
           tenantAllowlist: {tenant},
           wakeActivityTypes: {'typing'},
         ),
@@ -313,15 +329,68 @@ void main() {
 
     test('when no app id is configured', () {
       refused(
-        _gate(message(), spec: const TeamsSourceSpec(appId: '')),
+        _gate(message(), spec: const TeamsSourceSpec(botAppIds: {})),
         401,
-        contains('app id'),
+        contains('app ids'),
+      );
+    });
+
+    test('a token for none of the bots', () {
+      final t = signedToken(claims: {...tokenClaims(), 'aud': otherAppId});
+      refused(_gate(message(), token: t), 401, contains('none of these bots'));
+    });
+
+    test('a token whose audience names two of the bots', () {
+      final t = signedToken(
+        claims: {
+          ...tokenClaims(),
+          'aud': [appId, otherAppId],
+        },
+      );
+      refused(
+        _gate(
+          message(),
+          token: t,
+          spec: TeamsSourceSpec(
+            botAppIds: {appBot, otherBot},
+            tenantAllowlist: {tenant},
+          ),
+        ),
+        401,
+        contains('2 of these bots'),
+      );
+    });
+
+    test("one bot's token carrying an activity addressed to another", () {
+      // Both bots are served here, and the token is genuinely for the first;
+      // the body is the only thing naming the second.
+      refused(
+        _gate(
+          {
+            ...message(),
+            'recipient': {'id': '28:$otherAppId', 'name': 'Other'},
+          },
+          spec: TeamsSourceSpec(
+            botAppIds: {appBot, otherBot},
+            tenantAllowlist: {tenant},
+          ),
+        ),
+        401,
+        contains('recipient'),
+      );
+    });
+
+    test('an activity with no recipient', () {
+      refused(
+        _gate({...message()}..remove('recipient')),
+        401,
+        contains('recipient'),
       );
     });
 
     test('a body over the cap', () {
       final d = teamsGate(
-        spec: const TeamsSourceSpec(appId: appId),
+        spec: TeamsSourceSpec(botAppIds: {appBot}),
         keys: keys,
         headers: {'Authorization': 'Bearer ${signedToken()}'},
         body: utf8.encode(jsonEncode(message())),
@@ -596,7 +665,7 @@ String _described(TeamsEvent e) => jsonEncode({
   'timestamp': e.timestamp,
   'from': e.from?.value,
   'fromAadObjectId': e.fromAadObjectId?.value,
-  'recipient': e.recipient?.value,
+  'bot': e.bot.value,
   ...switch (e) {
     TeamsMessage() => {
       'text': e.text,
@@ -623,14 +692,11 @@ TeamsGateDecision _gate(
   Map<String, Object?> activity, {
   String? token,
   Map<String, String>? headers,
-  TeamsSourceSpec spec = const TeamsSourceSpec(
-    appId: appId,
-    tenantAllowlist: {tenant},
-  ),
+  TeamsSourceSpec? spec,
   bool Function(String)? hasSeen,
   List<int>? body,
 }) => teamsGate(
-  spec: spec,
+  spec: spec ?? TeamsSourceSpec(botAppIds: {appBot}, tenantAllowlist: {tenant}),
   keys: keys,
   headers: headers ?? {'Authorization': 'Bearer ${token ?? signedToken()}'},
   body: body ?? utf8.encode(jsonEncode(activity)),

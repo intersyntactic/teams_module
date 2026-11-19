@@ -7,7 +7,8 @@
 ///
 /// 1. AUTHENTICATION is a JWT that Microsoft signs with a private key and the
 ///    gate checks against Microsoft's published public keys. The gate holds
-///    no secret, only the bot's app id, which is the token's audience.
+///    no secret, only the app ids of the bots it serves; a token's audience
+///    names exactly one of them, and that is the bot the activity is for.
 ///
 /// 2. THE TOKEN VOUCHES FOR THE SENDER, NOT THE BODY. No documented check of
 ///    it touches the body. The `serviceurl` claim matched against the
@@ -110,7 +111,7 @@ final class TeamsGateDecision {
 
 final class TeamsSourceSpec {
   const TeamsSourceSpec({
-    required this.appId,
+    required this.botAppIds,
     this.tenantAllowlist = const {},
     this.wakeActivityTypes = const {
       'message',
@@ -123,9 +124,10 @@ final class TeamsSourceSpec {
     this.acknowledgement = 'Got it',
   });
 
-  /// The bot's Microsoft app id: the audience every token must name. Empty
-  /// is a configuration error, and the gate refuses rather than opens.
-  final String appId;
+  /// The app ids of the bots this endpoint serves: every token's audience
+  /// must name exactly one. Empty is a configuration error, and the gate
+  /// refuses rather than opens.
+  final Set<BotAppId> botAppIds;
 
   /// Tenants whose activities are taken. Empty means "any tenant whose
   /// activity is correctly signed", which is only ever right in tests.
@@ -148,13 +150,16 @@ final class TeamsSourceSpec {
 /// or a refusal.
 sealed class TeamsTokenCheck {}
 
-/// A bearer token Microsoft signed for this bot, in date. Made only by
-/// [teamsToken], and taken by [teamsGateBody], which still has to match its
-/// `serviceurl` claim against the activity.
+/// A bearer token Microsoft signed for one of the bots, in date. Made only
+/// by [teamsToken], and taken by [teamsGateBody], which still has to match
+/// its `serviceurl` claim and its [bot] against the activity.
 final class TeamsToken extends TeamsTokenCheck {
-  TeamsToken._(this._claims, this._key);
+  TeamsToken._(this._claims, this._key, this.bot);
   final JsonObject _claims;
   final BotFrameworkKey _key;
+
+  /// The bot the token's audience names.
+  final BotAppId bot;
 }
 
 /// A delivery refused on its headers: [decision] is a 401, and no body need
@@ -194,7 +199,8 @@ TeamsGateDecision teamsGate({
 
 /// The checks the headers alone can make, so a sender with no valid token
 /// is refused before a byte of its body is read: a token is present, signed
-/// by one of [keys], from the Bot Connector, in date, and for this bot.
+/// by one of [keys], from the Bot Connector, in date, and for exactly one of
+/// the bots.
 TeamsTokenCheck teamsToken({
   required TeamsSourceSpec spec,
   required BotFrameworkKeys keys,
@@ -202,11 +208,11 @@ TeamsTokenCheck teamsToken({
   required DateTime now,
   Duration maxClockSkew = const Duration(minutes: 5),
 }) {
-  // FAIL CLOSED on a missing app id: a deploy that forgot an env var
-  // becomes a refuser.
-  if (spec.appId.isEmpty) {
+  // FAIL CLOSED on no app ids: a deploy that forgot an env var becomes a
+  // refuser.
+  if (spec.botAppIds.isEmpty) {
     return TeamsTokenRefused._(
-      const TeamsGateDecision._reject(401, 'app id not configured'),
+      const TeamsGateDecision._reject(401, 'no bot app ids configured'),
     );
   }
   final auth = {
@@ -220,14 +226,18 @@ TeamsTokenCheck teamsToken({
   return switch (_verify(
     auth.substring('Bearer '.length).trim(),
     keys: keys,
-    appId: spec.appId,
+    botAppIds: spec.botAppIds,
     now: now,
     skew: maxClockSkew,
   )) {
     _Refused(:final reason) => TeamsTokenRefused._(
       TeamsGateDecision._reject(401, reason),
     ),
-    _Verified(:final claims, :final key) => TeamsToken._(claims, key),
+    _Verified(:final claims, :final key, :final bot) => TeamsToken._(
+      claims,
+      key,
+      bot,
+    ),
   };
 }
 
@@ -251,7 +261,7 @@ TeamsGateDecision teamsGateBody({
     return const TeamsGateDecision._reject(400, 'body is not a JSON object');
   }
   try {
-    return _decide(spec, activity, token._claims, token._key, hasSeen);
+    return _decide(spec, activity, token, hasSeen);
   } on FormatException catch (e) {
     return TeamsGateDecision._reject(400, 'activity: ${e.message}');
   }
@@ -260,10 +270,10 @@ TeamsGateDecision teamsGateBody({
 TeamsGateDecision _decide(
   TeamsSourceSpec spec,
   JsonObject a,
-  JsonObject claims,
-  BotFrameworkKey key,
+  TeamsToken token,
   bool Function(String seenKey)? hasSeen,
 ) {
+  final TeamsToken(_claims: claims, _key: key) = token;
   // The endorsement is what makes channelId trustworthy: a key Microsoft
   // has not endorsed for Teams may not sign a Teams activity.
   final channel = a.string('channelId');
@@ -292,6 +302,21 @@ TeamsGateDecision _decide(
     return const TeamsGateDecision._reject(
       401,
       'serviceurl claim does not match the activity',
+    );
+  }
+
+  // The token says which bot it was sent to; the body's recipient is only
+  // the body's word. Held to the token, so one bot's token can't carry an
+  // activity addressed to another.
+  final recipient = switch (a.objectOrNull('recipient')?.stringOrNull('id')) {
+    final s? => TeamsUserId.parse(s),
+    null => null,
+  };
+  if ((recipient == null ? null : BotAppId.ofChannelAccount(recipient)) !=
+      token.bot) {
+    return const TeamsGateDecision._reject(
+      401,
+      'recipient is not the bot the token is for',
     );
   }
 
@@ -419,7 +444,14 @@ TeamsEvent? _read(
     final s? => EntraObjectId.parse(s),
     null => null,
   };
-  final recipient = user(a.objectOrNull('recipient')?.stringOrNull('id'));
+  // The gate has held the recipient to the token's audience by now, and a
+  // recorded body passed the gate, so a recipient that names no bot isn't
+  // an activity.
+  final bot = switch (user(a.objectOrNull('recipient')?.stringOrNull('id'))) {
+    final r? => BotAppId.ofChannelAccount(r),
+    null => null,
+  };
+  if (bot == null) throw const FormatException('recipient is not a bot');
   final text = a.stringOrNull('text');
   // As they came: @-mentions, and the quoted-reply entity that says which
   // earlier message a reply quotes. That is how a free-text reply in a chat
@@ -444,7 +476,7 @@ TeamsEvent? _read(
       timestamp: timestamp,
       from: fromId,
       fromAadObjectId: fromAadObjectId,
-      recipient: recipient,
+      bot: bot,
       channel: channel,
       team: team,
       text: text,
@@ -460,7 +492,7 @@ TeamsEvent? _read(
       timestamp: timestamp,
       from: fromId,
       fromAadObjectId: fromAadObjectId,
-      recipient: recipient,
+      bot: bot,
       channel: channel,
       team: team,
       text: text,
@@ -476,7 +508,7 @@ TeamsEvent? _read(
       timestamp: timestamp,
       from: fromId,
       fromAadObjectId: fromAadObjectId,
-      recipient: recipient,
+      bot: bot,
       channel: channel,
       team: team,
       channelEventType: channelEventType,
@@ -491,7 +523,7 @@ TeamsEvent? _read(
       timestamp: timestamp,
       from: fromId,
       fromAadObjectId: fromAadObjectId,
-      recipient: recipient,
+      bot: bot,
       channel: channel,
       team: team,
       card: a.stringOrNull('replyToId'),
@@ -506,7 +538,7 @@ TeamsEvent? _read(
       timestamp: timestamp,
       from: fromId,
       fromAadObjectId: fromAadObjectId,
-      recipient: recipient,
+      bot: bot,
       channel: channel,
       team: team,
       name: name,
@@ -521,7 +553,7 @@ TeamsEvent? _read(
       timestamp: timestamp,
       from: fromId,
       fromAadObjectId: fromAadObjectId,
-      recipient: recipient,
+      bot: bot,
       channel: channel,
       team: team,
       added: ids('membersAdded'),
@@ -536,7 +568,7 @@ TeamsEvent? _read(
       timestamp: timestamp,
       from: fromId,
       fromAadObjectId: fromAadObjectId,
-      recipient: recipient,
+      bot: bot,
       channel: channel,
       team: team,
       action: a.stringOrNull('action'),
@@ -548,9 +580,10 @@ TeamsEvent? _read(
 sealed class _Check {}
 
 final class _Verified extends _Check {
-  _Verified(this.claims, this.key);
+  _Verified(this.claims, this.key, this.bot);
   final JsonObject claims;
   final BotFrameworkKey key;
+  final BotAppId bot;
 }
 
 final class _Refused extends _Check {
@@ -558,12 +591,13 @@ final class _Refused extends _Check {
   final String reason;
 }
 
-/// The token's claims, if Microsoft signed it for this bot and it is in
-/// date. The signature is checked before any claim is believed.
+/// The token's claims and the bot it is for, if Microsoft signed it for
+/// exactly one of [botAppIds] and it is in date. The signature is checked
+/// before any claim is believed.
 _Check _verify(
   String token, {
   required BotFrameworkKeys keys,
-  required String appId,
+  required Set<BotAppId> botAppIds,
   required DateTime now,
   required Duration skew,
 }) {
@@ -600,9 +634,22 @@ _Check _verify(
     final claims = _segment(parts[1]);
     final iss = claims.stringOrNull('iss');
     if (iss != botFrameworkIssuer) return _Refused('token issuer $iss');
-    final aud = claims.raw('aud');
-    if (!(aud == appId || (aud is List && aud.contains(appId)))) {
-      return _Refused('token audience is not this bot');
+    // Two of ours in one audience would leave which bot it is for to the
+    // body, which the token doesn't vouch for.
+    final bots = {
+      for (final s in switch (claims.raw('aud')) {
+        final String one => [one],
+        final List<Object?> many => many.whereType<String>(),
+        _ => const <String>[],
+      })
+        if (BotAppId.parse(s) case final b? when botAppIds.contains(b)) b,
+    };
+    if (bots.length != 1) {
+      return _Refused(
+        bots.isEmpty
+            ? 'token audience is none of these bots'
+            : 'token audience names ${bots.length} of these bots',
+      );
     }
     final seconds = now.millisecondsSinceEpoch / 1000;
     final exp = claims.numberOrNull('exp');
@@ -614,7 +661,7 @@ _Check _verify(
     if (nbf != null && seconds < nbf - skew.inSeconds) {
       return _Refused('token not valid for ${(nbf - seconds).round()}s');
     }
-    return _Verified(claims, key);
+    return _Verified(claims, key, bots.single);
   } on FormatException catch (e) {
     return _Refused('token: ${e.message}');
   }

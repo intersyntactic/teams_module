@@ -17,6 +17,11 @@ import 'package:pointycastle/random/fortuna_random.dart';
 import 'package:pointycastle/signers/rsa_signer.dart';
 
 const appId = '00000000-0000-0000-0000-00000000b07a';
+final appBot = BotAppId.parse(appId)!;
+
+/// A second bot served from the same endpoint.
+const otherAppId = '00000000-0000-0000-0000-0000000b07b2';
+final otherBot = BotAppId.parse(otherAppId)!;
 const tenant = 'tenant-ada';
 const serviceUrl = 'https://smba.trafficmanager.net/amer/';
 final now = DateTime.utc(2026, 11, 6, 10);
