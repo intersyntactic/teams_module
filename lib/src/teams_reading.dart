@@ -14,7 +14,8 @@ import 'teams_translator.dart';
 /// admits events under trajectories (RULINGS): a message is [MessageSaid]
 /// with the [UserSaid] made from it, CAM or a person added to a
 /// conversation is [ActorsJoinedAddress], a press of Approve or Not yet on a
-/// card is [ShownMessageJudged] for that card, and everything else is
+/// card is [ShownMessageJudged] for that card, a press of Close is
+/// [PersonAskedToCloseTrajectory] naming that card, and everything else is
 /// [NothingToAdmit] for now:
 ///
 /// - an `installationUpdate`, which Teams sends beside the
@@ -111,21 +112,29 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
       case TeamsCardAction(:final card?, :final actor?):
         final key = EventKey.parse('invoke:${event.id}');
         final to = TeamsMessageRef.of(event.conversation, card)?.source;
-        // Edit only reopens the choice on a card.
-        final VerdictOnShownMessage? verdict = switch (event.verb) {
-          CardActionVerb.approve => const ApprovedVerdict(),
-          CardActionVerb.notYet => const HeldOffVerdict(),
+        if (key == null || to == null) return null;
+        ShownMessageJudged judged(VerdictOnShownMessage verdict) =>
+            ShownMessageJudged(
+              addressInExternalSystem: address,
+              containingAddress: containingAddress,
+              from: actor,
+              key: key,
+              to: to,
+              verdict: verdict,
+            );
+        return switch (event.verb) {
+          CardActionVerb.approve => judged(const ApprovedVerdict()),
+          CardActionVerb.notYet => judged(const HeldOffVerdict()),
+          CardActionVerb.close => PersonAskedToCloseTrajectory(
+            addressInExternalSystem: address,
+            containingAddress: containingAddress,
+            from: actor,
+            key: key,
+            message: to,
+          ),
+          // Edit only reopens the choice on a card.
           CardActionVerb.edit || null => null,
         };
-        if (key == null || to == null || verdict == null) return null;
-        return ShownMessageJudged(
-          addressInExternalSystem: address,
-          containingAddress: containingAddress,
-          from: actor,
-          key: key,
-          to: to,
-          verdict: verdict,
-        );
       case TeamsCardAction() ||
           TeamsMessageUpdate() ||
           TeamsMessageDelete() ||

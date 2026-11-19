@@ -310,6 +310,18 @@ void main() {
       expect((r as ShownMessageJudged).verdict, isA<HeldOffVerdict>());
     });
 
+    test('of Close is PersonAskedToCloseTrajectory, naming that card', () {
+      final (_, [r]) = fold([pressed('close')]);
+      final asked = r as PersonAskedToCloseTrajectory;
+      expect(
+        asked.addressInExternalSystem,
+        AddressInExternalSystem.parse('teams:a:1personal'),
+      );
+      expect(asked.key, EventKey.parse('invoke:f:9001'));
+      expect(asked.from, ada);
+      expect(asked.message.value, 'a:1personal|1730881000000');
+    });
+
     test('naming no card is nothing to admit', () {
       final (_, [r]) = fold([pressed('approve')..remove('replyToId')]);
       expect(r, isA<NothingToAdmit>());
@@ -394,12 +406,15 @@ void main() {
         fromBea('act-1'),
         quotingBea(message(id: 'act-2', text: '<at>Bot</at>'), 'act-1'),
         pressed('notyet'),
+        pressed('close'),
       ];
       String described(EventReading r) => switch (r) {
         MessageSaid() => 'said ${r.key} ${r.from} ${r.node.quotes?.author}',
         ActorsJoinedAddress() => 'joined ${r.key} ${r.joiners}',
         MessageChanged() => 'changed ${r.key}',
         ShownMessageJudged() => 'responded ${r.key} ${r.to} ${r.verdict}',
+        PersonAskedToCloseTrajectory() =>
+          'asked to close ${r.key} ${r.from} ${r.message}',
         NothingToAdmit() => 'nothing',
       };
       expect(

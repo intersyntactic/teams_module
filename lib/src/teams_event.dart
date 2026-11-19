@@ -255,7 +255,10 @@ enum CardActionVerb {
   notYet('notyet'),
 
   /// Reopens the choice on a card, and writes nothing.
-  edit('edit');
+  edit('edit'),
+
+  /// Asks to close the trajectory the card stands in.
+  close('close');
 
   const CardActionVerb(this.asSent);
 

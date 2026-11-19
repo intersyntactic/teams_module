@@ -13,7 +13,7 @@ dependencies:
   checked_json: ^0.2.1
   is_annotation_shapes: ^0.3.2
   is_conversation_shapes: ^0.8.3
-  is_docking_station: ^0.1.0
+  is_docking_station: ^0.2.0
   is_effects: ^0.9.0
   is_shapes: ^0.6.0
   pointycastle: ^4.0.0
