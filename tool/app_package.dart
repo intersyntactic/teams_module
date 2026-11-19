@@ -2,17 +2,19 @@
 /// holding the manifest and the two icons Teams requires.
 ///
 ///     dart run tool/app_package.dart [--version 1.2.3] [--settings-action]
-///         APP_ID=NAME [APP_ID=NAME ...]
+///         [--read-channel-files] APP_ID=NAME [APP_ID=NAME ...]
 ///
 /// writes `build/appPackage/<app id>/` and `build/<name>.zip` for each, so
 /// a pool of agent bots (researcher1, reviewer1, …) is one run. NAME is what
 /// people see in Teams and @mention; the registration's own name is not.
 /// `--settings-action` adds the message action that opens call settings
 /// from a message's "..." menu, for the bot that coordinates.
+/// `--read-channel-files` lets the bot be installed in a team and asks, as
+/// it is, for File.Read.Group: the files in that team's channels, granted
+/// per team by its install (resource-specific consent), never tenant-wide.
 ///
-/// Manifest 1.21, not the newest: this app uses nothing newer than a bot in
-/// personal and group-chat scopes, and an older version is the one an
-/// upload validator that lags behind still accepts.
+/// Manifest 1.21, not the newest: this app uses nothing newer, and an older
+/// version is the one an upload validator that lags behind still accepts.
 library;
 
 import 'dart:convert';
@@ -34,11 +36,13 @@ const _butter = (0xeb, 0xd1, 0x9c); // the trajectory, hue 85
 Future<void> main(List<String> args) async {
   const usage =
       'usage: dart run tool/app_package.dart [--version 1.2.3] '
-      '[--settings-action] APP_ID=NAME [APP_ID=NAME ...]';
+      '[--settings-action] [--read-channel-files] '
+      'APP_ID=NAME [APP_ID=NAME ...]';
   // Teams takes a replacement package only if its version is higher than
   // the one already uploaded, so a re-upload names the next version.
   var version = '0.0.1';
   var settingsAction = false;
+  var readChannelFiles = false;
   final bots = <(BotAppId, String)>[];
   for (var i = 0; i < args.length; i++) {
     // wire-ok: command-line flags, read once here.
@@ -47,6 +51,8 @@ Future<void> main(List<String> args) async {
         version = args[++i];
       case '--settings-action':
         settingsAction = true;
+      case '--read-channel-files':
+        readChannelFiles = true;
       case final pair:
         final eq = pair.indexOf('=');
         final id = eq < 0 ? null : BotAppId.parse(pair.substring(0, eq));
@@ -84,9 +90,15 @@ Future<void> main(List<String> args) async {
     final dir = Directory('build/appPackage/$appId')
       ..createSync(recursive: true);
     File('${dir.path}/manifest.json').writeAsStringSync(
-      const JsonEncoder.withIndent(
-        '  ',
-      ).convert(manifest(appId, name, version, settingsAction: settingsAction)),
+      const JsonEncoder.withIndent('  ').convert(
+        manifest(
+          appId,
+          name,
+          version,
+          settingsAction: settingsAction,
+          readChannelFiles: readChannelFiles,
+        ),
+      ),
     );
     File('${dir.path}/color.png').writeAsBytesSync(colour);
     File('${dir.path}/outline.png').writeAsBytesSync(outlined);
@@ -120,6 +132,7 @@ Map<String, Object?> manifest(
   String name,
   String version, {
   bool settingsAction = false,
+  bool readChannelFiles = false,
 }) => {
   r'$schema':
       'https://developer.microsoft.com/json-schemas/teams/'
@@ -147,7 +160,7 @@ Map<String, Object?> manifest(
   'bots': [
     {
       'botId': appId.value,
-      'scopes': ['personal', 'groupChat'],
+      'scopes': ['personal', 'groupChat', if (readChannelFiles) 'team'],
       'isNotificationOnly': false,
       'supportsFiles': false,
     },
@@ -169,6 +182,21 @@ Map<String, Object?> manifest(
       },
     ],
   'validDomains': <String>[],
+  if (readChannelFiles) ...{
+    // Resource-specific consent names the app's own registration here;
+    // the resource is required by the schema and unused by RSC.
+    'webApplicationInfo': {
+      'id': appId.value,
+      'resource': 'https://RscPermission',
+    },
+    'authorization': {
+      'permissions': {
+        'resourceSpecific': [
+          {'name': 'File.Read.Group', 'type': 'Application'},
+        ],
+      },
+    },
+  },
 };
 
 /// A trajectory drawn as a transit map. It runs in butter from its root up
