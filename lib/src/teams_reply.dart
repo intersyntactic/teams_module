@@ -49,12 +49,12 @@ List<Map<String, Object?>> teamsReplyActivities(
 }
 
 /// The requests that post [reply] to the conversation [relayedEvent] came
-/// from, signed as [signIn], in posting order. Empty when [relayedEvent] is
-/// not a Teams activity.
+/// from, signed as [signIn], in posting order. Null when [relayedEvent] is
+/// not a Teams activity, so the airlock can refuse saying so.
 ///
 /// [relayedEvent] is the activity's body as the relay recorded it, which
 /// names the conversation and the regional endpoint that reaches it.
-List<Request> teamsReplyRequests({
+List<Request>? teamsReplyRequests({
   required List<int> relayedEvent,
   required ModelReply reply,
   required SignIn signIn,
@@ -63,9 +63,9 @@ List<Request> teamsReplyRequests({
   try {
     event = teamsRecordedEvent(relayedEvent);
   } on FormatException {
-    return const [];
+    return null;
   }
-  if (event == null) return const [];
+  if (event == null) return null;
   return [
     for (final activity in teamsReplyActivities(reply))
       teamsPostRequest(

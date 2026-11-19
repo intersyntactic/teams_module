@@ -178,7 +178,7 @@ void main() {
         relayedEvent: event,
         reply: reply,
         signIn: signIn,
-      );
+      )!;
       final activities = teamsReplyActivities(reply);
       expect(requests, hasLength(activities.length));
       expect(requests.length, greaterThan(1));
@@ -195,14 +195,14 @@ void main() {
       }
     });
 
-    test('are none for bytes that are not a Teams activity', () {
+    test('are null for bytes that are not a Teams activity', () {
       expect(
         teamsReplyRequests(
           relayedEvent: utf8.encode('not json'),
           reply: const FinishedReply(text: 'hi'),
           signIn: signIn,
         ),
-        isEmpty,
+        isNull,
       );
       expect(
         teamsReplyRequests(
@@ -210,7 +210,7 @@ void main() {
           reply: const FinishedReply(text: 'hi'),
           signIn: signIn,
         ),
-        isEmpty,
+        isNull,
       );
     });
   });
