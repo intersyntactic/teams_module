@@ -27,6 +27,8 @@ const bea = 'bbbbbbbb-0000-4000-8000-000000000002';
 /// Ada's one-to-one chat with the bot.
 const chat = 'a:ada';
 
+final bot = BotAppId.parse('00000000-0000-0000-0000-00000000b07a')!;
+
 TeamsCardAction press(
   String card,
   String? verb, {
@@ -37,6 +39,7 @@ TeamsCardAction press(
   conversation: conversation,
   id: 'press-of-$card',
   serviceUrl: Uri.parse('https://smba.trafficmanager.net/amer/'),
+  bot: bot,
   tenant: tenantId,
   fromAadObjectId: user == null ? null : EntraObjectId.parse(user),
   card: card,
@@ -149,6 +152,7 @@ void main() {
       conversation: chat,
       id: 'act-1',
       serviceUrl: Uri.parse('https://smba.trafficmanager.net/amer/'),
+      bot: bot,
       tenant: tenant,
       fromAadObjectId: EntraObjectId.parse(ada),
       text: 'hi',

@@ -195,7 +195,7 @@ a station coloured by who wrote it, people and agents alike.
 ## Running the relay
 
 ```
-TEAMS_APP_ID=<the bot's app id> TEAMS_TENANT_ALLOWLIST=<tenant ids, comma-separated> \
+TEAMS_APP_IDS=<the bots' app ids, comma-separated> TEAMS_TENANT_ALLOWLIST=<tenant ids, comma-separated> \
 JOURNAL_SOCKET=<the record's writer's Unix socket> \
   dart run bin/teams_relay.dart
 ```

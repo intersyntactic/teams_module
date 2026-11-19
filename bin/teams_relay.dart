@@ -1,9 +1,10 @@
 /// Run behind TLS (a reverse proxy): Teams posts only to https. The relay
-/// holds no Microsoft secret, only the bot's app id, which the bot's own
-/// manifest prints.
+/// holds no Microsoft secret, only the bots' app ids, which each bot's own
+/// manifest prints. One endpoint serves every bot in the list.
 ///
-///   TEAMS_APP_ID=...                 the bot's Microsoft app id: the
-///                                    audience every token must name
+///   TEAMS_APP_IDS=id1,id2            the bots' Microsoft app ids: every
+///                                    token's audience must name exactly
+///                                    one. Required; a non-GUID aborts
 ///   TEAMS_TENANT_ALLOWLIST=t1,t2     tenants whose activities are taken.
 ///                                    Required: empty would take any
 ///                                    correctly signed tenant, so it aborts
@@ -35,12 +36,24 @@ const _source = 'teams';
 
 Future<void> main() async {
   final env = Platform.environment;
-  final appId = env['TEAMS_APP_ID'] ?? '';
-  if (appId.isEmpty) {
+  final rawAppIds = [
+    for (final s in (env['TEAMS_APP_IDS'] ?? '').split(','))
+      if (s.trim().isNotEmpty) s.trim(),
+  ];
+  if (rawAppIds.isEmpty) {
     // Refuse to start rather than serve an endpoint that refuses everyone
     // for a reason nobody reads.
-    stderr.writeln('abort: TEAMS_APP_ID not set');
+    stderr.writeln('abort: TEAMS_APP_IDS not set');
     exit(78);
+  }
+  final botAppIds = <BotAppId>{};
+  for (final s in rawAppIds) {
+    final id = BotAppId.parse(s);
+    if (id == null) {
+      stderr.writeln('abort: TEAMS_APP_IDS has "$s", which is not a GUID');
+      exit(78);
+    }
+    botAppIds.add(id);
   }
   final allow = {
     for (final t in (env['TEAMS_TENANT_ALLOWLIST'] ?? '').split(','))
@@ -91,7 +104,7 @@ Future<void> main() async {
   }
 
   final relay = TeamsRelay(
-    spec: TeamsSourceSpec(appId: appId, tenantAllowlist: allow),
+    spec: TeamsSourceSpec(botAppIds: botAppIds, tenantAllowlist: allow),
     keys: keys,
     record: (body) => recordEvent(record, source: _source, bytes: body),
   );

@@ -11,7 +11,7 @@ import 'support/fixtures.dart';
 /// activity's service URL, as Microsoft's do.
 TeamsMessage messageOf(Map<String, Object?> activity) =>
     teamsGate(
-          spec: const TeamsSourceSpec(appId: appId, tenantAllowlist: {tenant}),
+          spec: TeamsSourceSpec(botAppIds: {appBot}, tenantAllowlist: {tenant}),
           keys: keys,
           headers: {
             'Authorization':
@@ -299,6 +299,7 @@ void main() {
             conversation: 'a:1personal',
             id: 'f:1',
             serviceUrl: Uri.parse(serviceUrl),
+            bot: appBot,
             from: TeamsUserId.parse('29:1bea'),
             fromAadObjectId: EntraObjectId.parse(
               'bea00000-0000-4000-8000-000000000002',

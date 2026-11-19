@@ -32,7 +32,7 @@ void main() {
       final logged = <String>[];
       final answers = <RecordAnswer>[];
       final relay = TeamsRelay(
-        spec: const TeamsSourceSpec(appId: appId, tenantAllowlist: {tenant}),
+        spec: TeamsSourceSpec(botAppIds: {appBot}, tenantAllowlist: {tenant}),
         keys: BotFrameworkKeySource(
           get: (url) async => url.path.endsWith('openidconfiguration')
               ? jsonEncode({'jwks_uri': 'https://login.botframework.com/k'})
