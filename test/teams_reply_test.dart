@@ -195,7 +195,42 @@ void main() {
       }
     });
 
+    test('post the open card, its bytes exactly as they were', () {
+      // The bytes is_airlock_api 0.11.0 published as trajectoryOpenCardBody,
+      // which cards already posted were drawn from.
+      const published =
+          '{"type":"message","attachments":[{"contentType":'
+          '"application/vnd.microsoft.card.adaptive","content":{"\$schema":'
+          '"http://adaptivecards.io/schemas/adaptive-card.json","type":'
+          '"AdaptiveCard","version":"1.5","body":[{"type":"TextBlock",'
+          '"text":"● Open · trajectory started","wrap":true}],"actions":'
+          '[{"type":"Action.Execute","title":"Close trajectory","verb":'
+          '"close"}]}}]}';
+      final [request] = teamsTrajectoryOpenedRequests(
+        relayedEvent: utf8.encode(jsonEncode(message())),
+        signIn: signIn,
+      )!;
+      expect(request.body, published);
+      expect(request.signIn, signIn);
+      expect(
+        '${request.path}',
+        '/amer/v3/conversations/a%3A1personal/activities',
+      );
+    });
+
+    test('the open card is pressed closed with the verb the reading takes', () {
+      final verb = jsonEncode(teamsTrajectoryOpenCard);
+      expect(verb, contains('"verb":"${CardActionVerb.close.asSent}"'));
+    });
+
     test('are null for bytes that are not a Teams activity', () {
+      expect(
+        teamsTrajectoryOpenedRequests(
+          relayedEvent: utf8.encode('not json'),
+          signIn: signIn,
+        ),
+        isNull,
+      );
       expect(
         teamsReplyRequests(
           relayedEvent: utf8.encode('not json'),

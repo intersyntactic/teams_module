@@ -1,12 +1,14 @@
-/// A model's reply as the Teams messages it goes out as: an Adaptive Card
-/// per message, the reply's text in it, and a footer saying how full the
-/// model's context is. A reply too long for one message is split across
-/// several, in order, and only the last carries the footer and any note
-/// that the reply was cut off.
+/// What CAM posts in answer to a conversation's events, as Teams messages:
+/// the card saying a trajectory opened, and a model's reply.
+///
+/// A reply is an Adaptive Card per message, the reply's text in it, and a
+/// footer saying how full the model's context is. A reply too long for one
+/// message is split across several, in order, and only the last carries
+/// the footer and any note that the reply was cut off.
 ///
 /// teams_module is the one place these bytes are made: the airlock decides
-/// the requests [teamsReplyRequests] builds as they are, recording exactly
-/// what each one sends.
+/// the requests built here as they are, recording exactly what each one
+/// sends, and knows nothing of Teams.
 library;
 
 import 'dart:convert';
@@ -59,25 +61,75 @@ List<Request>? teamsReplyRequests({
   required ModelReply reply,
   required SignIn signIn,
 }) {
-  final TeamsEvent? event;
-  try {
-    event = teamsRecordedEvent(relayedEvent);
-  } on FormatException {
-    return null;
-  }
+  final event = _teamsEventOrNull(relayedEvent);
   if (event == null) return null;
   return [
     for (final activity in teamsReplyActivities(reply))
-      teamsPostRequest(
-        TeamsPost(
-          serviceUrl: event.serviceUrl,
-          conversation: event.conversation,
-          activity: activity,
-        ),
-        signIn,
-      ),
+      _post(event, activity, signIn),
   ];
 }
+
+/// The card that says a trajectory opened in this conversation, with the
+/// one action a person closes it by: a press read as
+/// [CardActionVerb.close]. Teams shows when it was posted, so the card
+/// names no time.
+const Map<String, Object?> teamsTrajectoryOpenCard = {
+  'type': 'message',
+  'attachments': [
+    {
+      'contentType': 'application/vnd.microsoft.card.adaptive',
+      'content': {
+        r'$schema': 'http://adaptivecards.io/schemas/adaptive-card.json',
+        'type': 'AdaptiveCard',
+        'version': '1.5',
+        'body': [
+          {
+            'type': 'TextBlock',
+            'text': '● Open · trajectory started',
+            'wrap': true,
+          },
+        ],
+        'actions': [
+          {
+            'type': 'Action.Execute',
+            'title': 'Close trajectory',
+            'verb': 'close',
+          },
+        ],
+      },
+    },
+  ],
+};
+
+/// The request that posts [teamsTrajectoryOpenCard] to the conversation
+/// [relayedEvent] came from, signed as [signIn]. Null when [relayedEvent]
+/// is not a Teams activity.
+List<Request>? teamsTrajectoryOpenedRequests({
+  required List<int> relayedEvent,
+  required SignIn signIn,
+}) {
+  final event = _teamsEventOrNull(relayedEvent);
+  if (event == null) return null;
+  return [_post(event, teamsTrajectoryOpenCard, signIn)];
+}
+
+TeamsEvent? _teamsEventOrNull(List<int> relayedEvent) {
+  try {
+    return teamsRecordedEvent(relayedEvent);
+  } on FormatException {
+    return null;
+  }
+}
+
+Request _post(TeamsEvent event, Map<String, Object?> activity, SignIn signIn) =>
+    teamsPostRequest(
+      TeamsPost(
+        serviceUrl: event.serviceUrl,
+        conversation: event.conversation,
+        activity: activity,
+      ),
+      signIn,
+    );
 
 /// How full the model's context is after the call [usage] reports, such as
 /// `context 152k of 200k (76%)`, or `context 152k` when the model's window
