@@ -92,9 +92,10 @@ final class TeamsGateDecision {
 
   /// The body of the response to an invoke. Teams waits for it before
   /// showing the person anything, and the agent is too far away to respond
-  /// in time, so the gate responds with a fixed acknowledgement and the
-  /// agent edits the card afterwards. Present for a card action, seen or
-  /// not.
+  /// in time, so the gate responds with a fixed body: an acknowledgement
+  /// for a card action, which the agent edits afterwards, or the invoke's
+  /// entry in [TeamsSourceSpec.invokeResponses]. Present for either, seen
+  /// or not.
   final JsonObject? invokeResponse;
 
   /// What the caller adds to its seen set: the conversation id, the
@@ -120,8 +121,12 @@ final class TeamsSourceSpec {
       'messageUpdate',
       'messageDelete',
     },
-    this.wakeInvokes = const {'adaptiveCard/action'},
+    this.wakeInvokes = const {
+      'adaptiveCard/action',
+      'composeExtension/submitAction',
+    },
     this.acknowledgement = 'Got it',
+    this.invokeResponses = const {},
   });
 
   /// The app ids of the bots this endpoint serves: every token's audience
@@ -138,13 +143,36 @@ final class TeamsSourceSpec {
   /// needs to message a conversation first: its service URL, id and tenant.
   final Set<String> wakeActivityTypes;
 
-  /// Invoke names that wake the receiver. Each is responded to with
-  /// [acknowledgement].
+  /// Invoke names that wake the receiver. A card action is responded to
+  /// with [acknowledgement]; any other with its entry in [invokeResponses],
+  /// or with no body.
   final Set<String> wakeInvokes;
 
   /// What Teams shows after a card action, before the agent edits the card.
   final String acknowledgement;
+
+  /// Fixed response bodies by invoke name, given whether or not the invoke
+  /// wakes anyone: how a dialog opens with no agent asked, as
+  /// `composeExtension/fetchTask` answered with a [teamsDialog].
+  final Map<String, JsonObject> invokeResponses;
 }
+
+/// The response to a `composeExtension/fetchTask` that opens [card], an
+/// Adaptive Card, as a dialog titled [title]. Its submission arrives as a
+/// `composeExtension/submitAction`, read as a [TeamsMessageActionSubmit].
+JsonObject teamsDialog({required String title, required JsonObject card}) =>
+    JsonObject.of({
+      'task': {
+        'type': 'continue',
+        'value': {
+          'title': title,
+          'card': {
+            'contentType': 'application/vnd.microsoft.card.adaptive',
+            'content': card.asUncheckedMap(),
+          },
+        },
+      },
+    });
 
 /// What the headers alone say about a delivery: a token the gate believes,
 /// or a refusal.
@@ -338,13 +366,20 @@ TeamsGateDecision _decide(
     a.string('id'),
     a.stringOrNull('timestamp'),
   ]);
-  final invokeResponse = isInvoke && spec.wakeInvokes.contains(name)
-      ? JsonObject.of({
-          'statusCode': 200,
-          'type': 'application/vnd.microsoft.activity.message',
-          'value': spec.acknowledgement,
-        })
-      : null;
+  final wakes = isInvoke
+      ? spec.wakeInvokes.contains(name)
+      : spec.wakeActivityTypes.contains(type);
+  final invokeResponse = !isInvoke
+      ? null
+      : spec.invokeResponses[name] ??
+            // wire-ok: the one invoke the acknowledgement's shape is for.
+            (wakes && name == 'adaptiveCard/action'
+                ? JsonObject.of({
+                    'statusCode': 200,
+                    'type': 'application/vnd.microsoft.activity.message',
+                    'value': spec.acknowledgement,
+                  })
+                : null);
 
   if (hasSeen?.call(seenKey) ?? false) {
     return TeamsGateDecision._(
@@ -354,10 +389,15 @@ TeamsGateDecision _decide(
       seenKey: seenKey,
     );
   }
-  if (invokeResponse == null && !spec.wakeActivityTypes.contains(type)) {
+  if (!wakes) {
     return TeamsGateDecision._(
       TeamsGateOutcome.ignore,
-      isInvoke ? 'quiet invoke $name' : 'quiet activity $type',
+      switch ((isInvoke, invokeResponse)) {
+        (false, _) => 'quiet activity $type',
+        (true, null) => 'quiet invoke $name',
+        (true, _) => 'answered invoke $name',
+      },
+      invokeResponse: invokeResponse,
       seenKey: seenKey,
     );
   }
@@ -529,6 +569,27 @@ TeamsEvent? _read(
       card: a.stringOrNull('replyToId'),
       value: a.objectOrNull('value'),
     ),
+    // wire-ok: the invoke name, parsed here into TeamsEvent.
+    'invoke' when name == 'composeExtension/submitAction' =>
+      TeamsMessageActionSubmit(
+        conversation: conversationId,
+        id: id,
+        serviceUrl: serviceUrl,
+        tenant: tenant,
+        conversationType: conversationType,
+        timestamp: timestamp,
+        from: fromId,
+        fromAadObjectId: fromAadObjectId,
+        bot: bot,
+        channel: channel,
+        team: team,
+        command: a.objectOrNull('value')?.stringOrNull('commandId'),
+        message: a
+            .objectOrNull('value')
+            ?.objectOrNull('messagePayload')
+            ?.stringOrNull('id'),
+        data: a.objectOrNull('value')?.objectOrNull('data'),
+      ),
     'invoke' => TeamsInvoke(
       conversation: conversationId,
       id: id,

@@ -269,6 +269,47 @@ enum CardActionVerb {
   static CardActionVerb? parse(String? asSent) => _byAsSent[asSent];
 }
 
+/// A `composeExtension/submitAction`: someone filled in the dialog a
+/// message action opened from a message's "..." menu, and submitted it.
+final class TeamsMessageActionSubmit extends TeamsEvent {
+  const TeamsMessageActionSubmit({
+    required super.conversation,
+    required super.id,
+    required super.serviceUrl,
+    super.tenant,
+    super.conversationType,
+    super.timestamp,
+    super.from,
+    super.fromAadObjectId,
+    required super.bot,
+    super.channel,
+    super.team,
+    this.command,
+    this.message,
+    this.data,
+  });
+
+  /// The command's id in the manifest, such as [callSettingsCommandId].
+  final String? command;
+
+  /// The id, in [conversation], of the message whose menu it was opened
+  /// from.
+  final String? message;
+
+  /// The dialog's submitted values, by input id.
+  final JsonObject? data;
+
+  /// The message whose menu it was opened from, by where it was said.
+  TeamsMessageRef? get messageRef => switch (message) {
+    final m? => TeamsMessageRef.of(conversation, m),
+    null => null,
+  };
+}
+
+/// The manifest id of the message action that opens a conversation's call
+/// settings: the model, effort and so on its agent runs with.
+const callSettingsCommandId = 'callSettings';
+
 /// Any other `invoke` the gate was told to take.
 final class TeamsInvoke extends TeamsEvent {
   const TeamsInvoke({
