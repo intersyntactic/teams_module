@@ -20,6 +20,31 @@ import 'teams_gate.dart';
 import 'teams_post.dart';
 import 'teams_requests.dart';
 
+/// What the airlock is handed for an event with a `teams:` address: the
+/// requests answering it, built here, for the airlock to decide.
+final class TeamsRequestsAnsweringEvents
+    implements BuildsRequestsAnsweringEvents {
+  const TeamsRequestsAnsweringEvents();
+
+  @override
+  List<Request>? trajectoryOpenedRequests({
+    required List<int> relayedEvent,
+    required SignIn signIn,
+  }) =>
+      teamsTrajectoryOpenedRequests(relayedEvent: relayedEvent, signIn: signIn);
+
+  @override
+  List<Request>? replyRequests({
+    required List<int> relayedEvent,
+    required ModelReply reply,
+    required SignIn signIn,
+  }) => teamsReplyRequests(
+    relayedEvent: relayedEvent,
+    reply: reply,
+    signIn: signIn,
+  );
+}
+
 /// The most a message may weigh, encoded, by Microsoft's docs: about 28 KB.
 /// Not yet measured against Teams.
 const teamsMessageByteCap = 28000;
