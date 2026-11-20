@@ -162,6 +162,34 @@ void main() {
   group('the requests', () {
     final signIn = SignIn.parse('cam-teams')!;
 
+    test('are what the airlock is handed, through the interface', () {
+      const BuildsRequestsAnsweringEvents teams =
+          TeamsRequestsAnsweringEvents();
+      final event = utf8.encode(jsonEncode(message()));
+      const reply = FinishedReply(text: 'hi');
+      expect(
+        [
+          for (final r in teams.trajectoryOpenedRequests(
+            relayedEvent: event,
+            signIn: signIn,
+          )!)
+            r.body,
+        ],
+        [jsonEncode(teamsTrajectoryOpenCard)],
+      );
+      expect(
+        [
+          for (final r in teams.replyRequests(
+            relayedEvent: event,
+            reply: reply,
+            signIn: signIn,
+          )!)
+            r.body,
+        ],
+        [for (final a in teamsReplyActivities(reply)) jsonEncode(a)],
+      );
+    });
+
     test('post each part, in order, to the conversation the event came '
         'from', () {
       final event = utf8.encode(
