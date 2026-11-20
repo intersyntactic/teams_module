@@ -81,6 +81,8 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
       ),
       _ => null,
     };
+    // addressedTo is left out until every reader of these readings takes it:
+    // a reader on is_docking_station 0.2.0 refuses a reading that has it.
     switch (event) {
       case TeamsMessage():
         final key = EventKey.parse('message:${event.id}');
@@ -89,6 +91,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
         return MessageSaid(
           addressInExternalSystem: address,
           containingAddress: containingAddress,
+          addressedTo: null,
           key: key,
           node: node,
         );
@@ -98,6 +101,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
         return ActorsJoinedAddress.of(
           addressInExternalSystem: address,
           containingAddress: containingAddress,
+          addressedTo: null,
           from: event.actor,
           key: key,
           joiners: [
@@ -117,6 +121,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
             ShownMessageJudged(
               addressInExternalSystem: address,
               containingAddress: containingAddress,
+              addressedTo: null,
               from: actor,
               key: key,
               to: to,
@@ -128,6 +133,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
           CardActionVerb.close => PersonAskedToCloseTrajectory(
             addressInExternalSystem: address,
             containingAddress: containingAddress,
+            addressedTo: null,
             from: actor,
             key: key,
             message: to,

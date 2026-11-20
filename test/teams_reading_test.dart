@@ -423,4 +423,17 @@ void main() {
       );
     });
   });
+
+  test('no reading carries addressedTo, so a 0.2.0 reader still takes it', () {
+    final (_, readings) = fold([
+      added(),
+      fromBea('act-1'),
+      pressed('approve'),
+      pressed('close'),
+    ]);
+    expect(readings, everyElement(isA<AddressedEvent>()));
+    for (final r in readings.cast<AddressedEvent>()) {
+      expect(encodeReading(r).has('addressedTo'), isFalse);
+    }
+  });
 }
