@@ -162,6 +162,41 @@ void main() {
   group('the requests', () {
     final signIn = SignIn.parse('cam-teams')!;
 
+    test('are built from their inputs alone: the same inputs, the same '
+        'requests, every field', () {
+      // The airlock records these in its decision before anything leaves,
+      // so building must reach nothing and give the same bytes each time.
+      const teams = TeamsRequestsAnsweringEvents();
+      final event = utf8.encode(jsonEncode(message()));
+      final reply = CutOffReply(
+        text: [for (var i = 0; i < 30; i++) 'p$i ${'é' * 1500}'].join('\n\n'),
+        usage: usage,
+      );
+      String described(List<Request> requests) => jsonEncode([
+        for (final r in requests)
+          [
+            '${r.origin}',
+            '${r.method}',
+            '${r.path}',
+            '${r.signIn}',
+            r.headers,
+            r.body,
+          ],
+      ]);
+      List<Request> replies() => teams.replyRequests(
+        relayedEvent: event,
+        reply: reply,
+        signIn: signIn,
+      )!;
+      List<Request> opened() =>
+          teams.trajectoryOpenedRequests(relayedEvent: event, signIn: signIn)!;
+      final firstReplies = described(replies());
+      final firstOpened = described(opened());
+      expect(replies().length, greaterThan(1));
+      expect(described(replies()), firstReplies);
+      expect(described(opened()), firstOpened);
+    });
+
     test('are what the airlock is handed, through the interface', () {
       const BuildsRequestsAnsweringEvents teams =
           TeamsRequestsAnsweringEvents();
