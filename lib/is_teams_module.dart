@@ -29,6 +29,7 @@ export 'src/teams_conversation.dart';
 export 'src/teams_translator.dart';
 export 'src/teams_post.dart';
 export 'src/teams_reading.dart';
+export 'src/teams_reply.dart';
 export 'src/teams_requests.dart';
 export 'src/teams_receiver.dart';
 export 'src/teams_relay.dart';
