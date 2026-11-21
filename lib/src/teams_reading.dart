@@ -81,8 +81,9 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
       ),
       _ => null,
     };
-    // addressedTo is left out until every reader of these readings takes it:
-    // a reader on is_docking_station 0.2.0 refuses a reading that has it.
+    // The gate held the token's audience to the activity's recipient, so
+    // this is the bot Teams verified it was sent to.
+    final addressedTo = teamsBotActor(event.tenant, event.bot);
     switch (event) {
       case TeamsMessage():
         final key = EventKey.parse('message:${event.id}');
@@ -91,7 +92,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
         return MessageSaid(
           addressInExternalSystem: address,
           containingAddress: containingAddress,
-          addressedTo: null,
+          addressedTo: addressedTo,
           key: key,
           node: node,
         );
@@ -101,7 +102,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
         return ActorsJoinedAddress.of(
           addressInExternalSystem: address,
           containingAddress: containingAddress,
-          addressedTo: null,
+          addressedTo: addressedTo,
           from: event.actor,
           key: key,
           joiners: [
@@ -121,7 +122,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
             ShownMessageJudged(
               addressInExternalSystem: address,
               containingAddress: containingAddress,
-              addressedTo: null,
+              addressedTo: addressedTo,
               from: actor,
               key: key,
               to: to,
@@ -133,7 +134,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
           CardActionVerb.close => PersonAskedToCloseTrajectory(
             addressInExternalSystem: address,
             containingAddress: containingAddress,
-            addressedTo: null,
+            addressedTo: addressedTo,
             from: actor,
             key: key,
             message: to,
