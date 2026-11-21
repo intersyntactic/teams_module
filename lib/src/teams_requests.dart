@@ -40,6 +40,23 @@ Request teamsUpdateRequest({
   'id': activityId,
 }, signIn);
 
+/// The path every request to [conversation] on [serviceUrl] starts with:
+/// the service URL's region, then `/v3/conversations/<conversation>/`.
+///
+/// A conversation id can be spelled in a path two ways (`19:…` and
+/// `19%3A…`), and a rule granting a path prefix matches exact characters.
+/// So both the requests built here and any rule naming a conversation's
+/// prefix take it from this one function: the id percent-encoded, escapes
+/// in upper case. Null when the id would lead the path off the site.
+WebPath? teamsConversationPathPrefix(Uri serviceUrl, String conversation) {
+  final region = serviceUrl.path.endsWith('/')
+      ? serviceUrl.path.substring(0, serviceUrl.path.length - 1)
+      : serviceUrl.path;
+  return WebPath.parse(
+    '$region/v3/conversations/${Uri.encodeComponent(conversation)}/',
+  );
+}
+
 /// Refuses a service URL that is not https: the driver adds the token to
 /// the request, and it must never travel in the clear.
 Request _request(
@@ -64,13 +81,13 @@ Request _request(
   if (origin == null) {
     throw ArgumentError.value(serviceUrl, 'serviceUrl', 'has no site');
   }
-  final region = serviceUrl.path.endsWith('/')
-      ? serviceUrl.path.substring(0, serviceUrl.path.length - 1)
-      : serviceUrl.path;
-  final path = WebPath.parse(
-    '$region/v3/conversations/${Uri.encodeComponent(conversation)}'
-    '/activities${activityId == null ? '' : '/${Uri.encodeComponent(activityId)}'}',
-  );
+  final prefix = teamsConversationPathPrefix(serviceUrl, conversation);
+  final path = prefix == null
+      ? null
+      : WebPath.parse(
+          '${prefix.value}activities'
+          '${activityId == null ? '' : '/${Uri.encodeComponent(activityId)}'}',
+        );
   if (path == null) {
     throw ArgumentError.value(conversation, 'conversation', 'leaves the site');
   }

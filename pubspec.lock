@@ -153,6 +153,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.1.0"
+  is_admission_vocabulary:
+    dependency: "direct main"
+    description:
+      name: is_admission_vocabulary
+      sha256: bec737e48523e6fe11585d910a0e061c1b650fdc300f969ec64fcd7cad21f888
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.1.0"
   is_annotation_shapes:
     dependency: "direct main"
     description:
@@ -177,14 +185,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.8.3"
-  is_docking_station:
-    dependency: "direct main"
-    description:
-      name: is_docking_station
-      sha256: "1e32b33f182da0c627ffda2a62709b0400a36fa686b0bfa0499b18189824dc11"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.3.0"
   is_effects:
     dependency: "direct main"
     description:
