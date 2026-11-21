@@ -7,6 +7,7 @@
 /// writes `build/appPackage/<app id>/` and `build/<name>.zip` for each, so
 /// a pool of agent bots (researcher1, reviewer1, …) is one run. NAME is what
 /// people see in Teams and @mention; the registration's own name is not.
+/// Every package has the "Close trajectory" message action.
 /// `--settings-action` adds the message action that opens call settings
 /// from a message's "..." menu, for the bot that coordinates.
 ///
@@ -152,11 +153,30 @@ Map<String, Object?> manifest(
       'supportsFiles': false,
     },
   ],
-  if (settingsAction)
-    'composeExtensions': [
-      {
-        'botId': appId.value,
-        'commands': [
+  'composeExtensions': [
+    {
+      'botId': appId.value,
+      'commands': [
+        // Static parameters, not fetchTask: Teams draws the form itself, so
+        // the gate answers no dialog, and the submission is a submitAction.
+        {
+          'id': closeTrajectoryCommandId,
+          'type': 'action',
+          'context': ['message'],
+          'fetchTask': false,
+          'title': 'Close trajectory',
+          'description':
+              'End this conversation\'s trajectory; the next '
+              'message starts a new one',
+          'parameters': [
+            {
+              'name': closeTrajectoryConfirmParameter,
+              'title': 'Yes, close this trajectory',
+              'inputType': 'toggle',
+            },
+          ],
+        },
+        if (settingsAction)
           {
             'id': callSettingsCommandId,
             'type': 'action',
@@ -165,9 +185,9 @@ Map<String, Object?> manifest(
             'title': 'Call settings',
             'description': 'Choose the model and effort the agent runs with',
           },
-        ],
-      },
-    ],
+      ],
+    },
+  ],
   'validDomains': <String>[],
 };
 

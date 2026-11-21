@@ -84,6 +84,23 @@ Map<String, Object?> quotingBea(Map<String, Object?> activity, String id) => {
 };
 
 /// Ada pressing the button whose verb is [verb] on card `1730881000000`.
+/// The "Close trajectory" message action, opened on message
+/// `1730881000000` and submitted with [data], as the docs give a
+/// submitAction (not yet measured).
+Map<String, Object?> closeActionSubmitted(
+  Map<String, Object?> data, {
+  String command = closeTrajectoryCommandId,
+}) => {
+  ...cardAction(),
+  'name': 'composeExtension/submitAction',
+  'value': {
+    'commandId': command,
+    'commandContext': 'message',
+    'messagePayload': {'id': '1730881000000', 'body': <String, Object?>{}},
+    'data': data,
+  },
+}..remove('replyToId');
+
 Map<String, Object?> pressed(String verb) {
   final press = cardAction();
   ((press['value']! as Map)['action']! as Map)['verb'] = verb;
@@ -321,6 +338,51 @@ void main() {
       expect(asked.key, EventKey.parse('invoke:f:9001'));
       expect(asked.from, ada);
       expect(asked.message.value, 'a:1personal|1730881000000');
+    });
+
+    test('the Close trajectory action, toggle on, is '
+        'PersonAskedToCloseTrajectory naming the message', () {
+      for (final on in [true, 'true']) {
+        final (_, [r]) = fold([
+          closeActionSubmitted({'confirm': on}),
+        ]);
+        final asked = r as PersonAskedToCloseTrajectory;
+        expect(
+          asked.addressInExternalSystem,
+          AddressInExternalSystem.parse('teams:a:1personal'),
+        );
+        expect(asked.key, EventKey.parse('invoke:f:9001'));
+        expect(asked.from, ada);
+        expect(asked.addressedTo, bot);
+        expect(asked.message.value, 'a:1personal|1730881000000');
+      }
+    });
+
+    test('the Close trajectory action reads as the card\'s Close does', () {
+      final (_, [fromCard]) = fold([pressed('close')]);
+      final (_, [fromAction]) = fold([
+        closeActionSubmitted({'confirm': true}),
+      ]);
+      expect(
+        encodeReading(fromAction as AddressedEvent).asUncheckedMap(),
+        encodeReading(fromCard as AddressedEvent).asUncheckedMap(),
+        reason:
+            'one kind, one shape: only the message it names may differ, '
+            'and here both name 1730881000000',
+      );
+    });
+
+    test('the Close trajectory action with the toggle off or missing, or '
+        'another action, is nothing to admit', () {
+      for (final submitted in [
+        closeActionSubmitted({'confirm': false}),
+        closeActionSubmitted({'confirm': 'false'}),
+        closeActionSubmitted({}),
+        closeActionSubmitted({'confirm': true}, command: callSettingsCommandId),
+      ]) {
+        final (_, [r]) = fold([submitted]);
+        expect(r, isA<NothingToAdmit>(), reason: '$submitted');
+      }
     });
 
     test('naming no card is nothing to admit', () {
