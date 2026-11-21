@@ -88,10 +88,20 @@ ActorId? teamsActor(String? tenant, {TeamsUserId? user, EntraObjectId? entra}) {
   if (t == null) return null;
   if (entra != null) return ActorId.parse('teams:$t/${entra.value}');
   if (user case final u? when u.isBot) {
-    return ActorId.parse('teams:$t/bot:${u.value.substring(3).toLowerCase()}');
+    return _botActor(t, u.value.substring(3));
   }
   return null;
 }
+
+/// [bot]'s id on a trajectory in [tenant], as [teamsActor] names a bot.
+ActorId? teamsBotActor(String? tenant, BotAppId bot) {
+  final t = tenant?.toLowerCase();
+  if (t == null) return null;
+  return _botActor(t, bot.value);
+}
+
+ActorId? _botActor(String tenant, String appId) =>
+    ActorId.parse('teams:$tenant/bot:${appId.toLowerCase()}');
 
 /// What a Teams Reply quotes, read from its `quotedReply` entity: the shape
 /// seen in every recorded reply so far, in a one-to-one chat and a group

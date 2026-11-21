@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:checked_json/checked_json.dart';
 import 'package:is_annotation_shapes/is_annotation_shapes.dart'
     show ApprovedVerdict, HeldOffVerdict;
 import 'package:is_conversation_shapes/is_conversation_shapes.dart';
@@ -424,16 +425,51 @@ void main() {
     });
   });
 
-  test('no reading carries addressedTo, so a 0.2.0 reader still takes it', () {
-    final (_, readings) = fold([
-      added(),
-      fromBea('act-1'),
-      pressed('approve'),
-      pressed('close'),
-    ]);
-    expect(readings, everyElement(isA<AddressedEvent>()));
-    for (final r in readings.cast<AddressedEvent>()) {
-      expect(encodeReading(r).has('addressedTo'), isFalse);
-    }
+  group('addressedTo', () {
+    const otherAppId = '00000000-0000-0000-0000-0000000b07b2';
+    final otherBot = ActorId.parse('teams:$tenant/bot:$otherAppId')!;
+
+    test('is the bot each reading was sent to', () {
+      final (_, readings) = fold([
+        added(),
+        fromBea('act-1'),
+        pressed('approve'),
+        pressed('close'),
+      ]);
+      expect(readings.map((r) => (r as AddressedEvent).addressedTo), [
+        bot,
+        bot,
+        bot,
+        bot,
+      ]);
+    });
+
+    test('follows the recipient, so each pooled bot is named', () {
+      final (_, [r]) = fold([
+        {
+          ...fromBea('act-1'),
+          'recipient': {'id': '28:$otherAppId', 'name': 'Other'},
+        },
+      ]);
+      expect((r as MessageSaid).addressedTo, otherBot);
+    });
+
+    test('is written and read back as the docking station and its readers '
+        'do', () {
+      final (_, readings) = fold([
+        added(),
+        fromBea('act-1'),
+        pressed('approve'),
+        pressed('close'),
+      ]);
+      for (final r in readings.cast<AddressedEvent>()) {
+        final written = encodeReading(r);
+        expect(written.string('addressedTo'), bot.value);
+        final stored = jsonEncode(written.asUncheckedMap());
+        final read = decodeReading(JsonObject.decode(stored));
+        expect(read.addressedTo, bot);
+        expect(jsonEncode(encodeReading(read).asUncheckedMap()), stored);
+      }
+    });
   });
 }
