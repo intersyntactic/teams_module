@@ -2,7 +2,7 @@ name: is_teams_module
 description: >-
   The Teams module for intersyntactic: what people say and press in
   Microsoft Teams, taken in as nodes on a trajectory.
-version: 0.0.1
+version: 0.0.2
 repository: https://github.com/intersyntactic/teams_module
 publish_to: none
 
@@ -13,7 +13,7 @@ dependencies:
   checked_json: ^0.2.1
   is_annotation_shapes: ^0.3.2
   is_conversation_shapes: ^0.8.3
-  is_docking_station: ^0.3.0
+  is_admission_vocabulary: ^0.1.0
   is_effects: ^0.12.0
   is_shapes: ^0.6.0
   pointycastle: ^4.0.0
