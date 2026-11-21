@@ -114,6 +114,40 @@ UserSaid? teamsSaid(
   return UserSaid(author: author, source: source, text: text, quotes: quotes);
 }
 
+/// What [event] did to a message said earlier, in message terms: an edit
+/// is [Edited] with the message's new words and quote, read as [teamsSaid]
+/// reads them; a delete is [Deleted]; a restore is [Restored]. Null for
+/// anything else, and for an update whose kind Teams didn't name: it
+/// describes, and doesn't guess.
+///
+/// It names no author's right to the change. Who may change a message is
+/// for whatever reads the change, so a delete by someone else is still
+/// [Deleted].
+WhatChanged? teamsChange(
+  TeamsEvent event, {
+  required EntraObjectId? Function(TeamsUserId) entraOf,
+}) => switch (event) {
+  TeamsMessageDelete() => const Deleted(),
+  TeamsMessageUpdate(channelEventType: 'undeleteMessage') => const Restored(),
+  TeamsMessageUpdate(channelEventType: 'editMessage') => switch (teamsSaid(
+    TeamsMessage(
+      conversation: event.conversation,
+      id: event.id,
+      serviceUrl: event.serviceUrl,
+      tenant: event.tenant,
+      from: event.from,
+      fromAadObjectId: event.fromAadObjectId,
+      text: event.text,
+      entities: event.entities,
+    ),
+    entraOf: entraOf,
+  )) {
+    final said? => Edited(text: said.text, quotes: said.quotes),
+    null => null,
+  },
+  _ => null,
+};
+
 /// What [message] quotes, its author named when the record knows them and
 /// otherwise by the name Teams showed, with Teams' preview of its text: the
 /// only words of it the trajectory has when the quoted message never
