@@ -1,0 +1,161 @@
+name: publish
+
+# Builds and publishes a versioned image to GHCR. The box then deploys by
+# pulling a pinned version — no rsync, no build-on-box, no source on the host.
+#
+# Deliberately NOT a moving tag: merging to main publishes an artifact but
+# never changes what is running. Promoting a version is a separate, human act.
+
+on:
+  push:
+    branches: [main]
+    # Publish only when IMAGE CONTENT changed — exactly what the Dockerfile
+    # COPYs, plus the Dockerfile itself. A denylist of non-image paths can
+    # never be finished; this allowlist fails closed instead: a new COPY line
+    # with no matching entry here means no publish, not a bad one.
+    paths:
+      - 'bin/teams_relay.dart'
+      - 'lib/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - 'Dockerfile'
+  workflow_dispatch:
+    inputs:
+      allow_unverified_first_publish:
+        description: >-
+          For the one-time FIRST publish only: ghcr.io/intersyntactic/teams_module
+          has no package yet, and an inspect of a package that has never been
+          pushed may come back "denied" rather than "not found" —
+          indistinguishable from a real failure, so the guard fails closed
+          rather than guessing. Confirmed anonymously (403/"failed to
+          authorize", not "not found"); unconfirmed for the authenticated
+          GITHUB_TOKEN this job actually uses. This does NOT weaken the
+          "tag already exists" check — that always refuses — it only lets
+          the unknown-error branch proceed instead of failing the job.
+        type: boolean
+        default: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.ANNOTATION_SHAPES_DEPLOY_KEY }}
+      - run: dart pub get
+      - run: dart test
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version from pubspec.yaml
+        id: version
+        run: |
+          echo "value=$(sed -n 's/^version: *//p' pubspec.yaml)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # A version tag must name exactly one image forever, or "pinned to
+      # 0.0.1" stops meaning anything and rollback silently lands on the
+      # wrong build. Overwriting is the default registry behaviour, so
+      # refuse explicitly: merging without bumping the version is the
+      # mistake this catches.
+      #
+      # `docker manifest inspect` fails closed on a real "not found" but
+      # ALSO on a network blip, an auth failure or a media-type mismatch —
+      # every non-zero exit reads as "tag unused" and a retry then
+      # overwrites a real version (enspyrco/infra#166). `imagetools inspect`
+      # fails the same ways, so the fix is to read what it actually says:
+      # a true miss ends its error with "not found"; anything else
+      # (confirmed locally against an auth failure and a DNS failure,
+      # both worded differently) must fail the job, not be read as "unused".
+      - name: Refuse to overwrite an existing version tag
+        env:
+          TAG: ${{ env.IMAGE }}:${{ steps.version.outputs.value }}
+          ALLOW_UNVERIFIED: ${{ github.event.inputs.allow_unverified_first_publish }}
+        run: |
+          set +e
+          out=$(docker buildx imagetools inspect "$TAG" 2>&1)
+          status=$?
+          set -e
+          # exit 0 → the tag exists → always refuse. Nothing — not even the
+          # first-publish input — may overwrite a real version.
+          if [ "$status" -eq 0 ]; then
+            echo "::error::$TAG already exists. Bump \"version\" in pubspec.yaml." >&2
+            exit 1
+          fi
+          if echo "$out" | grep -q ': not found$'; then
+            echo "$TAG is unused — ok to publish."
+          elif [ "$ALLOW_UNVERIFIED" = "true" ]; then
+            echo "::warning::could not confirm $TAG is unused (imagetools inspect said: $out) — proceeding because allow_unverified_first_publish=true"
+            echo "### ⚠️ Version-tag guard could not verify $TAG" >> "$GITHUB_STEP_SUMMARY"
+            echo "Proceeded anyway via \`allow_unverified_first_publish: true\`. inspect said: \`$out\`" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::could not tell whether $TAG exists (imagetools inspect did not say \"not found\"): $out" >&2
+            exit 1
+          fi
+
+      # The box is aarch64 while the runner is amd64. A single-arch image
+      # pulls fine here and fails on the box with "no matching manifest".
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.ANNOTATION_SHAPES_DEPLOY_KEY }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          ssh: default
+          # Both tags are immutable: the version is what compose pins, the
+          # sha is what ties a running container back to a commit.
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.version.outputs.value }}
+            ${{ env.IMAGE }}:sha-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Assert the manifest actually carries the host's architecture.
+      # Dropping the platforms line above would otherwise publish green and
+      # only fail later, on the box, at pull time.
+      - name: Verify the published manifest covers the deploy target
+        env:
+          TAG: ${{ env.IMAGE }}:${{ steps.version.outputs.value }}
+        run: |
+          archs=$(docker manifest inspect "$TAG" | jq -r '.manifests[].platform.architecture')
+          echo "$archs" | grep -qx arm64 || {
+            echo "::error::$TAG has no arm64 manifest; the box is aarch64" >&2; exit 1; }
+          echo "arm64 present."
+
+      - name: Summary
+        run: |
+          {
+            echo "### Published"
+            echo ""
+            echo '```'
+            echo "${{ env.IMAGE }}:${{ steps.version.outputs.value }}"
+            echo "digest: ${{ steps.build.outputs.digest }}"
+            echo '```'
+            echo ""
+            echo "Not yet deployed."
+          } >> "$GITHUB_STEP_SUMMARY"
