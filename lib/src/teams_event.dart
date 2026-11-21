@@ -323,6 +323,15 @@ final class TeamsMessageActionSubmit extends TeamsEvent {
 /// settings: the model, effort and so on its agent runs with.
 const callSettingsCommandId = 'callSettings';
 
+/// The manifest id of the message action that closes the trajectory open in
+/// a conversation, from any message's "..." menu: for a conversation whose
+/// trajectory has no card to press Close on.
+const closeTrajectoryCommandId = 'closeTrajectory';
+
+/// The name of that action's one parameter, a toggle that must be on: so a
+/// slip of the menu closes nothing.
+const closeTrajectoryConfirmParameter = 'confirm';
+
 /// Any other `invoke` the gate was told to take.
 final class TeamsInvoke extends TeamsEvent {
   const TeamsInvoke({

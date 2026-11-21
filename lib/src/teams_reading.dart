@@ -1,3 +1,4 @@
+import 'package:checked_json/checked_json.dart' show JsonObject;
 import 'package:is_annotation_shapes/is_annotation_shapes.dart'
     show ApprovedVerdict, HeldOffVerdict, VerdictOnShownMessage;
 import 'package:is_docking_station/is_docking_station.dart';
@@ -14,9 +15,10 @@ import 'teams_translator.dart';
 /// admits events under trajectories (RULINGS): a message is [MessageSaid]
 /// with the [UserSaid] made from it, CAM or a person added to a
 /// conversation is [ActorsJoinedAddress], a press of Approve or Not yet on a
-/// card is [ShownMessageJudged] for that card, a press of Close is
-/// [PersonAskedToCloseTrajectory] naming that card, and everything else is
-/// [NothingToAdmit] for now:
+/// card is [ShownMessageJudged] for that card, a press of Close, or the
+/// "Close trajectory" message action submitted with its toggle on, is
+/// [PersonAskedToCloseTrajectory] naming that card or message, and
+/// everything else is [NothingToAdmit] for now:
 ///
 /// - an `installationUpdate`, which Teams sends beside the
 ///   `conversationUpdate` of the same join, so one join is read once;
@@ -142,6 +144,22 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
           // Edit only reopens the choice on a card.
           CardActionVerb.edit || null => null,
         };
+      case TeamsMessageActionSubmit(
+            command: closeTrajectoryCommandId,
+            :final messageRef?,
+            :final actor?,
+          )
+          when _confirmed(event.data):
+        final key = EventKey.parse('invoke:${event.id}');
+        if (key == null) return null;
+        return PersonAskedToCloseTrajectory(
+          addressInExternalSystem: address,
+          containingAddress: containingAddress,
+          addressedTo: addressedTo,
+          from: actor,
+          key: key,
+          message: messageRef.source,
+        );
       case TeamsCardAction() ||
           TeamsMessageUpdate() ||
           TeamsMessageDelete() ||
@@ -151,6 +169,16 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
         return null;
     }
   }
+
+  /// Whether the close action's toggle was on. Teams' encoding of a
+  /// submitted toggle is not yet measured, so a JSON true and the text
+  /// `true` both count.
+  static bool _confirmed(JsonObject? data) =>
+      // wire-ok: Teams' submitted toggle value, read once here.
+      switch (data?.raw(closeTrajectoryConfirmParameter)) {
+        true || 'true' => true,
+        _ => false,
+      };
 }
 
 /// What the Teams reading carries from one event to the next: which Entra
