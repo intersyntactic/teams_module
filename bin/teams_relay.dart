@@ -12,7 +12,7 @@
 ///   HOST=127.0.0.1                   optional; the address to bind. The
 ///                                    default is loopback, for a proxy on
 ///                                    the same machine.
-///   JOURNAL_SOCKET=/run/...sock      the record's writer's Unix socket:
+///   JOURNAL_SOCKET=/run/...sock      the logbook's writer's Unix socket:
 ///                                    every accepted request's body is
 ///                                    recorded through it as an `event`
 ///                                    entry, byte for byte, before Teams
@@ -22,7 +22,7 @@
 ///                                    once at boot, so Teams' wait for it
 ///                                    asks no agent. Unreadable aborts
 ///
-/// The relay keeps no record of its own: the record has one writer, which
+/// The relay keeps nothing of its own: the logbook has one writer, which
 /// knows the relay by its user, and the relay sends it what arrives.
 ///
 /// The bot's messaging endpoint is `https://<host>/api/messages`.
@@ -99,8 +99,8 @@ Future<void> main() async {
     }
   }
 
-  final record = env['JOURNAL_SOCKET'] ?? '';
-  if (record.isEmpty) {
+  final logbookSocket = env['JOURNAL_SOCKET'] ?? '';
+  if (logbookSocket.isEmpty) {
     // A relay that can't record what arrives must not respond 200 to it.
     stderr.writeln('abort: JOURNAL_SOCKET not set');
     exit(78);
@@ -132,7 +132,7 @@ Future<void> main() async {
       },
     ),
     keys: keys,
-    record: (body) => recordEvent(record, source: _source, bytes: body),
+    record: (body) => recordEvent(logbookSocket, source: _source, bytes: body),
   );
   final server = await HttpServer.bind(address, port);
   stdout.writeln('teams relay listening on ${address.address}:${server.port}');

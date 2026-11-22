@@ -430,7 +430,7 @@ TeamsGateDecision _decide(
 ///
 /// The same activity can be recorded more than once, as two events with one
 /// activity: the relay forgets what it has seen when it restarts, and a
-/// record that failed is retried. Act on one per [TeamsEvent.conversation]
+/// recording that failed is retried. Act on one per [TeamsEvent.conversation]
 /// and [TeamsEvent.id].
 ///
 /// Null for an activity type no event is read as. Throws a

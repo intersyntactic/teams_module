@@ -18,7 +18,7 @@ void main() {
   late bool keysServed;
   late List<Uint8List> recorded;
 
-  /// What the record answers next, the body already handed over.
+  /// What the logbook answers next, the body already handed over.
   late RecordAnswer Function() answer;
 
   setUp(() async {
@@ -199,7 +199,7 @@ void main() {
     expect(events, isEmpty);
   });
 
-  group('the record', () {
+  group('the logbook', () {
     test('records the body byte for byte, before responding', () async {
       // Spacing and key order no re-encoding would keep.
       final raw = utf8.encode(
@@ -237,12 +237,12 @@ void main() {
       ]);
     });
 
-    test('refused by the record is a 500 too, saying why', () async {
+    test('refused by the logbook is a 500 too, saying why', () async {
       answer = () => const RecordRefused('kind event for user 501');
       expect((await post(message())).$1, 500);
       expect(events, isEmpty);
       expect(logged, [
-        'teams relay: 500 message: refused by the record: '
+        'teams relay: 500 message: refused by the logbook: '
             'kind event for user 501',
       ]);
     });

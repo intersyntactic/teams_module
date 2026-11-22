@@ -24,7 +24,7 @@ import 'teams_post.dart';
 final class TeamsTranslator {
   TeamsTranslator({required this.authors});
 
-  /// Who each Teams channel id is, as far as the record says.
+  /// Who each Teams channel id is, as far as the logbook says.
   final TeamsAuthors authors;
 
   /// How to reach each chat joined.
@@ -41,7 +41,7 @@ final class TeamsTranslator {
   /// nothing.
   ({TeamsConversation? joined, UserSaid said})? said(TeamsMessage message) {
     // Learnt first, so a person quoting themselves is named even when this
-    // is the first the record has heard from them.
+    // is the first the logbook has heard from them.
     authors.learn(message);
     final said = teamsSaid(message, entraOf: authors.entraIdOf);
     if (said == null) return null;
@@ -95,7 +95,7 @@ final class TeamsTranslator {
 /// on a quoted message says "look at this". Null when Teams named no
 /// sender, or the message has no words and quotes nothing.
 ///
-/// [entraOf] names a quoted author from what the record has said so far;
+/// [entraOf] names a quoted author from what the logbook has said so far;
 /// the sender of [message] should already be in it, so a person quoting
 /// themselves is named even the first time they are heard from.
 UserSaid? teamsSaid(
@@ -114,7 +114,7 @@ UserSaid? teamsSaid(
   return UserSaid(author: author, source: source, text: text, quotes: quotes);
 }
 
-/// What [message] quotes, its author named when the record knows them and
+/// What [message] quotes, its author named when the logbook knows them and
 /// otherwise by the name Teams showed, with Teams' preview of its text: the
 /// only words of it the trajectory has when the quoted message never
 /// reached it. A quote is always of a message in the same chat.
