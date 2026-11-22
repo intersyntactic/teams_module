@@ -200,7 +200,7 @@ a station coloured by who wrote it, people and agents alike.
 
 ```
 TEAMS_APP_IDS=<the bots' app ids, comma-separated> TEAMS_TENANT_ALLOWLIST=<tenant ids, comma-separated> \
-JOURNAL_SOCKET=<the logbook's writer's Unix socket> \
+LOGBOOK_SOCKET=<the logbook's writer's Unix socket> \
   dart run bin/teams_relay.dart
 ```
 

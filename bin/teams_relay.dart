@@ -12,11 +12,13 @@
 ///   HOST=127.0.0.1                   optional; the address to bind. The
 ///                                    default is loopback, for a proxy on
 ///                                    the same machine.
-///   JOURNAL_SOCKET=/run/...sock      the logbook's writer's Unix socket:
+///   LOGBOOK_SOCKET=/run/...sock      the logbook's writer's Unix socket:
 ///                                    every accepted request's body is
 ///                                    recorded through it as an `event`
 ///                                    entry, byte for byte, before Teams
-///                                    gets a response. Required.
+///                                    gets a response. Required; its older
+///                                    name JOURNAL_SOCKET is read when it
+///                                    is unset.
 ///   TEAMS_SETTINGS_DIALOG=card.json  optional; an Adaptive Card the call
 ///                                    settings message action opens, read
 ///                                    once at boot, so Teams' wait for it
@@ -99,10 +101,13 @@ Future<void> main() async {
     }
   }
 
-  final logbookSocket = env['JOURNAL_SOCKET'] ?? '';
+  final logbookSocket = switch (env['LOGBOOK_SOCKET']) {
+    final s? when s.isNotEmpty => s,
+    _ => env['JOURNAL_SOCKET'] ?? '',
+  };
   if (logbookSocket.isEmpty) {
     // A relay that can't record what arrives must not respond 200 to it.
-    stderr.writeln('abort: JOURNAL_SOCKET not set');
+    stderr.writeln('abort: LOGBOOK_SOCKET not set');
     exit(78);
   }
   // Not checked for at boot: the writer may start after the relay, and

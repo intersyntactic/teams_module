@@ -9,7 +9,9 @@ package pin that tag.
   relay's 500 text (`refused by the logbook: <why>`), the live test (now
   `logbook_live_test.dart`, run with `LOGBOOK_LIVE*`), and the relay's
   socket variable. The verb "record" (recordEvent, Recorded, RecordRefused,
-  ...) is unchanged, and so is the env var `JOURNAL_SOCKET`.
+  ...) is unchanged.
+- The relay reads its logbook socket from `LOGBOOK_SOCKET`, and from its
+  older name `JOURNAL_SOCKET` when that is unset.
 
 ## 0.0.2
 
