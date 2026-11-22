@@ -1,11 +1,11 @@
-/// The relay's way to the record: the journal writer's Unix socket.
+/// The relay's way to the logbook: the logbook writer's Unix socket.
 ///
-/// An event goes straight to the record (Nick, 15 Nov 17:04): nothing is
+/// An event goes straight to the logbook (Nick, 15 Nov 17:04): nothing is
 /// decided about it, so nothing stands between the relay and the writer.
 /// The writer knows the relay by the user at the other end of its socket,
 /// and its sender table says that user may send `event` (Nick, 16 Nov: an
 /// event, not an arrival). Entries written before that are `arrived`, and
-/// keep it: whatever reads the record's events reads both kinds.
+/// keep it: whatever reads the logbook's events reads both kinds.
 ///
 /// The wire is `is_logbook` 0.2.0's service: one connection per entry, the
 /// request `<kind>\n<previous>\n<body>` with the write side then closed, and
@@ -26,7 +26,7 @@ sealed class RecordAnswer {
   /// The writer's answer [line], read strictly: anything but one of its
   /// three answers is [RecordUnanswered], so Teams is sent a 5xx and tries
   /// again. Sending it again can at worst record an event twice, which
-  /// whatever reads the record dedupes; reading an answer it can't read as
+  /// whatever reads the logbook dedupes; reading an answer it can't read as
   /// recorded could lose one.
   static RecordAnswer read(String line) => switch (line.split(' ')) {
     ['ok', final hash] when _hex.hasMatch(hash) => Recorded(hash),
@@ -62,7 +62,7 @@ final class RecordRefused extends RecordAnswer {
 /// The add failed partway, and the entry may be in anyway (the writer reads
 /// its chains back rather than guess). Only `ok` gets Teams a 200 (Nick,
 /// 16 Nov), so Teams is sent a 5xx and sends it again. That may record the
-/// event twice, which costs nothing: whatever reads the record takes one
+/// event twice, which costs nothing: whatever reads the logbook takes one
 /// per key. Not sending it again could lose it.
 final class RecordFailed extends RecordAnswer {
   const RecordFailed(this.why);
@@ -80,7 +80,7 @@ final class RecordUnanswered extends RecordAnswer {
 /// Records [bytes] from [source] at the writer's [socketPath], as an
 /// `event` entry that starts its own chain. The entry holds
 /// `{"at", "source", "bytes"}`, the bytes base64 and exactly as they came,
-/// the form the record's first entries took, so reading one back doesn't
+/// the form the logbook's first entries took, so reading one back doesn't
 /// change. Teams gives up on a request after 15 seconds, so [timeout] stays
 /// inside that.
 Future<RecordAnswer> recordEvent(

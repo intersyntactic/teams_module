@@ -12,17 +12,19 @@
 ///   HOST=127.0.0.1                   optional; the address to bind. The
 ///                                    default is loopback, for a proxy on
 ///                                    the same machine.
-///   JOURNAL_SOCKET=/run/...sock      the record's writer's Unix socket:
+///   LOGBOOK_SOCKET=/run/...sock      the logbook's writer's Unix socket:
 ///                                    every accepted request's body is
 ///                                    recorded through it as an `event`
 ///                                    entry, byte for byte, before Teams
-///                                    gets a response. Required.
+///                                    gets a response. Required; its older
+///                                    name JOURNAL_SOCKET is read when it
+///                                    is unset.
 ///   TEAMS_SETTINGS_DIALOG=card.json  optional; an Adaptive Card the call
 ///                                    settings message action opens, read
 ///                                    once at boot, so Teams' wait for it
 ///                                    asks no agent. Unreadable aborts
 ///
-/// The relay keeps no record of its own: the record has one writer, which
+/// The relay keeps nothing of its own: the logbook has one writer, which
 /// knows the relay by its user, and the relay sends it what arrives.
 ///
 /// The bot's messaging endpoint is `https://<host>/api/messages`.
@@ -99,10 +101,13 @@ Future<void> main() async {
     }
   }
 
-  final record = env['JOURNAL_SOCKET'] ?? '';
-  if (record.isEmpty) {
+  final logbookSocket = switch (env['LOGBOOK_SOCKET']) {
+    final s? when s.isNotEmpty => s,
+    _ => env['JOURNAL_SOCKET'] ?? '',
+  };
+  if (logbookSocket.isEmpty) {
     // A relay that can't record what arrives must not respond 200 to it.
-    stderr.writeln('abort: JOURNAL_SOCKET not set');
+    stderr.writeln('abort: LOGBOOK_SOCKET not set');
     exit(78);
   }
   // Not checked for at boot: the writer may start after the relay, and
@@ -132,7 +137,7 @@ Future<void> main() async {
       },
     ),
     keys: keys,
-    record: (body) => recordEvent(record, source: _source, bytes: body),
+    record: (body) => recordEvent(logbookSocket, source: _source, bytes: body),
   );
   final server = await HttpServer.bind(address, port);
   stdout.writeln('teams relay listening on ${address.address}:${server.port}');

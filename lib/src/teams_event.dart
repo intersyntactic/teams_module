@@ -3,7 +3,7 @@ import 'package:is_shapes/is_shapes.dart';
 
 import 'teams_ids.dart';
 
-/// Teams' record of one activity, checked by the gate. Each case is named
+/// Teams' account of one activity, checked by the gate. Each case is named
 /// for Teams' own activity, since it is Teams' account of what happened, not
 /// a reading of it: Teams says nothing, a user does, and saying is what the
 /// translator reads from it.

@@ -9,7 +9,7 @@ import 'teams_ids.dart';
 import 'teams_translator.dart';
 
 /// The Teams module's reading, for the docking station: what each event the
-/// Teams relay recorded is, in the record's order.
+/// Teams relay recorded is, in the logbook's order.
 ///
 /// It describes and decides nothing, since the docking station is what
 /// admits events under trajectories (RULINGS): a message is [MessageSaid]
@@ -65,7 +65,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
     }
     if (event == null) return (state, const NothingToAdmit());
     // Learnt first, so a person quoting themselves is named even when this
-    // is the first the record has heard from them.
+    // is the first the logbook has heard from them.
     final next = state.learnt(event);
     return (next, _read(event, next) ?? const NothingToAdmit());
   }
@@ -182,7 +182,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
 }
 
 /// What the Teams reading carries from one event to the next: which Entra
-/// user each Teams channel id belongs to, as far as the record says. A
+/// user each Teams channel id belongs to, as far as the logbook says. A
 /// quote names its author only by channel id, and so does a join, so
 /// either is named only if that person has been heard from.
 ///

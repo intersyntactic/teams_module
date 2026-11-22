@@ -4,9 +4,9 @@
 /// So far, the way in: [TeamsRelay], the endpoint Teams posts to; [teamsGate],
 /// which every delivery passes first; and the keys it checks signatures
 /// against, [BotFrameworkKeys], fetched by [BotFrameworkKeySource]; and
-/// [recordEvent], which records each accepted body with the record's one
+/// [recordEvent], which records each accepted body with the logbook's one
 /// writer; and [teamsRecordedEvent], which reads a recorded body back into
-/// the same event, for whatever reads the record; and [TeamsReading], which
+/// the same event, for whatever reads the logbook; and [TeamsReading], which
 /// tells the docking station what each recorded event is. Then
 /// [TeamsReceiver], which reads each event as the annotation shapes it
 /// writes, and a [StandInTrajectory] to write them to until the module meets

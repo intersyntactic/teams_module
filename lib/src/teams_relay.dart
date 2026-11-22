@@ -171,7 +171,7 @@ final class TeamsRelay {
         case RecordFailed(:final why):
           return _unrecorded(req, d, 'record failed partway: $why');
         case RecordRefused(:final why):
-          return _unrecorded(req, d, 'refused by the record: $why');
+          return _unrecorded(req, d, 'refused by the logbook: $why');
         case RecordUnanswered(:final why):
           return _unrecorded(req, d, 'not recorded: $why');
       }

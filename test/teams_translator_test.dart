@@ -220,7 +220,7 @@ void main() {
       expect((got.quotes!.author as KnownAuthor).actor, ada);
     });
 
-    test('names its quoted author by the record alone: someone never heard '
+    test('names its quoted author by the logbook alone: someone never heard '
         'from is not in it, with the name Teams showed', () {
       final got = teams
           .said(
@@ -332,7 +332,7 @@ void main() {
       expect(authors.entraIdOf(TeamsUserId.parse('29:1bea')!), isNull);
     });
 
-    test('of a bot names the bot, which needs no record', () {
+    test('of a bot names the bot, which needs nothing learnt first', () {
       final got = teams
           .said(
             messageOf(

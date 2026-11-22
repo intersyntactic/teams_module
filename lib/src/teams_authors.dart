@@ -2,7 +2,7 @@ import 'teams_event.dart';
 import 'teams_ids.dart';
 
 /// Which Entra user each Teams channel id `29:…` belongs to, as far as the
-/// record says.
+/// logbook says.
 ///
 /// A quote names its author only by channel id, which names a person only
 /// to this bot, so who wrote a quoted message is known only if they have
@@ -12,7 +12,7 @@ import 'teams_ids.dart';
 /// A channel id names the same person in every chat with the bot, so one
 /// of these serves every chat's [TeamsTranslator]: someone heard from in
 /// one chat is known when quoted in another. Learning the same pair twice
-/// changes nothing, so it can be given every event in the record, in order,
+/// changes nothing, so it can be given every event in the logbook, in order,
 /// on a restart as well as live, and comes out the same.
 final class TeamsAuthors {
   final _entraIds = <TeamsUserId, EntraObjectId>{};

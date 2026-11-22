@@ -3,6 +3,16 @@
 Each version is tagged `vX.Y.Z` on main, and the services that use this
 package pin that tag.
 
+## 0.0.3
+
+- "The record" is "the logbook" throughout: prose, doc comments, the
+  relay's 500 text (`refused by the logbook: <why>`), the live test (now
+  `logbook_live_test.dart`, run with `LOGBOOK_LIVE*`), and the relay's
+  socket variable. The verb "record" (recordEvent, Recorded, RecordRefused,
+  ...) is unchanged.
+- The relay reads its logbook socket from `LOGBOOK_SOCKET`, and from its
+  older name `JOURNAL_SOCKET` when that is unset.
+
 ## 0.0.2
 
 - The readings come from `is_admission_vocabulary` 0.1.0, not

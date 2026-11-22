@@ -35,7 +35,7 @@ permissions, so an organisation's IT has one thing to do: upload the app.
 ## What Teams sends, and how it is read
 
 The docking station gives this module's reading every event the relay recorded,
-in the record's order, and the reading says what each one is: something
+in the logbook's order, and the reading says what each one is: something
 said, a conversation joined, or nothing to admit. These are the facts about
 Teams that reading rests on. Each says whether it was **measured** (seen in
 bytes Teams really sent, with where) or is **unmeasured** (from Microsoft's
@@ -45,7 +45,7 @@ documentation or inference only).
 
 - A one-to-one chat's conversation id is `a:…`. Measured, in Hart's tenant.
   A group chat's is `19:…@thread.v2` by Microsoft's documentation; none is
-  in the record, so unmeasured here.
+  in the logbook, so unmeasured here.
 - In a channel, every message names its *thread*, not the channel:
   `conversation.id` is `<channel id>;messageid=<the thread's first post>`.
   A new post's thread is itself: its id and the `messageid` are the same.
@@ -91,7 +91,7 @@ documentation or inference only).
   millisecond apart for a team (215 ms in the one-to-one join seen): the
   `conversationUpdate` came first for one team and
   the `installationUpdate` first for the other. The reading doesn't depend
-  on the order. Measured in the record, 15 Nov; for a one-to-one chat the
+  on the order. Measured in the logbook, 15 Nov; for a one-to-one chat the
   one join seen had the `conversationUpdate` first, so whether that order
   holds there is unmeasured.
 - Installing the bot in a one-to-one chat sends the same pair, and its
@@ -114,7 +114,7 @@ documentation or inference only).
   *from* another bot is unmeasured.
 - A quote names its author only by channel id and display name, never an
   Entra object id. So the author is named from earlier events: if that
-  person has sent something the record holds, the quote is attributed to
+  person has sent something the logbook holds, the quote is attributed to
   them; otherwise it carries the display name Teams showed. Nothing is
   asked of Teams to find out. Measured shape, 14 Nov.
 
@@ -124,7 +124,7 @@ documentation or inference only).
   `authorization` block). Without them, Teams delivers only messages that
   @mention the bot in a group chat or a channel; in a one-to-one chat every
   message arrives. Mention-only is from Microsoft's documentation: every
-  group or channel message in the record mentions the bot, but no
+  group or channel message in the logbook mentions the bot, but no
   unmentioned post has been sent since the bot joined, so its absence is
   unmeasured.
 - To be offered in a team at all, the manifest's bot must list the `team`
@@ -147,14 +147,14 @@ message became.
   only by the card's activity id, in `replyToId`, and says which button by
   `value.action.verb`. Measured through the gate on 10 Nov, and in a group
   chat on 13 Nov in Hart's tenant, where the echo bot edited the pressed
-  card by that id. No press is in the record yet: it
+  card by that id. No press is in the logbook yet: it
   began on 15 Nov.
 - The card's own `value.action.data` comes back from the Teams client,
   which can be made to send anything, so it is never read as which node a
   card shows. That is known only to whatever sent the card.
 - A card's activity id comes back in the Bot Connector's response to
   sending it. Editing a card needs it, so that much is measured. Whether
-  the record of a send keeps it, which a press needs in order to be traced
+  the logbook of a send keeps it, which a press needs in order to be traced
   to its node, is being decided with the airlock.
 - Teams wants an invoke answered within about 15 seconds, and sends it
   again if not. The relay answers at once with a fixed message, before
@@ -200,18 +200,18 @@ a station coloured by who wrote it, people and agents alike.
 
 ```
 TEAMS_APP_IDS=<the bots' app ids, comma-separated> TEAMS_TENANT_ALLOWLIST=<tenant ids, comma-separated> \
-JOURNAL_SOCKET=<the record's writer's Unix socket> \
+LOGBOOK_SOCKET=<the logbook's writer's Unix socket> \
   dart run bin/teams_relay.dart
 ```
 
 It listens on `127.0.0.1:8087` for a TLS proxy in front. The bot's messaging
 endpoint is `https://<host>/api/messages`. Every accepted request's body is
-recorded with the record's one writer, as an `event` entry, before Teams
+recorded with the logbook's one writer, as an `event` entry, before Teams
 gets its response. The writer's sender table must let the relay's user send
 `event`, so the writer's table changes before the relay deploys. Entries
 recorded before the switch (16 Nov) have the old kind, `arrived`, and keep
-it: anything reading the record's events reads both. The relay keeps no
-record of its own, so it builds and runs compiled as well as from
+it: anything reading the logbook's events reads both. The relay keeps
+nothing of its own, so it builds and runs compiled as well as from
 source.
 For the arm64 box:
 
