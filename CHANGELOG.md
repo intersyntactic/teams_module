@@ -3,6 +3,15 @@
 Each version is tagged `vX.Y.Z` on main, and the services that use this
 package pin that tag.
 
+## 0.0.6
+
+- `teams-message` is `teams-reply-translator` (`dart compile exe
+  bin/teams_reply_translator.dart`), and `teamsMessageRequests` is
+  `translateTeamsReply`: it translates a reply into Teams' terms and
+  prints the requests, which the loop proposes to the airlock; it sends
+  and proposes nothing itself. Arguments, output and exit codes are
+  unchanged.
+
 ## 0.0.5
 
 - is_docking_station_api 0.4.0, where a module's "reading" is its

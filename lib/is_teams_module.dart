@@ -8,8 +8,9 @@
 /// writer; and [teamsRecordedEvent], which reads a recorded body back into
 /// the same event, for whatever reads the logbook; and
 /// [TeamsEventTranslator], which translates each recorded event into the
-/// docking station's terms. And the way out: [teamsMessageRequests], which
-/// the `teams-message` program prints, and [teamsPostRequest] and
+/// docking station's terms. And the way out: [translateTeamsReply], which
+/// translates a reply into Teams' terms and which the
+/// `teams-reply-translator` program prints, and [teamsPostRequest] and
 /// [teamsUpdateRequest], which describe a message as a request for a web
 /// driver to sign and send. The module holds no bot secret and sends
 /// nothing itself.
