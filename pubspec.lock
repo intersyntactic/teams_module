@@ -181,19 +181,20 @@ packages:
     dependency: "direct main"
     description:
       path: docking_station_api
-      ref: a12f25e08905d0e871d2da9485e22f84eb0fc75b
-      resolved-ref: a12f25e08905d0e871d2da9485e22f84eb0fc75b
+      ref: "5d494c2968da337d14476ca770378ec100d83a7f"
+      resolved-ref: "5d494c2968da337d14476ca770378ec100d83a7f"
       url: "https://github.com/intersyntactic/docking_station.git"
     source: git
     version: "0.4.0"
   is_effects:
     dependency: "direct main"
     description:
-      name: is_effects
-      sha256: "17181a8ca28b61bc749a2c43c15b08f2316599556c98e63937249faace3016a0"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.14.0"
+      path: "."
+      ref: "827e7e5aecd503e8e9266403186ad7044d066d69"
+      resolved-ref: "827e7e5aecd503e8e9266403186ad7044d066d69"
+      url: "https://github.com/intersyntactic/effects.git"
+    source: git
+    version: "0.14.2"
   is_logbook_format:
     dependency: transitive
     description:
@@ -218,6 +219,15 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.6.0"
+  is_web_address_vocabulary:
+    dependency: "direct overridden"
+    description:
+      path: "."
+      ref: ace08828f6604dd37949029da4c3340f716b81d5
+      resolved-ref: ace08828f6604dd37949029da4c3340f716b81d5
+      url: "https://github.com/intersyntactic/web_address_vocabulary.git"
+    source: git
+    version: "0.1.1"
   lints:
     dependency: "direct dev"
     description:

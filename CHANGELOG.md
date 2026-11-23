@@ -9,8 +9,17 @@ package pin that tag.
   translator: `TeamsReading` is `TeamsEventTranslator`, implementing
   `TranslatesRelayedEvents`, and `TeamsReadingState` is
   `TeamsEventTranslatorState`. Each step gives a `TranslatedEvent`; the
-  cases are unchanged. Pinned to docking_station a12f25e until 0.4.0 is
+  cases are unchanged. Pinned to docking_station 5d494c2 until 0.4.0 is
   published at the fresh-logbook cutover.
+- Every translated event names its `replyEndpoint`: the conversation at
+  the service URL Teams sent, which the gate holds to the token's
+  `serviceurl` claim, from `teamsReplyEndpoint`. is_effects ^0.14.2, whose
+  `AddressPrefix` is is_web_address_vocabulary's.
+- The relay records each event as a `teams-event` entry, `{"at", "bytes"}`,
+  written by the docking station contract's `encodeRelayedEvent`, so only
+  the relay's user can write one. `recordEvent` takes a
+  `RelayedEventSource`, and `teamsEventSource` is the relay's and the
+  translator's.
 - `TeamsTranslator`, `TeamsReceiver`, `StandInTrajectory`, `TeamsAuthors`
   and `TeamsConversation` are gone: the way in from before the docking
   station, which no program ran. `teamsSaid`, which the translator uses

@@ -6,7 +6,12 @@ import 'package:is_docking_station_api/is_docking_station_api.dart';
 import 'teams_event.dart';
 import 'teams_gate.dart';
 import 'teams_ids.dart';
+import 'teams_requests.dart';
 import 'teams_said.dart';
+
+/// The source the Teams relay records its events under, so they are
+/// `teams-event` entries, and the one this translator reads.
+final teamsEventSource = RelayedEventSource.parse('teams')!;
 
 /// The Teams module's translator, for the docking station: what each event
 /// the Teams relay recorded is, in the docking station's terms, in the
@@ -44,9 +49,8 @@ final class TeamsEventTranslator
     implements TranslatesRelayedEvents<TeamsEventTranslatorState> {
   const TeamsEventTranslator();
 
-  /// As the relay records it.
   @override
-  String get source => 'teams';
+  RelayedEventSource get source => teamsEventSource;
 
   @override
   TeamsEventTranslatorState get start => TeamsEventTranslatorState.empty;
@@ -91,6 +95,12 @@ final class TeamsEventTranslator
     // The gate held the token's audience to the activity's recipient, so
     // this is the bot Teams verified it was sent to.
     final addressedTo = teamsBotActor(event.tenant, event.bot);
+    // The gate held serviceUrl to the token's `serviceurl` claim, so the
+    // origin is the one Microsoft signed for; the path is the conversation.
+    final replyEndpoint = teamsReplyEndpoint(
+      event.serviceUrl,
+      event.conversation,
+    );
     switch (event) {
       case TeamsMessage():
         final key = EventKey.parse('message:${event.id}');
@@ -100,6 +110,7 @@ final class TeamsEventTranslator
           addressInExternalSystem: address,
           containingAddress: containingAddress,
           addressedTo: addressedTo,
+          replyEndpoint: replyEndpoint,
           key: key,
           node: node,
         );
@@ -110,6 +121,7 @@ final class TeamsEventTranslator
           addressInExternalSystem: address,
           containingAddress: containingAddress,
           addressedTo: addressedTo,
+          replyEndpoint: replyEndpoint,
           from: event.actor,
           key: key,
           joiners: [
@@ -130,6 +142,7 @@ final class TeamsEventTranslator
               addressInExternalSystem: address,
               containingAddress: containingAddress,
               addressedTo: addressedTo,
+              replyEndpoint: replyEndpoint,
               from: actor,
               key: key,
               to: to,
@@ -142,6 +155,7 @@ final class TeamsEventTranslator
             addressInExternalSystem: address,
             containingAddress: containingAddress,
             addressedTo: addressedTo,
+            replyEndpoint: replyEndpoint,
             from: actor,
             key: key,
             message: to,
@@ -161,6 +175,7 @@ final class TeamsEventTranslator
           addressInExternalSystem: address,
           containingAddress: containingAddress,
           addressedTo: addressedTo,
+          replyEndpoint: replyEndpoint,
           from: actor,
           key: key,
           message: messageRef.source,

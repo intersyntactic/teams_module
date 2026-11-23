@@ -14,7 +14,7 @@
 ///                                    the same machine.
 ///   LOGBOOK_SOCKET=/run/...sock      the logbook's writer's Unix socket:
 ///                                    every accepted request's body is
-///                                    recorded through it as an `event`
+///                                    recorded through it as a `teams-event`
 ///                                    entry, byte for byte, before Teams
 ///                                    gets a response. Required.
 ///   TEAMS_SETTINGS_DIALOG=card.json  optional; an Adaptive Card the call
@@ -34,10 +34,6 @@ import 'dart:io';
 
 import 'package:checked_json/checked_json.dart';
 import 'package:is_teams_module/is_teams_module.dart';
-
-/// The source the relay's events are recorded under: the same as before,
-/// so old and new events read alike.
-const _source = 'teams';
 
 Future<void> main() async {
   final env = Platform.environment;
@@ -132,7 +128,8 @@ Future<void> main() async {
       },
     ),
     keys: keys,
-    record: (body) => recordEvent(logbookSocket, source: _source, bytes: body),
+    record: (body) =>
+        recordEvent(logbookSocket, source: teamsEventSource, bytes: body),
   );
   final server = await HttpServer.bind(address, port);
   stdout.writeln('teams relay listening on ${address.address}:${server.port}');

@@ -16,11 +16,23 @@ dependencies:
   is_docking_station_api:
     git:
       url: https://github.com/intersyntactic/docking_station.git
-      ref: a12f25e08905d0e871d2da9485e22f84eb0fc75b
+      ref: 5d494c2968da337d14476ca770378ec100d83a7f
       path: docking_station_api
-  is_effects: ^0.14.0
+  is_effects: ^0.14.2
   is_shapes: ^0.6.0
   pointycastle: ^4.0.0
+
+# Until is_web_address_vocabulary 0.1.1 and is_effects 0.14.2 are on
+# pub.dev: their merged mains.
+dependency_overrides:
+  is_effects:
+    git:
+      url: https://github.com/intersyntactic/effects.git
+      ref: 827e7e5aecd503e8e9266403186ad7044d066d69
+  is_web_address_vocabulary:
+    git:
+      url: https://github.com/intersyntactic/web_address_vocabulary.git
+      ref: ace08828f6604dd37949029da4c3340f716b81d5
 
 dev_dependencies:
   is_content_id: ^0.2.0

@@ -13,25 +13,26 @@ import 'package:test/test.dart';
 
 import 'support/fixtures.dart';
 
-/// [activity] as the docking station hands it over: the body the relay
-/// records, `{at, source, bytes}`, read back from its `event` entry.
-RelayedEvent recorded(Map<String, Object?> activity) {
-  final body = Uint8List.fromList(
-    utf8.encode(
-      jsonEncode({
-        'at': '2026-11-15T09:45:11.754675Z',
-        'source': 'teams',
-        'bytes': base64Encode(utf8.encode(jsonEncode(activity))),
-      }),
-    ),
+/// [activity] as the docking station hands it over: written as the relay
+/// writes it, and read back from its `teams-event` entry.
+RelayedEvent recorded(Map<String, Object?> activity) =>
+    recordedBytes(utf8.encode(jsonEncode(activity)));
+
+/// [bytes] as the relay records them, read back from its entry.
+RelayedEvent recordedBytes(List<int> bytes) {
+  final (kind, body) = encodeRelayedEvent(
+    teamsEventSource,
+    at: DateTime.utc(2026, 11, 15, 9, 45, 11),
+    bytes: Uint8List.fromList(bytes),
   );
-  return RelayedEvent.read(_recordedId(body), body)!;
+  return RelayedEvent.read(_recordedId(body), kind, body)!;
 }
 
-/// The id the logbook gives an `event` entry holding [body]: the hash of
-/// its whole text, header included.
-ObjectId _recordedId(Uint8List body) =>
-    ObjectId.of(Uint8List.fromList([...utf8.encode('event\n-\n'), ...body]));
+/// The id the logbook gives a `teams-event` entry holding [body]: the hash
+/// of its whole text, header included.
+ObjectId _recordedId(Uint8List body) => ObjectId.of(
+  Uint8List.fromList([...utf8.encode('teams-event\n-\n'), ...body]),
+);
 
 /// Every one of [activities], folded from the start, as the docking station
 /// folds them: the translated events in order, and the state after the last.
@@ -467,18 +468,9 @@ void main() {
 
     test('bytes that are not an activity, with the state left as it was', () {
       const translator = TeamsEventTranslator();
-      final body = Uint8List.fromList(
-        utf8.encode(
-          jsonEncode({
-            'at': '2026-11-15T09:45:11Z',
-            'source': 'teams',
-            'bytes': base64Encode(utf8.encode('not json')),
-          }),
-        ),
-      );
       final (state, r) = translator.step(
         translator.start,
-        RelayedEvent.read(_recordedId(body), body)!,
+        recordedBytes(utf8.encode('not json')),
       );
       expect(r, isA<NothingToAdmit>());
       expect(state, same(translator.start));
@@ -522,6 +514,58 @@ void main() {
       expect(
         fold(activities).$2.map(described),
         fold(activities).$2.map(described),
+      );
+    });
+  });
+
+  group('replyEndpoint', () {
+    test('is the conversation at its service URL, for every event', () {
+      final (_, translated) = fold([
+        added(),
+        fromBea('act-1'),
+        pressed('approve'),
+        pressed('close'),
+      ]);
+      final chat = teamsReplyEndpoint(Uri.parse(serviceUrl), 'a:1personal');
+      expect(chat, isNotNull);
+      expect(
+        translated.map((r) => (r as AddressedEvent).replyEndpoint),
+        everyElement(chat),
+      );
+    });
+
+    test('in a channel thread is the thread, so a reply lands in it', () {
+      const channel = '19:abc@thread.tacv2';
+      const thread = '$channel;messageid=1794736789259';
+      final (_, [r]) = fold([
+        {
+          ...message(id: '1794736789259', text: '<at>Bot</at> test'),
+          'conversation': {
+            'id': thread,
+            'conversationType': 'channel',
+            'tenantId': tenant,
+          },
+          'channelData': {
+            'tenant': {'id': tenant},
+            'channel': {'id': channel},
+            'team': {'id': channel},
+          },
+        },
+      ]);
+      expect(
+        (r as MessageSaid).replyEndpoint,
+        teamsReplyEndpoint(Uri.parse(serviceUrl), thread),
+      );
+    });
+
+    test('follows the service URL Teams sent, region and all', () {
+      const au = 'https://smba.trafficmanager.net/au/';
+      final (_, [r]) = fold([
+        {...fromBea('act-1'), 'serviceUrl': au},
+      ]);
+      expect(
+        (r as MessageSaid).replyEndpoint,
+        teamsReplyEndpoint(Uri.parse(au), 'a:1personal'),
       );
     });
   });
