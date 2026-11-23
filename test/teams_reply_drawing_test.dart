@@ -5,7 +5,7 @@ import 'package:is_effects/is_effects.dart';
 import 'package:is_teams_module/is_teams_module.dart';
 import 'package:test/test.dart';
 
-import '../bin/teams_reply_translator.dart' as app;
+import '../bin/teams_reply_drawing.dart' as app;
 
 const origin = 'https://smba.trafficmanager.net';
 const prefix = '/amer/v3/conversations/a%3A1personal/';
@@ -174,7 +174,7 @@ void main() {
       expect(code, 64, reason: '$args');
       expect(requests, isEmpty, reason: '$args');
       expect(err, contains('usage'), reason: '$args');
-      expect(err, startsWith('teams-reply-translator: '), reason: '$args');
+      expect(err, startsWith('teams-reply-drawing: '), reason: '$args');
     }
   });
 

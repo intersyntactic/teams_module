@@ -112,7 +112,7 @@ Map<String, Object?> pressed(String verb) {
 final trajectoryHex = 'c1' * 32;
 
 /// Ada pressing "Close trajectory" on reply `1730881000000`, its data naming
-/// [trajectory] as `teams-reply-translator` writes it, or naming none.
+/// [trajectory] as the Teams drawing of a reply writes it, or naming none.
 Map<String, Object?> closePressed({String? trajectory}) {
   final press = pressed('close');
   ((press['value']! as Map)['action']! as Map)['data'] = {
@@ -396,11 +396,11 @@ void main() {
       expect(asked.trajectory, TrajectoryId.parse(trajectoryHex));
     });
 
-    test('of the Close on a reply teams-reply-translator built names the '
+    test('of the Close on a reply drawTeamsReply drew names the '
         'trajectory '
         'it was built with', () {
       final trajectory = TrajectoryId.parse(trajectoryHex)!;
-      final reply = teamsTextActivities('hi', trajectory: trajectory).last;
+      final reply = drawTeamsReply('hi', trajectory: trajectory).last;
       final card = JsonObject.decode(jsonEncode(reply))
           .objects('attachments')
           .single

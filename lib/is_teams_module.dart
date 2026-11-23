@@ -8,9 +8,10 @@
 /// writer; and [teamsRecordedEvent], which reads a recorded body back into
 /// the same event, for whatever reads the logbook; and
 /// [TeamsEventTranslator], which translates each recorded event into the
-/// docking station's terms. And the way out: [translateTeamsReply], which
-/// translates a reply into Teams' terms and which the
-/// `teams-reply-translator` program prints, and [teamsPostRequest] and
+/// docking station's terms. Translators bring things in; drawings take
+/// things out. The way out: [drawTeamsReply], the Teams drawing of a reply,
+/// and [postTeamsReplyDrawing], which the `teams-reply-drawing` program
+/// prints, the drawing addressed and signed; and [teamsPostRequest] and
 /// [teamsUpdateRequest], which describe a message as a request for a web
 /// driver to sign and send. The module holds no bot secret and sends
 /// nothing itself.

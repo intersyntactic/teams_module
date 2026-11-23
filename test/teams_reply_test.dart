@@ -234,7 +234,7 @@ void main() {
             r.body,
           ],
       ]);
-      List<ProposedRequest> built() => translateTeamsReply(
+      List<ProposedRequest> built() => postTeamsReplyDrawing(
         text: text,
         trajectory: trajectory,
         replyEndpoint: endpoint,
@@ -249,14 +249,14 @@ void main() {
       final text = [for (var i = 0; i < 8; i++) 'p$i ${'x' * 2000}']
           .join('\n\n');
       final footer = contextFooter(usage);
-      final requests = translateTeamsReply(
+      final requests = postTeamsReplyDrawing(
         text: text,
         trajectory: trajectory,
         replyEndpoint: endpoint,
         signIn: signIn,
         footer: footer,
       );
-      final activities = teamsTextActivities(
+      final activities = drawTeamsReply(
         text,
         trajectory: trajectory,
         footer: footer,
