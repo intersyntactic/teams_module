@@ -84,13 +84,13 @@ Map<String, Object?> quotingBea(Map<String, Object?> activity, String id) => {
   ],
 };
 
-/// The "Close trajectory" message action, opened on message
-/// `1730881000000` and submitted with [data], as the docs give a
-/// submitAction (not yet measured).
-Map<String, Object?> closeActionSubmitted(
-  Map<String, Object?> data, {
-  String command = closeTrajectoryCommandId,
-}) => {
+/// The message action [command], opened on message `1730881000000` and
+/// submitted with [data], as the docs give a submitAction (not yet
+/// measured).
+Map<String, Object?> messageActionSubmitted(
+  String command,
+  Map<String, Object?> data,
+) => {
   ...cardAction(),
   'name': 'composeExtension/submitAction',
   'value': {
@@ -112,7 +112,7 @@ Map<String, Object?> pressed(String verb) {
 final trajectoryHex = 'c1' * 32;
 
 /// Ada pressing "Close trajectory" on reply `1730881000000`, its data naming
-/// [trajectory] as `teams-reply-translator` writes it, or naming none.
+/// [trajectory] as the Teams drawing of a reply writes it, or naming none.
 Map<String, Object?> closePressed({String? trajectory}) {
   final press = pressed('close');
   ((press['value']! as Map)['action']! as Map)['data'] = {
@@ -396,11 +396,11 @@ void main() {
       expect(asked.trajectory, TrajectoryId.parse(trajectoryHex));
     });
 
-    test('of the Close on a reply teams-reply-translator built names the '
+    test('of the Close on a reply drawTeamsReply drew names the '
         'trajectory '
         'it was built with', () {
       final trajectory = TrajectoryId.parse(trajectoryHex)!;
-      final reply = teamsTextActivities('hi', trajectory: trajectory).last;
+      final reply = drawTeamsReply('hi', trajectory: trajectory).last;
       final card = JsonObject.decode(jsonEncode(reply))
           .objects('attachments')
           .single
@@ -437,15 +437,16 @@ void main() {
       }
     });
 
-    test('the Close trajectory message action, which can name no '
-        'trajectory, is nothing to admit, toggle on or off', () {
+    test('a message action submitted, whatever its command or data, is '
+        'nothing to admit: no message action closes a trajectory', () {
       for (final submitted in [
-        closeActionSubmitted({'confirm': true}),
-        closeActionSubmitted({'confirm': 'true'}),
-        closeActionSubmitted({'confirm': false}),
-        closeActionSubmitted({'confirm': 'false'}),
-        closeActionSubmitted({}),
-        closeActionSubmitted({'confirm': true}, command: callSettingsCommandId),
+        messageActionSubmitted(callSettingsCommandId, {'model': 'x'}),
+        // The retired "Close trajectory" action, from an old package.
+        messageActionSubmitted('closeTrajectory', {'confirm': true}),
+        messageActionSubmitted('closeTrajectory', {
+          'confirm': true,
+          'trajectory': trajectoryHex,
+        }),
       ]) {
         final (_, [r]) = fold([submitted]);
         expect(r, isA<NothingToAdmit>(), reason: '$submitted');

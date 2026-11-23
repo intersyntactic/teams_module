@@ -1,8 +1,8 @@
-/// One reply translated into Teams' terms: the requests that would post it,
-/// for the loop to propose to the airlock. It sends and proposes nothing
-/// itself.
+/// One reply drawn for Teams, its cards addressed and signed as the requests
+/// that would post them, for the loop to propose to the airlock. It sends
+/// and proposes nothing itself.
 ///
-///     teams-reply-translator \
+///     teams-reply-drawing \
 ///         --reply-endpoint '{"origin":"https://smba.trafficmanager.net",
 ///                     "pathPrefix":"/amer/v3/conversations/<id>/"}' \
 ///         --sign-in cam-teams --trajectory <64 hex> \
@@ -30,7 +30,7 @@ import 'package:is_shapes/is_shapes.dart' show TrajectoryId;
 import 'package:is_teams_module/is_teams_module.dart';
 
 const usage =
-    'usage: teams-reply-translator --reply-endpoint JSON --sign-in NAME '
+    'usage: teams-reply-drawing --reply-endpoint JSON --sign-in NAME '
     '--trajectory HEX [--turn N] [--context-tokens N] [--context-window N] '
     '< text';
 
@@ -57,12 +57,12 @@ Future<int> run(
     // wire-ok: command-line flags, read once here.
     if (!known.contains(args[i]) || i + 1 >= args.length) {
       err.writeln(
-        'teams-reply-translator: unknown or valueless ${args[i]}\n$usage',
+        'teams-reply-drawing: unknown or valueless ${args[i]}\n$usage',
       );
       return 64;
     }
     if (options.containsKey(args[i])) {
-      err.writeln('teams-reply-translator: ${args[i]} given twice\n$usage');
+      err.writeln('teams-reply-drawing: ${args[i]} given twice\n$usage');
       return 64;
     }
     options[args[i]] = args[i + 1];
@@ -74,22 +74,20 @@ Future<int> run(
       'reply endpoint',
     );
   } on FormatException catch (e) {
-    err.writeln(
-      'teams-reply-translator: --reply-endpoint: ${e.message}\n$usage',
-    );
+    err.writeln('teams-reply-drawing: --reply-endpoint: ${e.message}\n$usage');
     return 64;
   }
   final signIn = SignIn.parse(options['--sign-in'] ?? '');
   if (signIn == null) {
     err.writeln(
-      'teams-reply-translator: --sign-in is needed and must parse\n$usage',
+      'teams-reply-drawing: --sign-in is needed and must parse\n$usage',
     );
     return 64;
   }
   final trajectory = TrajectoryId.parse(options['--trajectory'] ?? '');
   if (trajectory == null) {
     err.writeln(
-      'teams-reply-translator: --trajectory is needed, a TrajectoryId in lower-case '
+      'teams-reply-drawing: --trajectory is needed, a TrajectoryId in lower-case '
       'hex\n$usage',
     );
     return 64;
@@ -102,9 +100,7 @@ Future<int> run(
   final contextTokens = count('--context-tokens');
   final contextWindow = count('--context-window');
   if ([turn, contextTokens, contextWindow].any((n) => n != null && n < 0)) {
-    err.writeln(
-      'teams-reply-translator: a count is not a whole number\n$usage',
-    );
+    err.writeln('teams-reply-drawing: a count is not a whole number\n$usage');
     return 64;
   }
 
@@ -112,15 +108,15 @@ Future<int> run(
   try {
     text = await input.transform(const Utf8Decoder()).join();
   } on FormatException {
-    err.writeln('teams-reply-translator: stdin is not UTF-8');
+    err.writeln('teams-reply-drawing: stdin is not UTF-8');
     return 65;
   }
   if (text.trim().isEmpty) {
-    err.writeln('teams-reply-translator: nothing to say on stdin');
+    err.writeln('teams-reply-drawing: nothing to say on stdin');
     return 65;
   }
 
-  final requests = translateTeamsReply(
+  final requests = postTeamsReplyDrawing(
     text: text,
     trajectory: trajectory,
     replyEndpoint: replyEndpoint,

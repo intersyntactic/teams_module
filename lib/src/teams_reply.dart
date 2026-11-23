@@ -1,14 +1,16 @@
-/// What CAM posts in a conversation, as Teams messages: a reply.
+/// The Teams drawing of a reply: how a reply shows in a Teams conversation,
+/// going out.
 ///
-/// A reply is an Adaptive Card per message, the reply's text in it, and at
+/// A reply is drawn as an Adaptive Card per message, its text in it, and at
 /// the bottom a footer saying the turn and how full the model's context is,
 /// with "Close trajectory" in the card's menu. A reply too long for one
 /// message is split across several, in order, and only the last carries
 /// the footer, the menu and any note that the reply was cut off.
 ///
-/// teams_module is the one place these bytes are made, and
-/// `teams-reply-translator` prints them as the requests that would post
-/// them, to the conversation's reply endpoint as the logbook recorded it.
+/// teams_module is the one place these bytes are made: [drawTeamsReply]
+/// draws them, and [postTeamsReplyDrawing], which `teams-reply-drawing`
+/// prints, addresses and signs them as the requests that would post them,
+/// to the conversation's reply endpoint as the logbook recorded it.
 library;
 
 import 'dart:convert';
@@ -35,7 +37,7 @@ List<Map<String, Object?>> teamsReplyActivities(
   ModelReply reply, {
   required TrajectoryId trajectory,
   int byteCap = teamsMessageByteCap,
-}) => teamsTextActivities(
+}) => drawTeamsReply(
   reply.text,
   trajectory: trajectory,
   footer: switch (reply.usage) {
@@ -46,11 +48,12 @@ List<Map<String, Object?>> teamsReplyActivities(
   byteCap: byteCap,
 );
 
-/// [text] as the Teams messages it goes out as, in posting order, each
-/// [byteCap] or less once encoded, the last carrying [footer], the menu
-/// that closes [trajectory] and, when [cutOff] or when it takes more than
-/// [maxMessages], a note that it was cut off. Always at least one.
-List<Map<String, Object?>> teamsTextActivities(
+/// The reply [text] drawn for Teams: the messages it shows as, in posting
+/// order, each [byteCap] or less once encoded, the last carrying [footer],
+/// the menu that closes [trajectory] and, when [cutOff] or when it takes
+/// more than [maxMessages], a note that it was cut off. Always at least
+/// one. Pure: the same inputs draw the same bytes.
+List<Map<String, Object?>> drawTeamsReply(
   String text, {
   required TrajectoryId trajectory,
   String? footer,
@@ -86,20 +89,21 @@ List<Map<String, Object?>> teamsTextActivities(
   ];
 }
 
-/// The reply [text] translated into Teams' terms: the requests that would
-/// post it to the conversation at [replyEndpoint], signed as [signIn], in
-/// posting order, as [teamsTextActivities] makes it, at most
-/// [teamsReplyMaxMessages] messages, closing [trajectory]. [replyEndpoint]
-/// is the conversation's as the logbook recorded it, never worked out again
-/// here.
-List<ProposedRequest> translateTeamsReply({
+/// The requests that would post the Teams drawing of the reply [text] to
+/// the conversation at [replyEndpoint], signed as [signIn], in posting
+/// order: the reply as [drawTeamsReply] draws it, at most
+/// [teamsReplyMaxMessages] messages, closing [trajectory]. Addressing and
+/// signing are not drawing; they are here until the sending driver takes
+/// them. [replyEndpoint] is the conversation's as the logbook recorded it,
+/// never worked out again here.
+List<ProposedRequest> postTeamsReplyDrawing({
   required String text,
   required TrajectoryId trajectory,
   required AddressPrefix replyEndpoint,
   required SignIn signIn,
   String? footer,
 }) => [
-  for (final activity in teamsTextActivities(
+  for (final activity in drawTeamsReply(
     text,
     trajectory: trajectory,
     footer: footer,

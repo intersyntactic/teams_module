@@ -3,6 +3,23 @@
 Each version is tagged `vX.Y.Z` on main, and the services that use this
 package pin that tag.
 
+## 0.0.7
+
+- The way out is a drawing: translators bring things in, drawings take
+  things out. `teams-reply-translator` is `teams-reply-drawing` (`dart
+  compile exe bin/teams_reply_drawing.dart`); `teamsTextActivities` is
+  `drawTeamsReply`, the cards alone, pure; `translateTeamsReply` is
+  `postTeamsReplyDrawing`, the drawing addressed and signed as the
+  requests that would post it. Arguments, output and exit codes are
+  unchanged. `TeamsEventTranslator` stays a translator.
+- The "Close trajectory" message action is gone: from the app package's
+  manifest (`tool/app_package.dart`, which now has a `composeExtensions`
+  section only with `--settings-action`), and `closeTrajectoryCommandId`
+  and `closeTrajectoryConfirmParameter` with it. It opened on any message
+  and so could name no trajectory; a trajectory is closed from the menu on
+  its replies' cards. A submission from a package that still has it is
+  `NothingToAdmit`, as every message action's is.
+
 ## 0.0.6
 
 - `teams-message` is `teams-reply-translator` (`dart compile exe

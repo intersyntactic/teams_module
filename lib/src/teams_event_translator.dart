@@ -30,8 +30,7 @@ final teamsEventSource = RelayedEventSource.parse('teams')!;
 ///   the docking station closes it only while it is the trajectory open at
 ///   the press's address, so a forged one reaches only what the presser
 ///   could close anyway;
-/// - the "Close trajectory" message action, which opens on any message and
-///   so can name no trajectory;
+/// - a message action's submission, such as call settings';
 /// - an `installationUpdate`, which Teams sends beside the
 ///   `conversationUpdate` of the same join, so one join is read once;
 /// - an edit or a delete, until conversation_shapes has a shape for what a
