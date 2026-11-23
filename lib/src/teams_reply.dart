@@ -6,9 +6,9 @@
 /// message is split across several, in order, and only the last carries
 /// the footer, the menu and any note that the reply was cut off.
 ///
-/// teams_module is the one place these bytes are made, and `teams-message`
-/// prints them as the requests that post them, to the conversation's reply
-/// endpoint as the logbook recorded it.
+/// teams_module is the one place these bytes are made, and
+/// `teams-reply-translator` prints them as the requests that would post
+/// them, to the conversation's reply endpoint as the logbook recorded it.
 library;
 
 import 'dart:convert';
@@ -86,12 +86,13 @@ List<Map<String, Object?>> teamsTextActivities(
   ];
 }
 
-/// The requests that post [text] to the conversation at [replyEndpoint],
-/// signed as [signIn], in posting order: the reply as [teamsTextActivities]
-/// makes it, at most [teamsReplyMaxMessages] messages, closing [trajectory].
-/// [replyEndpoint] is the conversation's as the logbook recorded it, never
-/// worked out again here.
-List<ProposedRequest> teamsMessageRequests({
+/// The reply [text] translated into Teams' terms: the requests that would
+/// post it to the conversation at [replyEndpoint], signed as [signIn], in
+/// posting order, as [teamsTextActivities] makes it, at most
+/// [teamsReplyMaxMessages] messages, closing [trajectory]. [replyEndpoint]
+/// is the conversation's as the logbook recorded it, never worked out again
+/// here.
+List<ProposedRequest> translateTeamsReply({
   required String text,
   required TrajectoryId trajectory,
   required AddressPrefix replyEndpoint,
