@@ -1,10 +1,10 @@
-/// What CAM posts in a conversation, as Teams messages: a reply, and the
-/// card saying a trajectory opened.
+/// What CAM posts in a conversation, as Teams messages: a reply.
 ///
-/// A reply is an Adaptive Card per message, the reply's text in it, and a
-/// footer saying the turn and how full the model's context is. A reply too
-/// long for one message is split across several, in order, and only the
-/// last carries the footer and any note that the reply was cut off.
+/// A reply is an Adaptive Card per message, the reply's text in it, and at
+/// the bottom a footer saying the turn and how full the model's context is,
+/// with "Close trajectory" in the card's menu. A reply too long for one
+/// message is split across several, in order, and only the last carries
+/// the footer, the menu and any note that the reply was cut off.
 ///
 /// teams_module is the one place these bytes are made, and `teams-message`
 /// prints them as the requests that post them, to the conversation's reply
@@ -15,6 +15,7 @@ import 'dart:convert';
 
 import 'package:is_effects/is_effects.dart';
 
+import 'teams_event.dart' show CardActionVerb;
 import 'teams_requests.dart';
 
 /// The most a message may weigh, encoded, by Microsoft's docs: about 28 KB.
@@ -54,7 +55,11 @@ List<Map<String, Object?>> teamsTextActivities(
 }) {
   bool fitsAsLast(String part, {required bool cut}) =>
       utf8
-          .encode(jsonEncode(_activity(part, cutOff: cut, footer: footer)))
+          .encode(
+            jsonEncode(
+              _activity(part, last: true, cutOff: cut, footer: footer),
+            ),
+          )
           .length <=
       byteCap;
   // Every part is weighed as the last would be, footer and all, so a part
@@ -71,8 +76,8 @@ List<Map<String, Object?>> teamsTextActivities(
   return [
     for (var i = 0; i < parts.length; i++)
       i == parts.length - 1
-          ? _activity(parts[i], cutOff: cut, footer: footer)
-          : _activity(parts[i], cutOff: false, footer: null),
+          ? _activity(parts[i], last: true, cutOff: cut, footer: footer)
+          : _activity(parts[i], last: false, cutOff: false, footer: null),
   ];
 }
 
@@ -108,38 +113,6 @@ String? replyFooter({int? turn, int? contextTokens, int? contextWindow}) {
   ];
   return halves.isEmpty ? null : halves.join(' · ');
 }
-
-/// The card that says a trajectory opened in this conversation, with the
-/// one action a person closes it by: a press read as
-/// [CardActionVerb.close]. Teams shows when it was posted, so the card
-/// names no time.
-const Map<String, Object?> teamsTrajectoryOpenCard = {
-  'type': 'message',
-  'attachments': [
-    {
-      'contentType': 'application/vnd.microsoft.card.adaptive',
-      'content': {
-        r'$schema': 'http://adaptivecards.io/schemas/adaptive-card.json',
-        'type': 'AdaptiveCard',
-        'version': '1.5',
-        'body': [
-          {
-            'type': 'TextBlock',
-            'text': '● Open · trajectory started',
-            'wrap': true,
-          },
-        ],
-        'actions': [
-          {
-            'type': 'Action.Execute',
-            'title': 'Close trajectory',
-            'verb': 'close',
-          },
-        ],
-      },
-    },
-  ],
-};
 
 /// How full the model's context is after the call [usage] reports, such as
 /// `context 152k of 200k (76%)`, or `context 152k` when the model's window
@@ -232,8 +205,12 @@ List<String> _byCharacters(String line, bool Function(String) fits) {
 /// One message: an Adaptive Card 1.5, the shape that rendered in every
 /// tenant tried, holding [text], then the cut-off note and the [footer]
 /// when there are any. No actions.
+/// One message of a reply. The [last] carries "Close trajectory" as a
+/// secondary action, which Teams draws in the card's overflow menu rather
+/// than as a button; a press is read as [CardActionVerb.close].
 Map<String, Object?> _activity(
   String text, {
+  required bool last,
   required bool cutOff,
   required String? footer,
 }) => {
@@ -262,6 +239,15 @@ Map<String, Object?> _activity(
               'isSubtle': true,
             },
         ],
+        if (last)
+          'actions': [
+            {
+              'type': 'Action.Execute',
+              'title': 'Close trajectory',
+              'verb': CardActionVerb.close.asSent,
+              'mode': 'secondary',
+            },
+          ],
       },
     },
   ],

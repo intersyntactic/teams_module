@@ -24,6 +24,11 @@ package pin that tag.
   and `TeamsConversation` are gone: the way in from before the docking
   station, which no program ran. `teamsSaid`, which the translator uses
   for every message, is kept, in `teams_said.dart`.
+- Every reply's last message carries "Close trajectory" in its card's
+  menu (`Action.Execute`, verb `close`, `mode: secondary`), under the
+  footer; a press is read as `PersonAskedToCloseTrajectory` as before.
+  `teamsTrajectoryOpenCard` is gone: no separate card says a trajectory
+  opened.
 - The relay reads its logbook socket from `LOGBOOK_SOCKET` only; the
   `JOURNAL_SOCKET` fallback is gone, as infra's unit now sets the new name.
 
