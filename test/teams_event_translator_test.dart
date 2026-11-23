@@ -84,13 +84,13 @@ Map<String, Object?> quotingBea(Map<String, Object?> activity, String id) => {
   ],
 };
 
-/// The "Close trajectory" message action, opened on message
-/// `1730881000000` and submitted with [data], as the docs give a
-/// submitAction (not yet measured).
-Map<String, Object?> closeActionSubmitted(
-  Map<String, Object?> data, {
-  String command = closeTrajectoryCommandId,
-}) => {
+/// The message action [command], opened on message `1730881000000` and
+/// submitted with [data], as the docs give a submitAction (not yet
+/// measured).
+Map<String, Object?> messageActionSubmitted(
+  String command,
+  Map<String, Object?> data,
+) => {
   ...cardAction(),
   'name': 'composeExtension/submitAction',
   'value': {
@@ -437,15 +437,16 @@ void main() {
       }
     });
 
-    test('the Close trajectory message action, which can name no '
-        'trajectory, is nothing to admit, toggle on or off', () {
+    test('a message action submitted, whatever its command or data, is '
+        'nothing to admit: no message action closes a trajectory', () {
       for (final submitted in [
-        closeActionSubmitted({'confirm': true}),
-        closeActionSubmitted({'confirm': 'true'}),
-        closeActionSubmitted({'confirm': false}),
-        closeActionSubmitted({'confirm': 'false'}),
-        closeActionSubmitted({}),
-        closeActionSubmitted({'confirm': true}, command: callSettingsCommandId),
+        messageActionSubmitted(callSettingsCommandId, {'model': 'x'}),
+        // The retired "Close trajectory" action, from an old package.
+        messageActionSubmitted('closeTrajectory', {'confirm': true}),
+        messageActionSubmitted('closeTrajectory', {
+          'confirm': true,
+          'trajectory': trajectoryHex,
+        }),
       ]) {
         final (_, [r]) = fold([submitted]);
         expect(r, isA<NothingToAdmit>(), reason: '$submitted');

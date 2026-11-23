@@ -3,6 +3,16 @@
 Each version is tagged `vX.Y.Z` on main, and the services that use this
 package pin that tag.
 
+## 0.0.7
+
+- The "Close trajectory" message action is gone: from the app package's
+  manifest (`tool/app_package.dart`, which now has a `composeExtensions`
+  section only with `--settings-action`), and `closeTrajectoryCommandId`
+  and `closeTrajectoryConfirmParameter` with it. It opened on any message
+  and so could name no trajectory; a trajectory is closed from the menu on
+  its replies' cards. A submission from a package that still has it is
+  `NothingToAdmit`, as every message action's is.
+
 ## 0.0.6
 
 - `teams-message` is `teams-reply-translator` (`dart compile exe
