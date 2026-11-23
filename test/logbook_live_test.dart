@@ -41,7 +41,11 @@ void main() {
         ),
         onEvent: (_) async {},
         record: (body) async {
-          final a = await recordEvent(socket, source: 'teams', bytes: body);
+          final a = await recordEvent(
+            socket,
+            source: teamsEventSource,
+            bytes: body,
+          );
           answers.add(a);
           return a;
         },

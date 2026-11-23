@@ -1,4 +1,3 @@
-import 'package:checked_json/checked_json.dart' show JsonObject;
 import 'package:is_annotation_shapes/is_annotation_shapes.dart'
     show ApprovedVerdict, HeldOffVerdict, VerdictOnShownMessage;
 import 'package:is_docking_station_api/is_docking_station_api.dart';
@@ -6,20 +5,33 @@ import 'package:is_docking_station_api/is_docking_station_api.dart';
 import 'teams_event.dart';
 import 'teams_gate.dart';
 import 'teams_ids.dart';
-import 'teams_translator.dart';
+import 'teams_requests.dart';
+import 'teams_said.dart';
 
-/// The Teams module's reading, for the docking station: what each event the
-/// Teams relay recorded is, in the logbook's order.
+/// The source the Teams relay records its events under, so they are
+/// `teams-event` entries, and the one this translator reads.
+final teamsEventSource = RelayedEventSource.parse('teams')!;
+
+/// The Teams module's translator, for the docking station: what each event
+/// the Teams relay recorded is, in the docking station's terms, in the
+/// logbook's order.
 ///
 /// It describes and decides nothing, since the docking station is what
 /// admits events under trajectories (RULINGS): a message is [MessageSaid]
 /// with the [UserSaid] made from it, CAM or a person added to a
 /// conversation is [ActorsJoinedAddress], a press of Approve or Not yet on a
-/// card is [ShownMessageJudged] for that card, a press of Close, or the
-/// "Close trajectory" message action submitted with its toggle on, is
-/// [PersonAskedToCloseTrajectory] naming that card or message, and
-/// everything else is [NothingToAdmit] for now:
+/// card is [ShownMessageJudged] for that card, a press of a reply's "Close
+/// trajectory" is [PersonAskedToCloseTrajectory] naming that reply and the
+/// trajectory its data names, and everything else is [NothingToAdmit] for
+/// now:
 ///
+/// - a Close whose data names no trajectory. That id is the one thing read
+///   from a card's own data, which the client sends back and could forge;
+///   the docking station closes it only while it is the trajectory open at
+///   the press's address, so a forged one reaches only what the presser
+///   could close anyway;
+/// - the "Close trajectory" message action, which opens on any message and
+///   so can name no trajectory;
 /// - an `installationUpdate`, which Teams sends beside the
 ///   `conversationUpdate` of the same join, so one join is read once;
 /// - an edit or a delete, until conversation_shapes has a shape for what a
@@ -39,19 +51,19 @@ import 'teams_translator.dart';
 /// `conversationUpdate:<id>` for a join, and `invoke:<id>` for a press. Teams
 /// sends a redelivery with the same activity id, so the two events it makes
 /// share a key; two activities have two.
-final class TeamsReading implements ModuleReading<TeamsReadingState> {
-  const TeamsReading();
-
-  /// As the relay records it.
-  @override
-  String get source => 'teams';
+final class TeamsEventTranslator
+    implements TranslatesRelayedEvents<TeamsEventTranslatorState> {
+  const TeamsEventTranslator();
 
   @override
-  TeamsReadingState get start => TeamsReadingState.empty;
+  RelayedEventSource get source => teamsEventSource;
 
   @override
-  (TeamsReadingState, EventReading) step(
-    TeamsReadingState state,
+  TeamsEventTranslatorState get start => TeamsEventTranslatorState.empty;
+
+  @override
+  (TeamsEventTranslatorState, TranslatedEvent) step(
+    TeamsEventTranslatorState state,
     RelayedEvent recorded,
   ) {
     final TeamsEvent? event;
@@ -59,7 +71,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
       event = teamsRecordedEvent(recorded.bytes);
     } on FormatException {
       // The gate took these bytes, so this is a body the gate and this
-      // reading disagree about: nothing to admit, rather than a fold that
+      // translator disagree about: nothing to admit, rather than a fold that
       // stops at it every time the docking station starts.
       return (state, const NothingToAdmit());
     }
@@ -70,7 +82,10 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
     return (next, _read(event, next) ?? const NothingToAdmit());
   }
 
-  static EventReading? _read(TeamsEvent event, TeamsReadingState state) {
+  static TranslatedEvent? _read(
+    TeamsEvent event,
+    TeamsEventTranslatorState state,
+  ) {
     final address = AddressInExternalSystem.parse(
       'teams:${event.conversation}',
     );
@@ -86,6 +101,12 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
     // The gate held the token's audience to the activity's recipient, so
     // this is the bot Teams verified it was sent to.
     final addressedTo = teamsBotActor(event.tenant, event.bot);
+    // The gate held serviceUrl to the token's `serviceurl` claim, so the
+    // origin is the one Microsoft signed for; the path is the conversation.
+    final replyEndpoint = teamsReplyEndpoint(
+      event.serviceUrl,
+      event.conversation,
+    );
     switch (event) {
       case TeamsMessage():
         final key = EventKey.parse('message:${event.id}');
@@ -95,6 +116,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
           addressInExternalSystem: address,
           containingAddress: containingAddress,
           addressedTo: addressedTo,
+          replyEndpoint: replyEndpoint,
           key: key,
           node: node,
         );
@@ -105,6 +127,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
           addressInExternalSystem: address,
           containingAddress: containingAddress,
           addressedTo: addressedTo,
+          replyEndpoint: replyEndpoint,
           from: event.actor,
           key: key,
           joiners: [
@@ -125,6 +148,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
               addressInExternalSystem: address,
               containingAddress: containingAddress,
               addressedTo: addressedTo,
+              replyEndpoint: replyEndpoint,
               from: actor,
               key: key,
               to: to,
@@ -133,33 +157,24 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
         return switch (event.verb) {
           CardActionVerb.approve => judged(const ApprovedVerdict()),
           CardActionVerb.notYet => judged(const HeldOffVerdict()),
-          CardActionVerb.close => PersonAskedToCloseTrajectory(
-            addressInExternalSystem: address,
-            containingAddress: containingAddress,
-            addressedTo: addressedTo,
-            from: actor,
-            key: key,
-            message: to,
-          ),
+          // A Close names the trajectory its reply was in; one that names
+          // none closes nothing.
+          CardActionVerb.close => switch (event.trajectory) {
+            final trajectory? => PersonAskedToCloseTrajectory(
+              addressInExternalSystem: address,
+              containingAddress: containingAddress,
+              addressedTo: addressedTo,
+              replyEndpoint: replyEndpoint,
+              from: actor,
+              key: key,
+              message: to,
+              trajectory: trajectory,
+            ),
+            null => null,
+          },
           // Edit only reopens the choice on a card.
           CardActionVerb.edit || null => null,
         };
-      case TeamsMessageActionSubmit(
-            command: closeTrajectoryCommandId,
-            :final messageRef?,
-            :final actor?,
-          )
-          when _confirmed(event.data):
-        final key = EventKey.parse('invoke:${event.id}');
-        if (key == null) return null;
-        return PersonAskedToCloseTrajectory(
-          addressInExternalSystem: address,
-          containingAddress: containingAddress,
-          addressedTo: addressedTo,
-          from: actor,
-          key: key,
-          message: messageRef.source,
-        );
       case TeamsCardAction() ||
           TeamsMessageUpdate() ||
           TeamsMessageDelete() ||
@@ -169,30 +184,20 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
         return null;
     }
   }
-
-  /// Whether the close action's toggle was on. Teams' encoding of a
-  /// submitted toggle is not yet measured, so a JSON true and the text
-  /// `true` both count.
-  static bool _confirmed(JsonObject? data) =>
-      // wire-ok: Teams' submitted toggle value, read once here.
-      switch (data?.raw(closeTrajectoryConfirmParameter)) {
-        true || 'true' => true,
-        _ => false,
-      };
 }
 
-/// What the Teams reading carries from one event to the next: which Entra
+/// What the Teams translator carries from one event to the next: which Entra
 /// user each Teams channel id belongs to, as far as the logbook says. A
 /// quote names its author only by channel id, and so does a join, so
 /// either is named only if that person has been heard from.
 ///
 /// Never changed: [learnt] gives a new one when there is something new,
 /// and this one otherwise, which is almost always.
-final class TeamsReadingState {
-  const TeamsReadingState._(this._entraIds);
+final class TeamsEventTranslatorState {
+  const TeamsEventTranslatorState._(this._entraIds);
 
   /// Before any event.
-  static const empty = TeamsReadingState._({});
+  static const empty = TeamsEventTranslatorState._({});
 
   final Map<TeamsUserId, EntraObjectId> _entraIds;
 
@@ -202,10 +207,12 @@ final class TeamsReadingState {
 
   /// This, with who sent [event], when Teams named both their channel id
   /// and their Entra object id.
-  TeamsReadingState learnt(TeamsEvent event) {
+  TeamsEventTranslatorState learnt(TeamsEvent event) {
     if ((event.from, event.fromAadObjectId) case (final from?, final entra?)
         when _entraIds[from] != entra) {
-      return TeamsReadingState._(Map.unmodifiable({..._entraIds, from: entra}));
+      return TeamsEventTranslatorState._(
+        Map.unmodifiable({..._entraIds, from: entra}),
+      );
     }
     return this;
   }

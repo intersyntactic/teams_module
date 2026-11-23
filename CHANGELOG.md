@@ -3,6 +3,41 @@
 Each version is tagged `vX.Y.Z` on main, and the services that use this
 package pin that tag.
 
+## 0.0.5
+
+- is_docking_station_api 0.4.0, where a module's "reading" is its
+  translator: `TeamsReading` is `TeamsEventTranslator`, implementing
+  `TranslatesRelayedEvents`, and `TeamsReadingState` is
+  `TeamsEventTranslatorState`. Each step gives a `TranslatedEvent`; the
+  cases are unchanged.
+- Every translated event names its `replyEndpoint`: the conversation at
+  the service URL Teams sent, which the gate holds to the token's
+  `serviceurl` claim, from `teamsReplyEndpoint`. is_effects ^0.14.2, whose
+  `AddressPrefix` is is_web_address_vocabulary's.
+- The relay records each event as a `teams-event` entry, `{"at", "bytes"}`,
+  written by the docking station contract's `encodeRelayedEvent`, so only
+  the relay's user can write one. `recordEvent` takes a
+  `RelayedEventSource`, and `teamsEventSource` is the relay's and the
+  translator's.
+- `TeamsTranslator`, `TeamsReceiver`, `StandInTrajectory`, `TeamsAuthors`
+  and `TeamsConversation` are gone: the way in from before the docking
+  station, which no program ran. `teamsSaid`, which the translator uses
+  for every message, is kept, in `teams_said.dart`.
+- Every reply's last message carries "Close trajectory" in its card's
+  menu (`Action.Execute`, verb `close`, `mode: secondary`), under the
+  footer, its data naming the trajectory the reply is in
+  (`{"trajectory": "<hex>"}`), so a press on an old reply closes that
+  reply's trajectory. `teams-message` takes `--trajectory`, a
+  `TrajectoryId` in hex, on every reply, and the translator reads it back
+  into `PersonAskedToCloseTrajectory.trajectory` (`TeamsCardAction`'s
+  `trajectory`). A Close naming none is `NothingToAdmit`.
+  `teamsTrajectoryOpenCard` is gone: no separate card says a trajectory
+  opened.
+- The "Close trajectory" message action is `NothingToAdmit`: it opens on
+  any message, so it can name no trajectory.
+- The relay reads its logbook socket from `LOGBOOK_SOCKET` only; the
+  `JOURNAL_SOCKET` fallback is gone, as infra's unit now sets the new name.
+
 ## 0.0.4
 
 - `teams-message`, a program (`dart compile exe bin/teams_message.dart`):

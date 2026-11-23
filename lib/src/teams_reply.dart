@@ -1,10 +1,10 @@
-/// What CAM posts in a conversation, as Teams messages: a reply, and the
-/// card saying a trajectory opened.
+/// What CAM posts in a conversation, as Teams messages: a reply.
 ///
-/// A reply is an Adaptive Card per message, the reply's text in it, and a
-/// footer saying the turn and how full the model's context is. A reply too
-/// long for one message is split across several, in order, and only the
-/// last carries the footer and any note that the reply was cut off.
+/// A reply is an Adaptive Card per message, the reply's text in it, and at
+/// the bottom a footer saying the turn and how full the model's context is,
+/// with "Close trajectory" in the card's menu. A reply too long for one
+/// message is split across several, in order, and only the last carries
+/// the footer, the menu and any note that the reply was cut off.
 ///
 /// teams_module is the one place these bytes are made, and `teams-message`
 /// prints them as the requests that post them, to the conversation's reply
@@ -14,7 +14,9 @@ library;
 import 'dart:convert';
 
 import 'package:is_effects/is_effects.dart';
+import 'package:is_shapes/is_shapes.dart' show TrajectoryId;
 
+import 'teams_event.dart' show CardActionVerb;
 import 'teams_requests.dart';
 
 /// The most a message may weigh, encoded, by Microsoft's docs: about 28 KB.
@@ -27,12 +29,15 @@ const teamsMessageByteCap = 28000;
 const teamsReplyMaxMessages = 10;
 
 /// [reply] as the Teams messages it goes out as, in posting order, each
-/// [teamsMessageByteCap] or less once encoded. Always at least one.
+/// [teamsMessageByteCap] or less once encoded, the last closing
+/// [trajectory]. Always at least one.
 List<Map<String, Object?>> teamsReplyActivities(
   ModelReply reply, {
+  required TrajectoryId trajectory,
   int byteCap = teamsMessageByteCap,
 }) => teamsTextActivities(
   reply.text,
+  trajectory: trajectory,
   footer: switch (reply.usage) {
     final usage? => contextFooter(usage),
     null => null,
@@ -42,11 +47,12 @@ List<Map<String, Object?>> teamsReplyActivities(
 );
 
 /// [text] as the Teams messages it goes out as, in posting order, each
-/// [byteCap] or less once encoded, the last carrying [footer] and, when
-/// [cutOff] or when it takes more than [maxMessages], a note that it was
-/// cut off. Always at least one.
+/// [byteCap] or less once encoded, the last carrying [footer], the menu
+/// that closes [trajectory] and, when [cutOff] or when it takes more than
+/// [maxMessages], a note that it was cut off. Always at least one.
 List<Map<String, Object?>> teamsTextActivities(
   String text, {
+  required TrajectoryId trajectory,
   String? footer,
   bool cutOff = false,
   int byteCap = teamsMessageByteCap,
@@ -54,7 +60,11 @@ List<Map<String, Object?>> teamsTextActivities(
 }) {
   bool fitsAsLast(String part, {required bool cut}) =>
       utf8
-          .encode(jsonEncode(_activity(part, cutOff: cut, footer: footer)))
+          .encode(
+            jsonEncode(
+              _activity(part, closes: trajectory, cutOff: cut, footer: footer),
+            ),
+          )
           .length <=
       byteCap;
   // Every part is weighed as the last would be, footer and all, so a part
@@ -71,24 +81,26 @@ List<Map<String, Object?>> teamsTextActivities(
   return [
     for (var i = 0; i < parts.length; i++)
       i == parts.length - 1
-          ? _activity(parts[i], cutOff: cut, footer: footer)
-          : _activity(parts[i], cutOff: false, footer: null),
+          ? _activity(parts[i], closes: trajectory, cutOff: cut, footer: footer)
+          : _activity(parts[i], closes: null, cutOff: false, footer: null),
   ];
 }
 
 /// The requests that post [text] to the conversation at [replyEndpoint],
 /// signed as [signIn], in posting order: the reply as [teamsTextActivities]
-/// makes it, at most [teamsReplyMaxMessages] messages. [replyEndpoint] is
-/// the conversation's as the logbook recorded it, never worked out again
-/// here.
+/// makes it, at most [teamsReplyMaxMessages] messages, closing [trajectory].
+/// [replyEndpoint] is the conversation's as the logbook recorded it, never
+/// worked out again here.
 List<ProposedRequest> teamsMessageRequests({
   required String text,
+  required TrajectoryId trajectory,
   required AddressPrefix replyEndpoint,
   required SignIn signIn,
   String? footer,
 }) => [
   for (final activity in teamsTextActivities(
     text,
+    trajectory: trajectory,
     footer: footer,
     maxMessages: teamsReplyMaxMessages,
   ))
@@ -108,38 +120,6 @@ String? replyFooter({int? turn, int? contextTokens, int? contextWindow}) {
   ];
   return halves.isEmpty ? null : halves.join(' · ');
 }
-
-/// The card that says a trajectory opened in this conversation, with the
-/// one action a person closes it by: a press read as
-/// [CardActionVerb.close]. Teams shows when it was posted, so the card
-/// names no time.
-const Map<String, Object?> teamsTrajectoryOpenCard = {
-  'type': 'message',
-  'attachments': [
-    {
-      'contentType': 'application/vnd.microsoft.card.adaptive',
-      'content': {
-        r'$schema': 'http://adaptivecards.io/schemas/adaptive-card.json',
-        'type': 'AdaptiveCard',
-        'version': '1.5',
-        'body': [
-          {
-            'type': 'TextBlock',
-            'text': '● Open · trajectory started',
-            'wrap': true,
-          },
-        ],
-        'actions': [
-          {
-            'type': 'Action.Execute',
-            'title': 'Close trajectory',
-            'verb': 'close',
-          },
-        ],
-      },
-    },
-  ],
-};
 
 /// How full the model's context is after the call [usage] reports, such as
 /// `context 152k of 200k (76%)`, or `context 152k` when the model's window
@@ -231,9 +211,13 @@ List<String> _byCharacters(String line, bool Function(String) fits) {
 
 /// One message: an Adaptive Card 1.5, the shape that rendered in every
 /// tenant tried, holding [text], then the cut-off note and the [footer]
-/// when there are any. No actions.
+/// when there are any. A reply's last message [closes] its trajectory:
+/// "Close trajectory" as a secondary action, which Teams draws in the
+/// card's overflow menu rather than as a button, its data naming the
+/// trajectory. A press is read as [CardActionVerb.close].
 Map<String, Object?> _activity(
   String text, {
+  required TrajectoryId? closes,
   required bool cutOff,
   required String? footer,
 }) => {
@@ -262,6 +246,16 @@ Map<String, Object?> _activity(
               'isSubtle': true,
             },
         ],
+        if (closes != null)
+          'actions': [
+            {
+              'type': 'Action.Execute',
+              'title': 'Close trajectory',
+              'verb': CardActionVerb.close.asSent,
+              'data': {'trajectory': closes.hex},
+              'mode': 'secondary',
+            },
+          ],
       },
     },
   ],

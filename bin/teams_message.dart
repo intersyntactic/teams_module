@@ -2,7 +2,7 @@
 ///
 ///     teams-message --reply-endpoint '{"origin":"https://smba.trafficmanager.net",
 ///                     "pathPrefix":"/amer/v3/conversations/<id>/"}' \
-///         --sign-in cam-teams \
+///         --sign-in cam-teams --trajectory <64 hex> \
 ///         [--turn 3] [--context-tokens 152000] [--context-window 200000]
 ///
 /// reads the reply's text, UTF-8, on stdin, and prints the requests as one
@@ -11,7 +11,9 @@
 /// The reply endpoint is is_effects' AddressPrefix as the logbook recorded
 /// it for the conversation, passed as it is; nothing here works it out
 /// again or reaches the network. The footer says the turn and how full the
-/// model's context is, each when given.
+/// model's context is, each when given. The trajectory is the one the reply
+/// is in, a TrajectoryId in hex: the reply's "Close trajectory" closes
+/// that one, wherever and whenever it is pressed.
 ///
 /// Exit: 0 printed, at least one request; 64 usage; 65 the text on stdin was
 /// not usable. On a nonzero exit nothing is printed on stdout.
@@ -21,11 +23,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:is_effects/is_effects.dart';
+import 'package:is_shapes/is_shapes.dart' show TrajectoryId;
 import 'package:is_teams_module/is_teams_module.dart';
 
 const usage =
     'usage: teams-message --reply-endpoint JSON --sign-in NAME '
-    '[--turn N] [--context-tokens N] [--context-window N] < text';
+    '--trajectory HEX [--turn N] [--context-tokens N] [--context-window N] '
+    '< text';
 
 Future<void> main(List<String> args) async =>
     exit(await run(args, input: stdin, out: stdout, err: stderr));
@@ -41,6 +45,7 @@ Future<int> run(
   const known = {
     '--reply-endpoint',
     '--sign-in',
+    '--trajectory',
     '--turn',
     '--context-tokens',
     '--context-window',
@@ -72,6 +77,14 @@ Future<int> run(
     err.writeln('teams-message: --sign-in is needed and must parse\n$usage');
     return 64;
   }
+  final trajectory = TrajectoryId.parse(options['--trajectory'] ?? '');
+  if (trajectory == null) {
+    err.writeln(
+      'teams-message: --trajectory is needed, a TrajectoryId in lower-case '
+      'hex\n$usage',
+    );
+    return 64;
+  }
   int? count(String flag) => switch (options[flag]) {
     null => null,
     final s => int.tryParse(s) ?? -1,
@@ -98,6 +111,7 @@ Future<int> run(
 
   final requests = teamsMessageRequests(
     text: text,
+    trajectory: trajectory,
     replyEndpoint: replyEndpoint,
     signIn: signIn,
     footer: replyFooter(

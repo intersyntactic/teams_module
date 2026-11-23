@@ -1,8 +1,11 @@
 import 'dart:convert';
 
 import 'package:is_effects/is_effects.dart';
+import 'package:is_shapes/is_shapes.dart' show TrajectoryId;
 import 'package:is_teams_module/is_teams_module.dart';
 import 'package:test/test.dart';
+
+final trajectory = TrajectoryId.parse('a1' * 32)!;
 
 /// The TextBlocks of [activity]'s card, in order.
 List<Map<String, Object?>> _blocks(Map<String, Object?> activity) {
@@ -14,6 +17,20 @@ List<Map<String, Object?>> _blocks(Map<String, Object?> activity) {
   return [
     for (final b in card['body']! as List<Object?>) // cast-ok: as above.
       b! as Map<String, Object?>, // cast-ok: as above.
+  ];
+}
+
+/// The actions on [activity]'s card, in order; none when it has none.
+List<Map<String, Object?>> _actions(Map<String, Object?> activity) {
+  final attachment =
+      (activity['attachments']! as List<Object?>).single!
+          as Map<String, Object?>; // cast-ok: built by this package.
+  final card =
+      attachment['content']! as Map<String, Object?>; // cast-ok: as above.
+  return [
+    for (final a
+        in (card['actions'] as List<Object?>?) ?? []) // cast-ok: as above.
+      a! as Map<String, Object?>, // cast-ok: as above.
   ];
 }
 
@@ -34,19 +51,41 @@ void main() {
   );
 
   group('the card', () {
-    test('a finished reply: its text, then the footer, no actions', () {
+    test('a finished reply: its text, then the footer, and Close trajectory '
+        'in its menu', () {
       final [activity] = teamsReplyActivities(
         const FinishedReply(text: 'hi', usage: usage),
+        trajectory: trajectory,
       );
       expect(activity['type'], 'message');
       expect(_texts(activity), ['hi', 'context 152k of 200k (76%)']);
       expect(_blocks(activity).last['isSubtle'], isTrue);
-      expect(jsonEncode(activity), isNot(contains('actions')));
+      expect(_actions(activity), [
+        {
+          'type': 'Action.Execute',
+          'title': 'Close trajectory',
+          'verb': 'close',
+          'data': {'trajectory': 'a1' * 32},
+          'mode': 'secondary',
+        },
+      ]);
+    });
+
+    test('is pressed closed with the verb the translator reads as a close', () {
+      final [activity] = teamsReplyActivities(
+        const FinishedReply(text: 'hi'),
+        trajectory: trajectory,
+      );
+      expect(
+        CardActionVerb.parse('${_actions(activity).single['verb']}'),
+        CardActionVerb.close,
+      );
     });
 
     test('a cut-off reply says so, above the footer', () {
       final [activity] = teamsReplyActivities(
         const CutOffReply(text: 'half a', usage: usage),
+        trajectory: trajectory,
       );
       expect(_texts(activity), [
         'half a',
@@ -55,9 +94,13 @@ void main() {
       ]);
     });
 
-    test('no usage, no footer', () {
-      final [activity] = teamsReplyActivities(const FinishedReply(text: 'hi'));
+    test('no usage, no footer, but still closable', () {
+      final [activity] = teamsReplyActivities(
+        const FinishedReply(text: 'hi'),
+        trajectory: trajectory,
+      );
       expect(_texts(activity), ['hi']);
+      expect(_actions(activity), hasLength(1));
     });
   });
 
@@ -105,18 +148,24 @@ void main() {
   });
 
   group('a long reply', () {
-    test('is split at blank lines, each part under the cap, the footer and '
-        'cut-off note on the last only', () {
+    test('is split at blank lines, each part under the cap, the footer, '
+        'menu and cut-off note on the last only', () {
       final paragraphs = [for (var i = 0; i < 40; i++) 'p$i ${'x' * 400}'];
       final reply = CutOffReply(text: paragraphs.join('\n\n'), usage: usage);
-      final parts = teamsReplyActivities(reply, byteCap: 4000);
+      final parts = teamsReplyActivities(
+        reply,
+        trajectory: trajectory,
+        byteCap: 4000,
+      );
       expect(parts.length, greaterThan(1));
       for (final p in parts) {
         expect(_bytes(p), lessThanOrEqualTo(4000));
       }
       for (final p in parts.take(parts.length - 1)) {
         expect(_texts(p), hasLength(1));
+        expect(_actions(p), isEmpty);
       }
+      expect(_actions(parts.last), hasLength(1));
       expect(_texts(parts.last).skip(1), [
         '(reply cut off)',
         'context 152k of 200k (76%)',
@@ -153,7 +202,13 @@ void main() {
 
     test('a reply that fits is one part, even an empty one', () {
       expect(splitToFit('', (_) => true), ['']);
-      expect(teamsReplyActivities(const FinishedReply(text: '')), hasLength(1));
+      expect(
+        teamsReplyActivities(
+          const FinishedReply(text: ''),
+          trajectory: trajectory,
+        ),
+        hasLength(1),
+      );
     });
   });
 
@@ -181,6 +236,7 @@ void main() {
       ]);
       List<ProposedRequest> built() => teamsMessageRequests(
         text: text,
+        trajectory: trajectory,
         replyEndpoint: endpoint,
         signIn: signIn,
         footer: contextFooter(usage),
@@ -195,12 +251,14 @@ void main() {
       final footer = contextFooter(usage);
       final requests = teamsMessageRequests(
         text: text,
+        trajectory: trajectory,
         replyEndpoint: endpoint,
         signIn: signIn,
         footer: footer,
       );
       final activities = teamsTextActivities(
         text,
+        trajectory: trajectory,
         footer: footer,
         maxMessages: teamsReplyMaxMessages,
       );
@@ -217,25 +275,6 @@ void main() {
         expect(endpoint.covers(r.origin, r.path), isTrue);
         expect(r.body, jsonEncode(activities[i]));
       }
-    });
-
-    test('the open card keeps its bytes exactly as they were', () {
-      // The bytes is_airlock_api 0.11.0 published as trajectoryOpenCardBody,
-      // which cards already posted were drawn from.
-      const published =
-          '{"type":"message","attachments":[{"contentType":'
-          '"application/vnd.microsoft.card.adaptive","content":{"\$schema":'
-          '"http://adaptivecards.io/schemas/adaptive-card.json","type":'
-          '"AdaptiveCard","version":"1.5","body":[{"type":"TextBlock",'
-          '"text":"● Open · trajectory started","wrap":true}],"actions":'
-          '[{"type":"Action.Execute","title":"Close trajectory","verb":'
-          '"close"}]}}]}';
-      expect(jsonEncode(teamsTrajectoryOpenCard), published);
-    });
-
-    test('the open card is pressed closed with the verb the reading takes', () {
-      final verb = jsonEncode(teamsTrajectoryOpenCard);
-      expect(verb, contains('"verb":"${CardActionVerb.close.asSent}"'));
     });
   });
 }

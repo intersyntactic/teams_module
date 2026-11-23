@@ -9,11 +9,14 @@ import '../bin/teams_message.dart' as app;
 
 const origin = 'https://smba.trafficmanager.net';
 const prefix = '/amer/v3/conversations/a%3A1personal/';
-const endpointArgs = [
+final trajectoryHex = 'a1' * 32;
+final endpointArgs = [
   '--reply-endpoint',
   '{"origin":"$origin","pathPrefix":"$prefix"}',
   '--sign-in',
   'cam-teams',
+  '--trajectory',
+  trajectoryHex,
 ];
 
 /// The app run on [args] with [stdin]: its exit code, the requests it
@@ -71,6 +74,26 @@ void main() {
     expect(r.path.value, '${prefix}activities');
     expect(r.signIn, SignIn.parse('cam-teams'));
     expect(texts(r), ['Hello **Nick**', 'turn 3 · context 152k of 200k (76%)']);
+  });
+
+  test('the last message closes the trajectory given, by its id in the '
+      "Close action's data", () async {
+    final text = List.filled(4000, 'a line of the reply').join('\n');
+    final (_, requests, _) = await run(endpointArgs, stdin: text);
+    List<JsonObject> actions(ProposedRequest r) {
+      final card = JsonObject.decode(r.body!)
+          .objects('attachments')
+          .single
+          .object('content');
+      return card.has('actions') ? card.objects('actions') : [];
+    }
+
+    for (final r in requests.take(requests.length - 1)) {
+      expect(actions(r), isEmpty);
+    }
+    final close = actions(requests.last).single;
+    expect(close.string('verb'), 'close');
+    expect(close.object('data').string('trajectory'), trajectoryHex);
   });
 
   test('no turn or context given: no footer', () async {
@@ -137,6 +160,15 @@ void main() {
       ],
       ['--reply-endpoint', 'not json', '--sign-in', 'x'],
       [...endpointArgs, '--turn', 'three'],
+      // No trajectory, or one not a TrajectoryId in lower-case hex.
+      endpointArgs.sublist(0, 4),
+      [
+        ...endpointArgs.sublist(0, 4),
+        '--trajectory',
+        trajectoryHex.toUpperCase(),
+      ],
+      [...endpointArgs.sublist(0, 4), '--trajectory', 'a1' * 31],
+      [...endpointArgs.sublist(0, 4), '--trajectory', 'g' * 64],
     ]) {
       final (code, requests, err) = await run(args);
       expect(code, 64, reason: '$args');

@@ -14,11 +14,9 @@
 ///                                    the same machine.
 ///   LOGBOOK_SOCKET=/run/...sock      the logbook's writer's Unix socket:
 ///                                    every accepted request's body is
-///                                    recorded through it as an `event`
+///                                    recorded through it as a `teams-event`
 ///                                    entry, byte for byte, before Teams
-///                                    gets a response. Required; its older
-///                                    name JOURNAL_SOCKET is read when it
-///                                    is unset.
+///                                    gets a response. Required.
 ///   TEAMS_SETTINGS_DIALOG=card.json  optional; an Adaptive Card the call
 ///                                    settings message action opens, read
 ///                                    once at boot, so Teams' wait for it
@@ -36,10 +34,6 @@ import 'dart:io';
 
 import 'package:checked_json/checked_json.dart';
 import 'package:is_teams_module/is_teams_module.dart';
-
-/// The source the relay's events are recorded under: the same as before,
-/// so old and new events read alike.
-const _source = 'teams';
 
 Future<void> main() async {
   final env = Platform.environment;
@@ -101,10 +95,7 @@ Future<void> main() async {
     }
   }
 
-  final logbookSocket = switch (env['LOGBOOK_SOCKET']) {
-    final s? when s.isNotEmpty => s,
-    _ => env['JOURNAL_SOCKET'] ?? '',
-  };
+  final logbookSocket = env['LOGBOOK_SOCKET'] ?? '';
   if (logbookSocket.isEmpty) {
     // A relay that can't record what arrives must not respond 200 to it.
     stderr.writeln('abort: LOGBOOK_SOCKET not set');
@@ -137,7 +128,8 @@ Future<void> main() async {
       },
     ),
     keys: keys,
-    record: (body) => recordEvent(logbookSocket, source: _source, bytes: body),
+    record: (body) =>
+        recordEvent(logbookSocket, source: teamsEventSource, bytes: body),
   );
   final server = await HttpServer.bind(address, port);
   stdout.writeln('teams relay listening on ${address.address}:${server.port}');

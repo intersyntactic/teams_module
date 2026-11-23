@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:is_content_id/is_content_id.dart' show ObjectId;
+import 'package:is_docking_station_api/is_docking_station_api.dart'
+    show RelayedEvent;
 import 'package:is_teams_module/is_teams_module.dart';
 import 'package:test/test.dart';
 
@@ -14,8 +17,8 @@ void main() {
     });
 
     test('refused, with why', () {
-      final a = RecordAnswer.read('refused kind event for user 501');
-      expect((a as RecordRefused).why, 'kind event for user 501');
+      final a = RecordAnswer.read('refused kind teams-event for user 501');
+      expect((a as RecordRefused).why, 'kind teams-event for user 501');
     });
 
     test('failed, with why: the entry may be in', () {
@@ -78,43 +81,62 @@ void main() {
       });
     }
 
-    test('sends an event entry starting its own chain: at, source, and '
-        'the bytes exactly, in base64', () async {
-      Uint8List? request;
-      await writer((_) => 'ok ab', sent: (r) => request = r);
-      final bytes = Uint8List.fromList(utf8.encode('{  "text" :"x"}é'));
-      final a = await recordEvent(
-        path,
-        source: 'teams',
-        bytes: bytes,
-        at: DateTime.utc(2026, 11, 15, 6),
-      );
-      expect((a as Recorded).entry, 'ab');
-      final text = utf8.decode(request!);
-      expect(text, startsWith('event\n-\n'));
-      final entry = jsonDecode(
-        text.substring('event\n-\n'.length),
-      ) as Map<String, Object?>;
-      expect(entry.keys, ['at', 'source', 'bytes']);
-      expect(entry['at'], '2026-11-15T06:00:00.000Z');
-      expect(entry['source'], 'teams');
-      expect(base64Decode(entry['bytes']! as String), bytes);
-    });
+    test(
+      'sends a teams-event entry starting its own chain: at, and the '
+      'bytes exactly, in base64, as the docking station reads it back',
+      () async {
+        Uint8List? request;
+        await writer((_) => 'ok ab', sent: (r) => request = r);
+        final bytes = Uint8List.fromList(utf8.encode('{  "text" :"x"}é'));
+        final a = await recordEvent(
+          path,
+          source: teamsEventSource,
+          bytes: bytes,
+          at: DateTime.utc(2026, 11, 15, 6),
+        );
+        expect((a as Recorded).entry, 'ab');
+        final text = utf8.decode(request!);
+        expect(text, startsWith('teams-event\n-\n'));
+        final body = utf8.encode(text.substring('teams-event\n-\n'.length));
+        final entry = jsonDecode(utf8.decode(body)) as Map<String, Object?>;
+        expect(entry.keys, ['at', 'bytes']);
+        expect(entry['at'], '2026-11-15T06:00:00.000Z');
+        final read = RelayedEvent.read(
+          ObjectId.of(request!),
+          teamsEventSource.kind,
+          body,
+        )!;
+        expect(read.source, teamsEventSource);
+        expect(read.bytes, bytes);
+      },
+    );
 
     test('reads the answer it gets back', () async {
       await writer((_) => 'failed disk full');
-      final a = await recordEvent(path, source: 'teams', bytes: Uint8List(1));
+      final a = await recordEvent(
+        path,
+        source: teamsEventSource,
+        bytes: Uint8List(1),
+      );
       expect((a as RecordFailed).why, 'disk full');
     });
 
     test('is unanswered when nothing listens', () async {
-      final a = await recordEvent(path, source: 'teams', bytes: Uint8List(1));
+      final a = await recordEvent(
+        path,
+        source: teamsEventSource,
+        bytes: Uint8List(1),
+      );
       expect(a, isA<RecordUnanswered>());
     });
 
     test('is unanswered when the writer closes without answering', () async {
       await writer((_) => null);
-      final a = await recordEvent(path, source: 'teams', bytes: Uint8List(1));
+      final a = await recordEvent(
+        path,
+        source: teamsEventSource,
+        bytes: Uint8List(1),
+      );
       expect((a as RecordUnanswered).why, 'closed before answering');
     });
 
@@ -122,7 +144,7 @@ void main() {
       await writer((_) => Completer<String?>().future);
       final a = await recordEvent(
         path,
-        source: 'teams',
+        source: teamsEventSource,
         bytes: Uint8List(1),
         timeout: const Duration(milliseconds: 200),
       );

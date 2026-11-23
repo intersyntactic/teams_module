@@ -181,18 +181,18 @@ packages:
     dependency: "direct main"
     description:
       name: is_docking_station_api
-      sha256: e1d74771f50a2f507104ec57fa8a4383c7543d5406ff7e908bde702800cdfaaf
+      sha256: cf10508402a18f108db6dffe132852d2d5e3eb6fe0562aef6cddd7d039bc8c79
       url: "https://pub.dev"
     source: hosted
-    version: "0.3.0"
+    version: "0.4.0"
   is_effects:
     dependency: "direct main"
     description:
       name: is_effects
-      sha256: "17181a8ca28b61bc749a2c43c15b08f2316599556c98e63937249faace3016a0"
+      sha256: "95b051e592edb4e04241e89be3ac1500c0abaf58fdec8e64f40a2cbe7a7ebfc7"
       url: "https://pub.dev"
     source: hosted
-    version: "0.14.0"
+    version: "0.14.2"
   is_logbook_format:
     dependency: transitive
     description:
@@ -217,6 +217,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.6.0"
+  is_web_address_vocabulary:
+    dependency: transitive
+    description:
+      name: is_web_address_vocabulary
+      sha256: "232241a06a2871213e110f52f01c8c68b6c98fdcdf00fcfb491c8e24d10d8dac"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.1.1"
   lints:
     dependency: "direct dev"
     description:

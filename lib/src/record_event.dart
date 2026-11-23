@@ -3,9 +3,8 @@
 /// An event goes straight to the logbook (Nick, 15 Nov 17:04): nothing is
 /// decided about it, so nothing stands between the relay and the writer.
 /// The writer knows the relay by the user at the other end of its socket,
-/// and its sender table says that user may send `event` (Nick, 16 Nov: an
-/// event, not an arrival). Entries written before that are `arrived`, and
-/// keep it: whatever reads the logbook's events reads both kinds.
+/// and its sender table lets that user, and only that user, send
+/// `teams-event`. The kind names the source, so the table vouches for it.
 ///
 /// The wire is `is_logbook` 0.2.0's service: one connection per entry, the
 /// request `<kind>\n<previous>\n<body>` with the write side then closed, and
@@ -18,6 +17,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+
+import 'package:is_docking_station_api/is_docking_station_api.dart'
+    show RelayedEventSource, encodeRelayedEvent;
 
 /// What the writer said became of one event.
 sealed class RecordAnswer {
@@ -52,8 +54,8 @@ final class Recorded extends RecordAnswer {
 
 /// Refused before anything was added: Teams is sent a 5xx and sends it
 /// again. A refusal of the kind itself means the sender table doesn't let
-/// the relay's user send `event`, which no retry will fix: the log says
-/// so.
+/// the relay's user send `teams-event`, which no retry will fix: the log
+/// says so.
 final class RecordRefused extends RecordAnswer {
   const RecordRefused(this.why);
   final String why;
@@ -77,25 +79,22 @@ final class RecordUnanswered extends RecordAnswer {
   final String why;
 }
 
-/// Records [bytes] from [source] at the writer's [socketPath], as an
-/// `event` entry that starts its own chain. The entry holds
-/// `{"at", "source", "bytes"}`, the bytes base64 and exactly as they came,
-/// the form the logbook's first entries took, so reading one back doesn't
-/// change. Teams gives up on a request after 15 seconds, so [timeout] stays
-/// inside that.
+/// Records [bytes] from [source] at the writer's [socketPath], as a
+/// `<source>-event` entry that starts its own chain, written by
+/// [encodeRelayedEvent] so the docking station's contract owns the form:
+/// `{"at", "bytes"}`, the bytes base64 and exactly as they came. Teams
+/// gives up on a request after 15 seconds, so [timeout] stays inside that.
 Future<RecordAnswer> recordEvent(
   String socketPath, {
-  required String source,
+  required RelayedEventSource source,
   required Uint8List bytes,
   DateTime? at,
   Duration timeout = const Duration(seconds: 10),
 }) async {
-  final entry = utf8.encode(
-    jsonEncode({
-      'at': (at ?? DateTime.now().toUtc()).toIso8601String(),
-      'source': source,
-      'bytes': base64Encode(bytes),
-    }),
+  final (kind, entry) = encodeRelayedEvent(
+    source,
+    at: at ?? DateTime.now().toUtc(),
+    bytes: bytes,
   );
   Socket? socket;
   try {
@@ -105,7 +104,7 @@ Future<RecordAnswer> recordEvent(
         0,
       );
       socket!
-        ..add(utf8.encode('event\n-\n'))
+        ..add(utf8.encode('${kind.name}\n-\n'))
         ..add(entry);
       // The writer reads the request to its end: closing the write side is
       // what tells it the request is whole.

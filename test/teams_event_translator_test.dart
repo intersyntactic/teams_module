@@ -13,40 +13,41 @@ import 'package:test/test.dart';
 
 import 'support/fixtures.dart';
 
-/// [activity] as the docking station hands it over: the body the relay
-/// records, `{at, source, bytes}`, read back from its `event` entry.
-RelayedEvent recorded(Map<String, Object?> activity) {
-  final body = Uint8List.fromList(
-    utf8.encode(
-      jsonEncode({
-        'at': '2026-11-15T09:45:11.754675Z',
-        'source': 'teams',
-        'bytes': base64Encode(utf8.encode(jsonEncode(activity))),
-      }),
-    ),
+/// [activity] as the docking station hands it over: written as the relay
+/// writes it, and read back from its `teams-event` entry.
+RelayedEvent recorded(Map<String, Object?> activity) =>
+    recordedBytes(utf8.encode(jsonEncode(activity)));
+
+/// [bytes] as the relay records them, read back from its entry.
+RelayedEvent recordedBytes(List<int> bytes) {
+  final (kind, body) = encodeRelayedEvent(
+    teamsEventSource,
+    at: DateTime.utc(2026, 11, 15, 9, 45, 11),
+    bytes: Uint8List.fromList(bytes),
   );
-  return RelayedEvent.read(_recordedId(body), body)!;
+  return RelayedEvent.read(_recordedId(body), kind, body)!;
 }
 
-/// The id the logbook gives an `event` entry holding [body]: the hash of
-/// its whole text, header included.
-ObjectId _recordedId(Uint8List body) =>
-    ObjectId.of(Uint8List.fromList([...utf8.encode('event\n-\n'), ...body]));
+/// The id the logbook gives a `teams-event` entry holding [body]: the hash
+/// of its whole text, header included.
+ObjectId _recordedId(Uint8List body) => ObjectId.of(
+  Uint8List.fromList([...utf8.encode('teams-event\n-\n'), ...body]),
+);
 
 /// Every one of [activities], folded from the start, as the docking station
-/// folds them: the readings in order, and the state after the last.
-(TeamsReadingState, List<EventReading>) fold(
+/// folds them: the translated events in order, and the state after the last.
+(TeamsEventTranslatorState, List<TranslatedEvent>) fold(
   Iterable<Map<String, Object?>> activities,
 ) {
-  const reading = TeamsReading();
-  var state = reading.start;
-  final readings = <EventReading>[];
+  const translator = TeamsEventTranslator();
+  var state = translator.start;
+  final translated = <TranslatedEvent>[];
   for (final a in activities) {
-    final (next, r) = reading.step(state, recorded(a));
+    final (next, r) = translator.step(state, recorded(a));
     state = next;
-    readings.add(r);
+    translated.add(r);
   }
-  return (state, readings);
+  return (state, translated);
 }
 
 final ada = ActorId.parse(
@@ -83,7 +84,6 @@ Map<String, Object?> quotingBea(Map<String, Object?> activity, String id) => {
   ],
 };
 
-/// Ada pressing the button whose verb is [verb] on card `1730881000000`.
 /// The "Close trajectory" message action, opened on message
 /// `1730881000000` and submitted with [data], as the docs give a
 /// submitAction (not yet measured).
@@ -101,9 +101,23 @@ Map<String, Object?> closeActionSubmitted(
   },
 }..remove('replyToId');
 
+/// Ada pressing the button whose verb is [verb] on card `1730881000000`.
 Map<String, Object?> pressed(String verb) {
   final press = cardAction();
   ((press['value']! as Map)['action']! as Map)['verb'] = verb;
+  return press;
+}
+
+/// The trajectory the replies in these tests were posted in.
+final trajectoryHex = 'c1' * 32;
+
+/// Ada pressing "Close trajectory" on reply `1730881000000`, its data naming
+/// [trajectory] as `teams-message` writes it, or naming none.
+Map<String, Object?> closePressed({String? trajectory}) {
+  final press = pressed('close');
+  ((press['value']! as Map)['action']! as Map)['data'] = {
+    'trajectory': ?trajectory,
+  };
   return press;
 }
 
@@ -183,9 +197,48 @@ void main() {
         fromBea('act-1'),
         quotingBea(message(id: 'act-2', text: '<at>Bot</at>'), 'act-1'),
       ]);
-      final quotes = (r as MessageSaid).node.quotes!;
+      // Only an @-mention on a quote says "look at this", with no words.
+      expect((r as MessageSaid).node.text, isEmpty);
+      final quotes = r.node.quotes!;
       expect((quotes.author as KnownAuthor).actor, bea);
       expect(quotes.source.value, 'a:1personal|act-1');
+    });
+
+    test('quoting with words carries them and the quote', () {
+      final (_, [r]) = fold([
+        quotingBea(message(id: 'act-2', text: 'not quite'), 'act-1'),
+      ]);
+      expect((r as MessageSaid).node.text, 'not quite');
+      expect(r.node.quotes!.source.value, 'a:1personal|act-1');
+    });
+
+    test('quoting a bot names the bot, which needs nothing learnt first', () {
+      final (_, [r]) = fold([
+        {
+          ...quotingBea(message(id: 'act-2', text: 'this one'), 'act-0'),
+          'entities': [
+            {
+              'type': 'quotedReply',
+              'quotedReply': {'messageId': 'act-0', 'senderId': '28:$appId'},
+            },
+          ],
+        },
+      ]);
+      expect(
+        ((r as MessageSaid).node.quotes!.author as KnownAuthor).actor,
+        bot,
+      );
+    });
+
+    test('by another bot is MessageSaid too: a bot is a user', () {
+      final (_, [r]) = fold([
+        {
+          ...message(id: 'act-2', text: 'Build 41 failed'),
+          'from': {'id': '28:other-bot', 'name': 'CI'},
+        },
+      ]);
+      expect((r as MessageSaid).from.value, 'teams:$tenant/bot:other-bot');
+      expect(r.node.text, 'Build 41 failed');
     });
 
     test('quoting themselves, the first time heard from, names them', () {
@@ -328,8 +381,9 @@ void main() {
       expect((r as ShownMessageJudged).verdict, isA<HeldOffVerdict>());
     });
 
-    test('of Close is PersonAskedToCloseTrajectory, naming that card', () {
-      final (_, [r]) = fold([pressed('close')]);
+    test('of Close is PersonAskedToCloseTrajectory, naming that reply and '
+        'the trajectory its data names', () {
+      final (_, [r]) = fold([closePressed(trajectory: trajectoryHex)]);
       final asked = r as PersonAskedToCloseTrajectory;
       expect(
         asked.addressInExternalSystem,
@@ -337,44 +391,56 @@ void main() {
       );
       expect(asked.key, EventKey.parse('invoke:f:9001'));
       expect(asked.from, ada);
+      expect(asked.addressedTo, bot);
       expect(asked.message.value, 'a:1personal|1730881000000');
+      expect(asked.trajectory, TrajectoryId.parse(trajectoryHex));
     });
 
-    test('the Close trajectory action, toggle on, is '
-        'PersonAskedToCloseTrajectory naming the message', () {
-      for (final on in [true, 'true']) {
-        final (_, [r]) = fold([
-          closeActionSubmitted({'confirm': on}),
-        ]);
-        final asked = r as PersonAskedToCloseTrajectory;
-        expect(
-          asked.addressInExternalSystem,
-          AddressInExternalSystem.parse('teams:a:1personal'),
-        );
-        expect(asked.key, EventKey.parse('invoke:f:9001'));
-        expect(asked.from, ada);
-        expect(asked.addressedTo, bot);
-        expect(asked.message.value, 'a:1personal|1730881000000');
-      }
+    test('of the Close on a reply teams-message built names the trajectory '
+        'it was built with', () {
+      final trajectory = TrajectoryId.parse(trajectoryHex)!;
+      final reply = teamsTextActivities('hi', trajectory: trajectory).last;
+      final card = JsonObject.decode(jsonEncode(reply))
+          .objects('attachments')
+          .single
+          .object('content');
+      final close = card.objects('actions').single;
+      final press = pressed(close.string('verb'));
+      ((press['value']! as Map)['action']! as Map)['data'] = close
+          .object('data')
+          .asUncheckedMap();
+      final (_, [r]) = fold([press]);
+      expect((r as PersonAskedToCloseTrajectory).trajectory, trajectory);
     });
 
-    test('the Close trajectory action reads as the card\'s Close does', () {
-      final (_, [fromCard]) = fold([pressed('close')]);
-      final (_, [fromAction]) = fold([
-        closeActionSubmitted({'confirm': true}),
-      ]);
+    test('of Close passes on any trajectory its data names: the docking '
+        'station closes it only while it is open at this address', () {
+      final elsewhere = 'd2' * 32;
+      final (_, [r]) = fold([closePressed(trajectory: elsewhere)]);
       expect(
-        encodeReading(fromAction as AddressedEvent).asUncheckedMap(),
-        encodeReading(fromCard as AddressedEvent).asUncheckedMap(),
-        reason:
-            'one kind, one shape: only the message it names may differ, '
-            'and here both name 1730881000000',
+        (r as PersonAskedToCloseTrajectory).trajectory,
+        TrajectoryId.parse(elsewhere),
       );
     });
 
-    test('the Close trajectory action with the toggle off or missing, or '
-        'another action, is nothing to admit', () {
+    test('of Close naming no trajectory, or not one in lower-case hex, is '
+        'nothing to admit', () {
+      for (final press in [
+        closePressed(),
+        pressed('close'),
+        closePressed(trajectory: trajectoryHex.toUpperCase()),
+        closePressed(trajectory: 'c1' * 31),
+      ]) {
+        final (_, [r]) = fold([press]);
+        expect(r, isA<NothingToAdmit>(), reason: '$press');
+      }
+    });
+
+    test('the Close trajectory message action, which can name no '
+        'trajectory, is nothing to admit, toggle on or off', () {
       for (final submitted in [
+        closeActionSubmitted({'confirm': true}),
+        closeActionSubmitted({'confirm': 'true'}),
         closeActionSubmitted({'confirm': false}),
         closeActionSubmitted({'confirm': 'false'}),
         closeActionSubmitted({}),
@@ -414,11 +480,11 @@ void main() {
 
   group('nothing to admit, for now', () {
     test('an edit or a delete, until a shape says what a message became', () {
-      final (_, readings) = fold([
+      final (_, translated) = fold([
         {...message(text: 'now'), 'type': 'messageUpdate'},
         {...message(), 'type': 'messageDelete'}..remove('text'),
       ]);
-      expect(readings, everyElement(isA<NothingToAdmit>()));
+      expect(translated, everyElement(isA<NothingToAdmit>()));
     });
 
     test('a press of Edit, which only reopens the choice on a card', () {
@@ -427,36 +493,27 @@ void main() {
     });
 
     test('bytes that are not an activity, with the state left as it was', () {
-      const reading = TeamsReading();
-      final body = Uint8List.fromList(
-        utf8.encode(
-          jsonEncode({
-            'at': '2026-11-15T09:45:11Z',
-            'source': 'teams',
-            'bytes': base64Encode(utf8.encode('not json')),
-          }),
-        ),
-      );
-      final (state, r) = reading.step(
-        reading.start,
-        RelayedEvent.read(_recordedId(body), body)!,
+      const translator = TeamsEventTranslator();
+      final (state, r) = translator.step(
+        translator.start,
+        recordedBytes(utf8.encode('not json')),
       );
       expect(r, isA<NothingToAdmit>());
-      expect(state, same(reading.start));
+      expect(state, same(translator.start));
     });
   });
 
   group('the state', () {
     test('given to a step is never changed by it', () {
-      const reading = TeamsReading();
-      final before = reading.start;
-      reading.step(before, recorded(fromBea('act-1')));
+      const translator = TeamsEventTranslator();
+      final before = translator.start;
+      translator.step(before, recorded(fromBea('act-1')));
       expect(before.entraIdOf(TeamsUserId.parse('29:1bea')!), isNull);
     });
 
     test('is the same one back when the event teaches nothing new', () {
       final (state, _) = fold([fromBea('act-1')]);
-      final (again, _) = const TeamsReading().step(
+      final (again, _) = const TeamsEventTranslator().step(
         state,
         recorded(fromBea('act-2')),
       );
@@ -469,9 +526,9 @@ void main() {
         fromBea('act-1'),
         quotingBea(message(id: 'act-2', text: '<at>Bot</at>'), 'act-1'),
         pressed('notyet'),
-        pressed('close'),
+        closePressed(trajectory: trajectoryHex),
       ];
-      String described(EventReading r) => switch (r) {
+      String described(TranslatedEvent r) => switch (r) {
         MessageSaid() => 'said ${r.key} ${r.from} ${r.node.quotes?.author}',
         ActorsJoinedAddress() => 'joined ${r.key} ${r.joiners}',
         MessageChanged() => 'changed ${r.key}',
@@ -487,18 +544,70 @@ void main() {
     });
   });
 
+  group('replyEndpoint', () {
+    test('is the conversation at its service URL, for every event', () {
+      final (_, translated) = fold([
+        added(),
+        fromBea('act-1'),
+        pressed('approve'),
+        closePressed(trajectory: trajectoryHex),
+      ]);
+      final chat = teamsReplyEndpoint(Uri.parse(serviceUrl), 'a:1personal');
+      expect(chat, isNotNull);
+      expect(
+        translated.map((r) => (r as AddressedEvent).replyEndpoint),
+        everyElement(chat),
+      );
+    });
+
+    test('in a channel thread is the thread, so a reply lands in it', () {
+      const channel = '19:abc@thread.tacv2';
+      const thread = '$channel;messageid=1794736789259';
+      final (_, [r]) = fold([
+        {
+          ...message(id: '1794736789259', text: '<at>Bot</at> test'),
+          'conversation': {
+            'id': thread,
+            'conversationType': 'channel',
+            'tenantId': tenant,
+          },
+          'channelData': {
+            'tenant': {'id': tenant},
+            'channel': {'id': channel},
+            'team': {'id': channel},
+          },
+        },
+      ]);
+      expect(
+        (r as MessageSaid).replyEndpoint,
+        teamsReplyEndpoint(Uri.parse(serviceUrl), thread),
+      );
+    });
+
+    test('follows the service URL Teams sent, region and all', () {
+      const au = 'https://smba.trafficmanager.net/au/';
+      final (_, [r]) = fold([
+        {...fromBea('act-1'), 'serviceUrl': au},
+      ]);
+      expect(
+        (r as MessageSaid).replyEndpoint,
+        teamsReplyEndpoint(Uri.parse(au), 'a:1personal'),
+      );
+    });
+  });
+
   group('addressedTo', () {
     const otherAppId = '00000000-0000-0000-0000-0000000b07b2';
     final otherBot = ActorId.parse('teams:$tenant/bot:$otherAppId')!;
 
-    test('is the bot each reading was sent to', () {
-      final (_, readings) = fold([
+    test('is the bot each translated event was sent to', () {
+      final (_, translated) = fold([
         added(),
         fromBea('act-1'),
         pressed('approve'),
-        pressed('close'),
+        closePressed(trajectory: trajectoryHex),
       ]);
-      expect(readings.map((r) => (r as AddressedEvent).addressedTo), [
+      expect(translated.map((r) => (r as AddressedEvent).addressedTo), [
         bot,
         bot,
         bot,
@@ -518,19 +627,22 @@ void main() {
 
     test('is written and read back as the docking station and its readers '
         'do', () {
-      final (_, readings) = fold([
+      final (_, translated) = fold([
         added(),
         fromBea('act-1'),
         pressed('approve'),
-        pressed('close'),
+        closePressed(trajectory: trajectoryHex),
       ]);
-      for (final r in readings.cast<AddressedEvent>()) {
-        final written = encodeReading(r);
+      for (final r in translated.cast<AddressedEvent>()) {
+        final written = encodeTranslatedEvent(r);
         expect(written.string('addressedTo'), bot.value);
         final stored = jsonEncode(written.asUncheckedMap());
-        final read = decodeReading(JsonObject.decode(stored));
+        final read = decodeTranslatedEvent(JsonObject.decode(stored));
         expect(read.addressedTo, bot);
-        expect(jsonEncode(encodeReading(read).asUncheckedMap()), stored);
+        expect(
+          jsonEncode(encodeTranslatedEvent(read).asUncheckedMap()),
+          stored,
+        );
       }
     });
   });
