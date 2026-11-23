@@ -258,6 +258,18 @@ final class TeamsCardAction extends TeamsEvent {
   /// The action's verb, when it is one our cards send.
   CardActionVerb? get verb =>
       CardActionVerb.parse(value?.objectOrNull('action')?.stringOrNull('verb'));
+
+  /// The trajectory a reply's Close names in its data, when it names one.
+  /// The Teams client sends the data back and could send anything, so this
+  /// is only a claim: the docking station closes it only while it is the
+  /// trajectory open where the press came from.
+  TrajectoryId? get trajectory => switch (value
+      ?.objectOrNull('action')
+      ?.objectOrNull('data')
+      ?.stringOrNull('trajectory')) {
+    final hex? => TrajectoryId.parse(hex),
+    null => null,
+  };
 }
 
 /// The verbs our cards send, read once from the string Teams carries.

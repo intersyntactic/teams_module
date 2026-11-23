@@ -29,8 +29,13 @@ package pin that tag.
   footer, its data naming the trajectory the reply is in
   (`{"trajectory": "<hex>"}`), so a press on an old reply closes that
   reply's trajectory. `teams-message` takes `--trajectory`, a
-  `TrajectoryId` in hex, on every reply. `teamsTrajectoryOpenCard` is
-  gone: no separate card says a trajectory opened.
+  `TrajectoryId` in hex, on every reply, and the translator reads it back
+  into `PersonAskedToCloseTrajectory.trajectory` (`TeamsCardAction`'s
+  `trajectory`). A Close naming none is `NothingToAdmit`.
+  `teamsTrajectoryOpenCard` is gone: no separate card says a trajectory
+  opened.
+- The "Close trajectory" message action is `NothingToAdmit`: it opens on
+  any message, so it can name no trajectory.
 - The relay reads its logbook socket from `LOGBOOK_SOCKET` only; the
   `JOURNAL_SOCKET` fallback is gone, as infra's unit now sets the new name.
 

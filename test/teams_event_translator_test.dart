@@ -84,7 +84,6 @@ Map<String, Object?> quotingBea(Map<String, Object?> activity, String id) => {
   ],
 };
 
-/// Ada pressing the button whose verb is [verb] on card `1730881000000`.
 /// The "Close trajectory" message action, opened on message
 /// `1730881000000` and submitted with [data], as the docs give a
 /// submitAction (not yet measured).
@@ -102,9 +101,23 @@ Map<String, Object?> closeActionSubmitted(
   },
 }..remove('replyToId');
 
+/// Ada pressing the button whose verb is [verb] on card `1730881000000`.
 Map<String, Object?> pressed(String verb) {
   final press = cardAction();
   ((press['value']! as Map)['action']! as Map)['verb'] = verb;
+  return press;
+}
+
+/// The trajectory the replies in these tests were posted in.
+final trajectoryHex = 'c1' * 32;
+
+/// Ada pressing "Close trajectory" on reply `1730881000000`, its data naming
+/// [trajectory] as `teams-message` writes it, or naming none.
+Map<String, Object?> closePressed({String? trajectory}) {
+  final press = pressed('close');
+  ((press['value']! as Map)['action']! as Map)['data'] = {
+    'trajectory': ?trajectory,
+  };
   return press;
 }
 
@@ -368,8 +381,9 @@ void main() {
       expect((r as ShownMessageJudged).verdict, isA<HeldOffVerdict>());
     });
 
-    test('of Close is PersonAskedToCloseTrajectory, naming that card', () {
-      final (_, [r]) = fold([pressed('close')]);
+    test('of Close is PersonAskedToCloseTrajectory, naming that reply and '
+        'the trajectory its data names', () {
+      final (_, [r]) = fold([closePressed(trajectory: trajectoryHex)]);
       final asked = r as PersonAskedToCloseTrajectory;
       expect(
         asked.addressInExternalSystem,
@@ -377,44 +391,56 @@ void main() {
       );
       expect(asked.key, EventKey.parse('invoke:f:9001'));
       expect(asked.from, ada);
+      expect(asked.addressedTo, bot);
       expect(asked.message.value, 'a:1personal|1730881000000');
+      expect(asked.trajectory, TrajectoryId.parse(trajectoryHex));
     });
 
-    test('the Close trajectory action, toggle on, is '
-        'PersonAskedToCloseTrajectory naming the message', () {
-      for (final on in [true, 'true']) {
-        final (_, [r]) = fold([
-          closeActionSubmitted({'confirm': on}),
-        ]);
-        final asked = r as PersonAskedToCloseTrajectory;
-        expect(
-          asked.addressInExternalSystem,
-          AddressInExternalSystem.parse('teams:a:1personal'),
-        );
-        expect(asked.key, EventKey.parse('invoke:f:9001'));
-        expect(asked.from, ada);
-        expect(asked.addressedTo, bot);
-        expect(asked.message.value, 'a:1personal|1730881000000');
-      }
+    test('of the Close on a reply teams-message built names the trajectory '
+        'it was built with', () {
+      final trajectory = TrajectoryId.parse(trajectoryHex)!;
+      final reply = teamsTextActivities('hi', trajectory: trajectory).last;
+      final card = JsonObject.decode(jsonEncode(reply))
+          .objects('attachments')
+          .single
+          .object('content');
+      final close = card.objects('actions').single;
+      final press = pressed(close.string('verb'));
+      ((press['value']! as Map)['action']! as Map)['data'] = close
+          .object('data')
+          .asUncheckedMap();
+      final (_, [r]) = fold([press]);
+      expect((r as PersonAskedToCloseTrajectory).trajectory, trajectory);
     });
 
-    test('the Close trajectory action reads as the card\'s Close does', () {
-      final (_, [fromCard]) = fold([pressed('close')]);
-      final (_, [fromAction]) = fold([
-        closeActionSubmitted({'confirm': true}),
-      ]);
+    test('of Close passes on any trajectory its data names: the docking '
+        'station closes it only while it is open at this address', () {
+      final elsewhere = 'd2' * 32;
+      final (_, [r]) = fold([closePressed(trajectory: elsewhere)]);
       expect(
-        encodeTranslatedEvent(fromAction as AddressedEvent).asUncheckedMap(),
-        encodeTranslatedEvent(fromCard as AddressedEvent).asUncheckedMap(),
-        reason:
-            'one kind, one shape: only the message it names may differ, '
-            'and here both name 1730881000000',
+        (r as PersonAskedToCloseTrajectory).trajectory,
+        TrajectoryId.parse(elsewhere),
       );
     });
 
-    test('the Close trajectory action with the toggle off or missing, or '
-        'another action, is nothing to admit', () {
+    test('of Close naming no trajectory, or not one in lower-case hex, is '
+        'nothing to admit', () {
+      for (final press in [
+        closePressed(),
+        pressed('close'),
+        closePressed(trajectory: trajectoryHex.toUpperCase()),
+        closePressed(trajectory: 'c1' * 31),
+      ]) {
+        final (_, [r]) = fold([press]);
+        expect(r, isA<NothingToAdmit>(), reason: '$press');
+      }
+    });
+
+    test('the Close trajectory message action, which can name no '
+        'trajectory, is nothing to admit, toggle on or off', () {
       for (final submitted in [
+        closeActionSubmitted({'confirm': true}),
+        closeActionSubmitted({'confirm': 'true'}),
         closeActionSubmitted({'confirm': false}),
         closeActionSubmitted({'confirm': 'false'}),
         closeActionSubmitted({}),
@@ -500,7 +526,7 @@ void main() {
         fromBea('act-1'),
         quotingBea(message(id: 'act-2', text: '<at>Bot</at>'), 'act-1'),
         pressed('notyet'),
-        pressed('close'),
+        closePressed(trajectory: trajectoryHex),
       ];
       String described(TranslatedEvent r) => switch (r) {
         MessageSaid() => 'said ${r.key} ${r.from} ${r.node.quotes?.author}',
@@ -524,7 +550,7 @@ void main() {
         added(),
         fromBea('act-1'),
         pressed('approve'),
-        pressed('close'),
+        closePressed(trajectory: trajectoryHex),
       ]);
       final chat = teamsReplyEndpoint(Uri.parse(serviceUrl), 'a:1personal');
       expect(chat, isNotNull);
@@ -579,7 +605,7 @@ void main() {
         added(),
         fromBea('act-1'),
         pressed('approve'),
-        pressed('close'),
+        closePressed(trajectory: trajectoryHex),
       ]);
       expect(translated.map((r) => (r as AddressedEvent).addressedTo), [
         bot,
@@ -605,7 +631,7 @@ void main() {
         added(),
         fromBea('act-1'),
         pressed('approve'),
-        pressed('close'),
+        closePressed(trajectory: trajectoryHex),
       ]);
       for (final r in translated.cast<AddressedEvent>()) {
         final written = encodeTranslatedEvent(r);

@@ -181,8 +181,8 @@ packages:
     dependency: "direct main"
     description:
       path: docking_station_api
-      ref: "5d494c2968da337d14476ca770378ec100d83a7f"
-      resolved-ref: "5d494c2968da337d14476ca770378ec100d83a7f"
+      ref: "1fd10ffd0eea6642377333b4940d7c3372cf7f5d"
+      resolved-ref: "1fd10ffd0eea6642377333b4940d7c3372cf7f5d"
       url: "https://github.com/intersyntactic/docking_station.git"
     source: git
     version: "0.4.0"

@@ -1,4 +1,3 @@
-import 'package:checked_json/checked_json.dart' show JsonObject;
 import 'package:is_annotation_shapes/is_annotation_shapes.dart'
     show ApprovedVerdict, HeldOffVerdict, VerdictOnShownMessage;
 import 'package:is_docking_station_api/is_docking_station_api.dart';
@@ -21,11 +20,18 @@ final teamsEventSource = RelayedEventSource.parse('teams')!;
 /// admits events under trajectories (RULINGS): a message is [MessageSaid]
 /// with the [UserSaid] made from it, CAM or a person added to a
 /// conversation is [ActorsJoinedAddress], a press of Approve or Not yet on a
-/// card is [ShownMessageJudged] for that card, a press of Close, or the
-/// "Close trajectory" message action submitted with its toggle on, is
-/// [PersonAskedToCloseTrajectory] naming that card or message, and
-/// everything else is [NothingToAdmit] for now:
+/// card is [ShownMessageJudged] for that card, a press of a reply's "Close
+/// trajectory" is [PersonAskedToCloseTrajectory] naming that reply and the
+/// trajectory its data names, and everything else is [NothingToAdmit] for
+/// now:
 ///
+/// - a Close whose data names no trajectory. That id is the one thing read
+///   from a card's own data, which the client sends back and could forge;
+///   the docking station closes it only while it is the trajectory open at
+///   the press's address, so a forged one reaches only what the presser
+///   could close anyway;
+/// - the "Close trajectory" message action, which opens on any message and
+///   so can name no trajectory;
 /// - an `installationUpdate`, which Teams sends beside the
 ///   `conversationUpdate` of the same join, so one join is read once;
 /// - an edit or a delete, until conversation_shapes has a shape for what a
@@ -151,35 +157,24 @@ final class TeamsEventTranslator
         return switch (event.verb) {
           CardActionVerb.approve => judged(const ApprovedVerdict()),
           CardActionVerb.notYet => judged(const HeldOffVerdict()),
-          CardActionVerb.close => PersonAskedToCloseTrajectory(
-            addressInExternalSystem: address,
-            containingAddress: containingAddress,
-            addressedTo: addressedTo,
-            replyEndpoint: replyEndpoint,
-            from: actor,
-            key: key,
-            message: to,
-          ),
+          // A Close names the trajectory its reply was in; one that names
+          // none closes nothing.
+          CardActionVerb.close => switch (event.trajectory) {
+            final trajectory? => PersonAskedToCloseTrajectory(
+              addressInExternalSystem: address,
+              containingAddress: containingAddress,
+              addressedTo: addressedTo,
+              replyEndpoint: replyEndpoint,
+              from: actor,
+              key: key,
+              message: to,
+              trajectory: trajectory,
+            ),
+            null => null,
+          },
           // Edit only reopens the choice on a card.
           CardActionVerb.edit || null => null,
         };
-      case TeamsMessageActionSubmit(
-            command: closeTrajectoryCommandId,
-            :final messageRef?,
-            :final actor?,
-          )
-          when _confirmed(event.data):
-        final key = EventKey.parse('invoke:${event.id}');
-        if (key == null) return null;
-        return PersonAskedToCloseTrajectory(
-          addressInExternalSystem: address,
-          containingAddress: containingAddress,
-          addressedTo: addressedTo,
-          replyEndpoint: replyEndpoint,
-          from: actor,
-          key: key,
-          message: messageRef.source,
-        );
       case TeamsCardAction() ||
           TeamsMessageUpdate() ||
           TeamsMessageDelete() ||
@@ -189,16 +184,6 @@ final class TeamsEventTranslator
         return null;
     }
   }
-
-  /// Whether the close action's toggle was on. Teams' encoding of a
-  /// submitted toggle is not yet measured, so a JSON true and the text
-  /// `true` both count.
-  static bool _confirmed(JsonObject? data) =>
-      // wire-ok: Teams' submitted toggle value, read once here.
-      switch (data?.raw(closeTrajectoryConfirmParameter)) {
-        true || 'true' => true,
-        _ => false,
-      };
 }
 
 /// What the Teams translator carries from one event to the next: which Entra
