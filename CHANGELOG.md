@@ -15,6 +15,8 @@ package pin that tag.
   and `TeamsConversation` are gone: the way in from before the docking
   station, which no program ran. `teamsSaid`, which the translator uses
   for every message, is kept, in `teams_said.dart`.
+- The relay reads its logbook socket from `LOGBOOK_SOCKET` only; the
+  `JOURNAL_SOCKET` fallback is gone, as infra's unit now sets the new name.
 
 ## 0.0.4
 

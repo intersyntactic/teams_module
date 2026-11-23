@@ -16,9 +16,7 @@
 ///                                    every accepted request's body is
 ///                                    recorded through it as an `event`
 ///                                    entry, byte for byte, before Teams
-///                                    gets a response. Required; its older
-///                                    name JOURNAL_SOCKET is read when it
-///                                    is unset.
+///                                    gets a response. Required.
 ///   TEAMS_SETTINGS_DIALOG=card.json  optional; an Adaptive Card the call
 ///                                    settings message action opens, read
 ///                                    once at boot, so Teams' wait for it
@@ -101,10 +99,7 @@ Future<void> main() async {
     }
   }
 
-  final logbookSocket = switch (env['LOGBOOK_SOCKET']) {
-    final s? when s.isNotEmpty => s,
-    _ => env['JOURNAL_SOCKET'] ?? '',
-  };
+  final logbookSocket = env['LOGBOOK_SOCKET'] ?? '';
   if (logbookSocket.isEmpty) {
     // A relay that can't record what arrives must not respond 200 to it.
     stderr.writeln('abort: LOGBOOK_SOCKET not set');
