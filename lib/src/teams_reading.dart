@@ -1,7 +1,7 @@
 import 'package:checked_json/checked_json.dart' show JsonObject;
 import 'package:is_annotation_shapes/is_annotation_shapes.dart'
     show ApprovedVerdict, HeldOffVerdict, VerdictOnShownMessage;
-import 'package:is_admission_vocabulary/is_admission_vocabulary.dart';
+import 'package:is_docking_station_api/is_docking_station_api.dart';
 
 import 'teams_event.dart';
 import 'teams_gate.dart';

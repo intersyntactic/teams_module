@@ -5,8 +5,8 @@ import 'package:checked_json/checked_json.dart';
 import 'package:is_annotation_shapes/is_annotation_shapes.dart'
     show ApprovedVerdict, HeldOffVerdict;
 import 'package:is_conversation_shapes/is_conversation_shapes.dart';
-import 'package:is_admission_vocabulary/is_admission_vocabulary.dart';
-import 'package:is_logbook_client/is_logbook_client.dart' show ObjectId;
+import 'package:is_docking_station_api/is_docking_station_api.dart';
+import 'package:is_content_id/is_content_id.dart' show ObjectId;
 import 'package:is_shapes/is_shapes.dart';
 import 'package:is_teams_module/is_teams_module.dart';
 import 'package:test/test.dart';

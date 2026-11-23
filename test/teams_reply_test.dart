@@ -4,8 +4,6 @@ import 'package:is_effects/is_effects.dart';
 import 'package:is_teams_module/is_teams_module.dart';
 import 'package:test/test.dart';
 
-import 'support/fixtures.dart';
-
 /// The TextBlocks of [activity]'s card, in order.
 List<Map<String, Object?>> _blocks(Map<String, Object?> activity) {
   final attachment =
@@ -161,18 +159,16 @@ void main() {
 
   group('the requests', () {
     final signIn = SignIn.parse('cam-teams')!;
+    final endpoint = teamsReplyEndpoint(
+      Uri.parse('https://smba.trafficmanager.net/amer/'),
+      '19:c1@thread.v2',
+    )!;
 
     test('are built from their inputs alone: the same inputs, the same '
         'requests, every field', () {
-      // The airlock records these in its decision before anything leaves,
-      // so building must reach nothing and give the same bytes each time.
-      const teams = TeamsRequestsAnsweringEvents();
-      final event = utf8.encode(jsonEncode(message()));
-      final reply = CutOffReply(
-        text: [for (var i = 0; i < 30; i++) 'p$i ${'é' * 1500}'].join('\n\n'),
-        usage: usage,
-      );
-      String described(List<Request> requests) => jsonEncode([
+      final text = [for (var i = 0; i < 30; i++) 'p$i ${'é' * 1500}']
+          .join('\n\n');
+      String described(List<ProposedRequest> requests) => jsonEncode([
         for (final r in requests)
           [
             '${r.origin}',
@@ -183,68 +179,32 @@ void main() {
             r.body,
           ],
       ]);
-      List<Request> replies() => teams.replyRequests(
-        relayedEvent: event,
-        reply: reply,
+      List<ProposedRequest> built() => teamsMessageRequests(
+        text: text,
+        replyEndpoint: endpoint,
         signIn: signIn,
-      )!;
-      List<Request> opened() =>
-          teams.trajectoryOpenedRequests(relayedEvent: event, signIn: signIn)!;
-      final firstReplies = described(replies());
-      final firstOpened = described(opened());
-      expect(replies().length, greaterThan(1));
-      expect(described(replies()), firstReplies);
-      expect(described(opened()), firstOpened);
+        footer: contextFooter(usage),
+      );
+      expect(built().length, greaterThan(1));
+      expect(described(built()), described(built()));
     });
 
-    test('are what the airlock is handed, through the interface', () {
-      const BuildsRequestsAnsweringEvents teams =
-          TeamsRequestsAnsweringEvents();
-      final event = utf8.encode(jsonEncode(message()));
-      const reply = FinishedReply(text: 'hi');
-      expect(
-        [
-          for (final r in teams.trajectoryOpenedRequests(
-            relayedEvent: event,
-            signIn: signIn,
-          )!)
-            r.body,
-        ],
-        [jsonEncode(teamsTrajectoryOpenCard)],
-      );
-      expect(
-        [
-          for (final r in teams.replyRequests(
-            relayedEvent: event,
-            reply: reply,
-            signIn: signIn,
-          )!)
-            r.body,
-        ],
-        [for (final a in teamsReplyActivities(reply)) jsonEncode(a)],
-      );
-    });
-
-    test('post each part, in order, to the conversation the event came '
-        'from', () {
-      final event = utf8.encode(
-        jsonEncode({
-          ...message(),
-          'conversation': {'id': '19:c1@thread.v2'},
-        }),
-      );
-      final reply = FinishedReply(
-        text: [for (var i = 0; i < 40; i++) 'p$i ${'x' * 2000}'].join('\n\n'),
-        usage: usage,
-      );
-      final requests = teamsReplyRequests(
-        relayedEvent: event,
-        reply: reply,
+    test('post each part, in order, to the recorded reply endpoint', () {
+      final text = [for (var i = 0; i < 8; i++) 'p$i ${'x' * 2000}']
+          .join('\n\n');
+      final footer = contextFooter(usage);
+      final requests = teamsMessageRequests(
+        text: text,
+        replyEndpoint: endpoint,
         signIn: signIn,
-      )!;
-      final activities = teamsReplyActivities(reply);
+        footer: footer,
+      );
+      final activities = teamsTextActivities(
+        text,
+        footer: footer,
+        maxMessages: teamsReplyMaxMessages,
+      );
       expect(requests, hasLength(activities.length));
-      expect(requests.length, greaterThan(1));
       for (var i = 0; i < requests.length; i++) {
         final r = requests[i];
         expect(r.method, Method.post);
@@ -254,11 +214,12 @@ void main() {
           '${r.path}',
           '/amer/v3/conversations/19%3Ac1%40thread.v2/activities',
         );
+        expect(endpoint.covers(r.origin, r.path), isTrue);
         expect(r.body, jsonEncode(activities[i]));
       }
     });
 
-    test('post the open card, its bytes exactly as they were', () {
+    test('the open card keeps its bytes exactly as they were', () {
       // The bytes is_airlock_api 0.11.0 published as trajectoryOpenCardBody,
       // which cards already posted were drawn from.
       const published =
@@ -269,47 +230,12 @@ void main() {
           '"text":"● Open · trajectory started","wrap":true}],"actions":'
           '[{"type":"Action.Execute","title":"Close trajectory","verb":'
           '"close"}]}}]}';
-      final [request] = teamsTrajectoryOpenedRequests(
-        relayedEvent: utf8.encode(jsonEncode(message())),
-        signIn: signIn,
-      )!;
-      expect(request.body, published);
-      expect(request.signIn, signIn);
-      expect(
-        '${request.path}',
-        '/amer/v3/conversations/a%3A1personal/activities',
-      );
+      expect(jsonEncode(teamsTrajectoryOpenCard), published);
     });
 
     test('the open card is pressed closed with the verb the reading takes', () {
       final verb = jsonEncode(teamsTrajectoryOpenCard);
       expect(verb, contains('"verb":"${CardActionVerb.close.asSent}"'));
-    });
-
-    test('are null for bytes that are not a Teams activity', () {
-      expect(
-        teamsTrajectoryOpenedRequests(
-          relayedEvent: utf8.encode('not json'),
-          signIn: signIn,
-        ),
-        isNull,
-      );
-      expect(
-        teamsReplyRequests(
-          relayedEvent: utf8.encode('not json'),
-          reply: const FinishedReply(text: 'hi'),
-          signIn: signIn,
-        ),
-        isNull,
-      );
-      expect(
-        teamsReplyRequests(
-          relayedEvent: utf8.encode(jsonEncode({...message(), 'type': 'x'})),
-          reply: const FinishedReply(text: 'hi'),
-          signIn: signIn,
-        ),
-        isNull,
-      );
     });
   });
 }

@@ -1,97 +1,112 @@
-/// What CAM posts in answer to a conversation's events, as Teams messages:
-/// the card saying a trajectory opened, and a model's reply.
+/// What CAM posts in a conversation, as Teams messages: a reply, and the
+/// card saying a trajectory opened.
 ///
 /// A reply is an Adaptive Card per message, the reply's text in it, and a
-/// footer saying how full the model's context is. A reply too long for one
-/// message is split across several, in order, and only the last carries
-/// the footer and any note that the reply was cut off.
+/// footer saying the turn and how full the model's context is. A reply too
+/// long for one message is split across several, in order, and only the
+/// last carries the footer and any note that the reply was cut off.
 ///
-/// teams_module is the one place these bytes are made: the airlock decides
-/// the requests built here as they are, recording exactly what each one
-/// sends, and knows nothing of Teams.
+/// teams_module is the one place these bytes are made, and `teams-message`
+/// prints them as the requests that post them, to the conversation's reply
+/// endpoint as the logbook recorded it.
 library;
 
 import 'dart:convert';
 
 import 'package:is_effects/is_effects.dart';
 
-import 'teams_event.dart';
-import 'teams_gate.dart';
-import 'teams_post.dart';
 import 'teams_requests.dart';
-
-/// What the airlock is handed for an event with a `teams:` address: the
-/// requests answering it, built here, for the airlock to decide.
-final class TeamsRequestsAnsweringEvents
-    implements BuildsRequestsAnsweringEvents {
-  const TeamsRequestsAnsweringEvents();
-
-  @override
-  List<Request>? trajectoryOpenedRequests({
-    required List<int> relayedEvent,
-    required SignIn signIn,
-  }) =>
-      teamsTrajectoryOpenedRequests(relayedEvent: relayedEvent, signIn: signIn);
-
-  @override
-  List<Request>? replyRequests({
-    required List<int> relayedEvent,
-    required ModelReply reply,
-    required SignIn signIn,
-  }) => teamsReplyRequests(
-    relayedEvent: relayedEvent,
-    reply: reply,
-    signIn: signIn,
-  );
-}
 
 /// The most a message may weigh, encoded, by Microsoft's docs: about 28 KB.
 /// Not yet measured against Teams.
 const teamsMessageByteCap = 28000;
+
+/// The most messages one reply goes out as. Past it the reply is cut off at
+/// the last message, which says so: each message is up to
+/// [teamsMessageByteCap], and every byte sent is kept in the logbook too.
+const teamsReplyMaxMessages = 10;
 
 /// [reply] as the Teams messages it goes out as, in posting order, each
 /// [teamsMessageByteCap] or less once encoded. Always at least one.
 List<Map<String, Object?>> teamsReplyActivities(
   ModelReply reply, {
   int byteCap = teamsMessageByteCap,
-}) {
-  final cutOff = reply is CutOffReply;
-  final footer = switch (reply.usage) {
+}) => teamsTextActivities(
+  reply.text,
+  footer: switch (reply.usage) {
     final usage? => contextFooter(usage),
     null => null,
-  };
-  Map<String, Object?> last(String text) =>
-      _activity(text, cutOff: cutOff, footer: footer);
+  },
+  cutOff: reply is CutOffReply,
+  byteCap: byteCap,
+);
+
+/// [text] as the Teams messages it goes out as, in posting order, each
+/// [byteCap] or less once encoded, the last carrying [footer] and, when
+/// [cutOff] or when it takes more than [maxMessages], a note that it was
+/// cut off. Always at least one.
+List<Map<String, Object?>> teamsTextActivities(
+  String text, {
+  String? footer,
+  bool cutOff = false,
+  int byteCap = teamsMessageByteCap,
+  int? maxMessages,
+}) {
+  bool fitsAsLast(String part, {required bool cut}) =>
+      utf8
+          .encode(jsonEncode(_activity(part, cutOff: cut, footer: footer)))
+          .length <=
+      byteCap;
   // Every part is weighed as the last would be, footer and all, so a part
   // that fits stays fitting wherever it lands.
-  bool fits(String text) =>
-      utf8.encode(jsonEncode(last(text))).length <= byteCap;
-  final parts = splitToFit(reply.text, fits);
+  var parts = splitToFit(text, (part) => fitsAsLast(part, cut: cutOff));
+  var cut = cutOff;
+  if (maxMessages != null && parts.length > maxMessages) {
+    cut = true;
+    parts = parts.sublist(0, maxMessages);
+    // The last part must still fit once the cut-off note is in it.
+    final last = parts.removeLast();
+    parts.add(splitToFit(last, (part) => fitsAsLast(part, cut: true)).first);
+  }
   return [
     for (var i = 0; i < parts.length; i++)
       i == parts.length - 1
-          ? last(parts[i])
+          ? _activity(parts[i], cutOff: cut, footer: footer)
           : _activity(parts[i], cutOff: false, footer: null),
   ];
 }
 
-/// The requests that post [reply] to the conversation [relayedEvent] came
-/// from, signed as [signIn], in posting order. Null when [relayedEvent] is
-/// not a Teams activity, so the airlock can refuse saying so.
-///
-/// [relayedEvent] is the activity's body as the relay recorded it, which
-/// names the conversation and the regional endpoint that reaches it.
-List<Request>? teamsReplyRequests({
-  required List<int> relayedEvent,
-  required ModelReply reply,
+/// The requests that post [text] to the conversation at [replyEndpoint],
+/// signed as [signIn], in posting order: the reply as [teamsTextActivities]
+/// makes it, at most [teamsReplyMaxMessages] messages. [replyEndpoint] is
+/// the conversation's as the logbook recorded it, never worked out again
+/// here.
+List<ProposedRequest> teamsMessageRequests({
+  required String text,
+  required AddressPrefix replyEndpoint,
   required SignIn signIn,
-}) {
-  final event = _teamsEventOrNull(relayedEvent);
-  if (event == null) return null;
-  return [
-    for (final activity in teamsReplyActivities(reply))
-      _post(event, activity, signIn),
+  String? footer,
+}) => [
+  for (final activity in teamsTextActivities(
+    text,
+    footer: footer,
+    maxMessages: teamsReplyMaxMessages,
+  ))
+    teamsPostToEndpoint(
+      replyEndpoint: replyEndpoint,
+      activity: activity,
+      signIn: signIn,
+    ),
+];
+
+/// The footer under a reply: `turn 3 · context 152k of 200k (76%)`, either
+/// half on its own, or null when there is neither.
+String? replyFooter({int? turn, int? contextTokens, int? contextWindow}) {
+  final halves = [
+    if (turn != null) 'turn $turn',
+    if (contextTokens != null) contextFooterOf(contextTokens, contextWindow),
   ];
+  return halves.isEmpty ? null : halves.join(' · ');
 }
 
 /// The card that says a trajectory opened in this conversation, with the
@@ -126,42 +141,14 @@ const Map<String, Object?> teamsTrajectoryOpenCard = {
   ],
 };
 
-/// The request that posts [teamsTrajectoryOpenCard] to the conversation
-/// [relayedEvent] came from, signed as [signIn]. Null when [relayedEvent]
-/// is not a Teams activity.
-List<Request>? teamsTrajectoryOpenedRequests({
-  required List<int> relayedEvent,
-  required SignIn signIn,
-}) {
-  final event = _teamsEventOrNull(relayedEvent);
-  if (event == null) return null;
-  return [_post(event, teamsTrajectoryOpenCard, signIn)];
-}
-
-TeamsEvent? _teamsEventOrNull(List<int> relayedEvent) {
-  try {
-    return teamsRecordedEvent(relayedEvent);
-  } on FormatException {
-    return null;
-  }
-}
-
-Request _post(TeamsEvent event, Map<String, Object?> activity, SignIn signIn) =>
-    teamsPostRequest(
-      TeamsPost(
-        serviceUrl: event.serviceUrl,
-        conversation: event.conversation,
-        activity: activity,
-      ),
-      signIn,
-    );
-
 /// How full the model's context is after the call [usage] reports, such as
 /// `context 152k of 200k (76%)`, or `context 152k` when the model's window
 /// isn't known. Rounded up, never down: it is a warning.
-String contextFooter(ModelUsage usage) {
-  final used = usage.context;
-  final window = usage.contextWindow;
+String contextFooter(ModelUsage usage) =>
+    contextFooterOf(usage.context, usage.contextWindow);
+
+/// [used] tokens of a [window], as [contextFooter] says it.
+String contextFooterOf(int used, int? window) {
   if (window == null || window <= 0) return 'context ${tokenCount(used)}';
   final percent = (used * 100 + window - 1) ~/ window;
   return 'context ${tokenCount(used)} of ${tokenCount(window)} ($percent%)';

@@ -28,6 +28,47 @@ void main() {
     expect(jsonDecode(r.body!), {'type': 'message', 'text': 'hi'});
   });
 
+  group('the conversation origin', () {
+    test('is the service URL\'s https site, without its region', () {
+      expect(
+        teamsConversationOrigin(serviceUrl),
+        Origin.parse('https://smba.trafficmanager.net'),
+      );
+    });
+
+    test('is null for a service URL that is not https', () {
+      expect(teamsConversationOrigin(Uri.parse('http://x.example/')), isNull);
+    });
+
+    test('joined with the path prefix as the reply endpoint, covers every '
+        'request built for the conversation, and is null off https', () {
+      final endpoint = teamsReplyEndpoint(serviceUrl, conversation)!;
+      for (final r in [
+        teamsPostRequest(post(), bot),
+        teamsPostRequest(post(replyToId: '1730881000000'), bot),
+        teamsPostToEndpoint(
+          replyEndpoint: endpoint,
+          activity: const {'type': 'message'},
+          signIn: bot,
+        ),
+      ]) {
+        expect(endpoint.covers(r.origin, r.path), isTrue, reason: '${r.path}');
+      }
+      expect(
+        teamsReplyEndpoint(Uri.parse('http://x.example/'), conversation),
+        isNull,
+      );
+    });
+
+    test('with the path prefix, is where every request goes', () {
+      final origin = teamsConversationOrigin(serviceUrl)!;
+      final prefix = teamsConversationPathPrefix(serviceUrl, conversation)!;
+      final r = teamsPostRequest(post(), bot);
+      expect(r.origin, origin);
+      expect(r.path.value, startsWith(prefix.value));
+    });
+  });
+
   group('the conversation path prefix', () {
     test('is the region, then the id percent-encoded with upper-case '
         'escapes', () {

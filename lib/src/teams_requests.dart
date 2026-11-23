@@ -1,4 +1,4 @@
-/// A Teams message as a [Request]: described for a web driver to send, not
+/// A Teams message as a [ProposedRequest]: described for a web driver to send, not
 /// sent. The module names where the message goes and what it carries; the
 /// airlock decides the request and the driver signs it with [SignIn]'s
 /// token, so no secret is needed here.
@@ -17,7 +17,7 @@ import 'teams_post.dart';
 /// [post] as a request: a new message, or a reply under
 /// [TeamsPost.replyToId]. The driver's `Sent.created` is the new message's
 /// id.
-Request teamsPostRequest(TeamsPost post, SignIn signIn) => _request(
+ProposedRequest teamsPostRequest(TeamsPost post, SignIn signIn) => _request(
   Method.post,
   post.serviceUrl,
   post.conversation,
@@ -26,10 +26,34 @@ Request teamsPostRequest(TeamsPost post, SignIn signIn) => _request(
   signIn,
 );
 
+/// [activity] as a new message in the conversation at [replyEndpoint], the
+/// conversation's as the logbook recorded it: [teamsReplyEndpoint] made it,
+/// and nothing here works it out again.
+ProposedRequest teamsPostToEndpoint({
+  required AddressPrefix replyEndpoint,
+  required Map<String, Object?> activity,
+  required SignIn signIn,
+}) {
+  final path = WebPath.parse('${replyEndpoint.pathPrefix.value}activities');
+  if (path == null) {
+    throw ArgumentError.value(replyEndpoint, 'replyEndpoint', 'has no path');
+  }
+  return ProposedRequest(
+    replyEndpoint.origin,
+    method: Method.post,
+    path: path,
+    signIn: signIn,
+    headers: _headers,
+    body: jsonEncode(activity),
+  );
+}
+
+const _headers = {'content-type': 'application/json; charset=utf-8'};
+
 /// Replaces the bot's own message [activityId] with [activity]: how a card
 /// changes after someone presses a button on it. Teams lets a bot edit only
 /// its own messages.
-Request teamsUpdateRequest({
+ProposedRequest teamsUpdateRequest({
   required Uri serviceUrl,
   required String conversation,
   required String activityId,
@@ -44,22 +68,47 @@ Request teamsUpdateRequest({
 /// the service URL's region, then `/v3/conversations/<conversation>/`.
 ///
 /// A conversation id can be spelled in a path two ways (`19:…` and
-/// `19%3A…`), and a rule granting a path prefix matches exact characters.
-/// So both the requests built here and any rule naming a conversation's
-/// prefix take it from this one function: the id percent-encoded, escapes
-/// in upper case. Null when the id would lead the path off the site.
-WebPath? teamsConversationPathPrefix(Uri serviceUrl, String conversation) {
+/// `19%3A…`); [PathPrefix.covers] takes either, and the requests built here
+/// and the reply endpoint recorded for the conversation both spell it this
+/// one way: the id percent-encoded, escapes in upper case. Null when the id
+/// would lead the path off the site.
+PathPrefix? teamsConversationPathPrefix(Uri serviceUrl, String conversation) {
   final region = serviceUrl.path.endsWith('/')
       ? serviceUrl.path.substring(0, serviceUrl.path.length - 1)
       : serviceUrl.path;
-  return WebPath.parse(
+  return PathPrefix.parse(
     '$region/v3/conversations/${Uri.encodeComponent(conversation)}/',
   );
 }
 
-/// Refuses a service URL that is not https: the driver adds the token to
-/// the request, and it must never travel in the clear.
-Request _request(
+/// Where a reply to [conversation] on [serviceUrl] goes: its origin and path
+/// prefix, worked out once, when the event is read, and recorded. Null
+/// unless both are: an https site and a path that stays on it.
+AddressPrefix? teamsReplyEndpoint(Uri serviceUrl, String conversation) {
+  final origin = teamsConversationOrigin(serviceUrl);
+  final prefix = teamsConversationPathPrefix(serviceUrl, conversation);
+  return origin == null || prefix == null
+      ? null
+      : AddressPrefix.of(origin, prefix);
+}
+
+/// The site every request to a conversation on [serviceUrl] goes to. Null
+/// unless it is an https site: the driver adds the token to the request,
+/// and it must never travel in the clear.
+Origin? teamsConversationOrigin(Uri serviceUrl) {
+  // wire-ok: a URI scheme, checked against the one we accept.
+  if (serviceUrl.scheme != 'https') return null;
+  return Origin.parse(
+    Uri(
+      scheme: serviceUrl.scheme,
+      host: serviceUrl.host,
+      port: serviceUrl.port,
+    ).toString(),
+  );
+}
+
+/// Refuses a service URL [teamsConversationOrigin] has no site for.
+ProposedRequest _request(
   Method method,
   Uri serviceUrl,
   String conversation,
@@ -67,19 +116,9 @@ Request _request(
   Map<String, Object?> activity,
   SignIn signIn,
 ) {
-  // wire-ok: a URI scheme, checked against the one we accept.
-  if (serviceUrl.scheme != 'https') {
-    throw ArgumentError.value(serviceUrl, 'serviceUrl', 'is not https');
-  }
-  final origin = Origin.parse(
-    Uri(
-      scheme: serviceUrl.scheme,
-      host: serviceUrl.host,
-      port: serviceUrl.port,
-    ).toString(),
-  );
+  final origin = teamsConversationOrigin(serviceUrl);
   if (origin == null) {
-    throw ArgumentError.value(serviceUrl, 'serviceUrl', 'has no site');
+    throw ArgumentError.value(serviceUrl, 'serviceUrl', 'is not an https site');
   }
   final prefix = teamsConversationPathPrefix(serviceUrl, conversation);
   final path = prefix == null
@@ -91,12 +130,12 @@ Request _request(
   if (path == null) {
     throw ArgumentError.value(conversation, 'conversation', 'leaves the site');
   }
-  return Request(
+  return ProposedRequest(
     origin,
     method: method,
     path: path,
     signIn: signIn,
-    headers: const {'content-type': 'application/json; charset=utf-8'},
+    headers: _headers,
     body: jsonEncode(activity),
   );
 }
