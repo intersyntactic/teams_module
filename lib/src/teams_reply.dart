@@ -14,6 +14,7 @@ library;
 import 'dart:convert';
 
 import 'package:is_effects/is_effects.dart';
+import 'package:is_shapes/is_shapes.dart' show TrajectoryId;
 
 import 'teams_event.dart' show CardActionVerb;
 import 'teams_requests.dart';
@@ -28,12 +29,15 @@ const teamsMessageByteCap = 28000;
 const teamsReplyMaxMessages = 10;
 
 /// [reply] as the Teams messages it goes out as, in posting order, each
-/// [teamsMessageByteCap] or less once encoded. Always at least one.
+/// [teamsMessageByteCap] or less once encoded, the last closing
+/// [trajectory]. Always at least one.
 List<Map<String, Object?>> teamsReplyActivities(
   ModelReply reply, {
+  required TrajectoryId trajectory,
   int byteCap = teamsMessageByteCap,
 }) => teamsTextActivities(
   reply.text,
+  trajectory: trajectory,
   footer: switch (reply.usage) {
     final usage? => contextFooter(usage),
     null => null,
@@ -43,11 +47,12 @@ List<Map<String, Object?>> teamsReplyActivities(
 );
 
 /// [text] as the Teams messages it goes out as, in posting order, each
-/// [byteCap] or less once encoded, the last carrying [footer] and, when
-/// [cutOff] or when it takes more than [maxMessages], a note that it was
-/// cut off. Always at least one.
+/// [byteCap] or less once encoded, the last carrying [footer], the menu
+/// that closes [trajectory] and, when [cutOff] or when it takes more than
+/// [maxMessages], a note that it was cut off. Always at least one.
 List<Map<String, Object?>> teamsTextActivities(
   String text, {
+  required TrajectoryId trajectory,
   String? footer,
   bool cutOff = false,
   int byteCap = teamsMessageByteCap,
@@ -57,7 +62,7 @@ List<Map<String, Object?>> teamsTextActivities(
       utf8
           .encode(
             jsonEncode(
-              _activity(part, last: true, cutOff: cut, footer: footer),
+              _activity(part, closes: trajectory, cutOff: cut, footer: footer),
             ),
           )
           .length <=
@@ -76,24 +81,26 @@ List<Map<String, Object?>> teamsTextActivities(
   return [
     for (var i = 0; i < parts.length; i++)
       i == parts.length - 1
-          ? _activity(parts[i], last: true, cutOff: cut, footer: footer)
-          : _activity(parts[i], last: false, cutOff: false, footer: null),
+          ? _activity(parts[i], closes: trajectory, cutOff: cut, footer: footer)
+          : _activity(parts[i], closes: null, cutOff: false, footer: null),
   ];
 }
 
 /// The requests that post [text] to the conversation at [replyEndpoint],
 /// signed as [signIn], in posting order: the reply as [teamsTextActivities]
-/// makes it, at most [teamsReplyMaxMessages] messages. [replyEndpoint] is
-/// the conversation's as the logbook recorded it, never worked out again
-/// here.
+/// makes it, at most [teamsReplyMaxMessages] messages, closing [trajectory].
+/// [replyEndpoint] is the conversation's as the logbook recorded it, never
+/// worked out again here.
 List<ProposedRequest> teamsMessageRequests({
   required String text,
+  required TrajectoryId trajectory,
   required AddressPrefix replyEndpoint,
   required SignIn signIn,
   String? footer,
 }) => [
   for (final activity in teamsTextActivities(
     text,
+    trajectory: trajectory,
     footer: footer,
     maxMessages: teamsReplyMaxMessages,
   ))
@@ -204,13 +211,13 @@ List<String> _byCharacters(String line, bool Function(String) fits) {
 
 /// One message: an Adaptive Card 1.5, the shape that rendered in every
 /// tenant tried, holding [text], then the cut-off note and the [footer]
-/// when there are any. No actions.
-/// One message of a reply. The [last] carries "Close trajectory" as a
-/// secondary action, which Teams draws in the card's overflow menu rather
-/// than as a button; a press is read as [CardActionVerb.close].
+/// when there are any. A reply's last message [closes] its trajectory:
+/// "Close trajectory" as a secondary action, which Teams draws in the
+/// card's overflow menu rather than as a button, its data naming the
+/// trajectory. A press is read as [CardActionVerb.close].
 Map<String, Object?> _activity(
   String text, {
-  required bool last,
+  required TrajectoryId? closes,
   required bool cutOff,
   required String? footer,
 }) => {
@@ -239,12 +246,13 @@ Map<String, Object?> _activity(
               'isSubtle': true,
             },
         ],
-        if (last)
+        if (closes != null)
           'actions': [
             {
               'type': 'Action.Execute',
               'title': 'Close trajectory',
               'verb': CardActionVerb.close.asSent,
+              'data': {'trajectory': closes.hex},
               'mode': 'secondary',
             },
           ],
