@@ -9,8 +9,7 @@ package pin that tag.
   translator: `TeamsReading` is `TeamsEventTranslator`, implementing
   `TranslatesRelayedEvents`, and `TeamsReadingState` is
   `TeamsEventTranslatorState`. Each step gives a `TranslatedEvent`; the
-  cases are unchanged. Pinned to docking_station 5d494c2 until 0.4.0 is
-  published at the fresh-logbook cutover.
+  cases are unchanged.
 - Every translated event names its `replyEndpoint`: the conversation at
   the service URL Teams sent, which the gate holds to the token's
   `serviceurl` claim, from `teamsReplyEndpoint`. is_effects ^0.14.2, whose

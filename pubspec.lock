@@ -180,20 +180,18 @@ packages:
   is_docking_station_api:
     dependency: "direct main"
     description:
-      path: docking_station_api
-      ref: "1fd10ffd0eea6642377333b4940d7c3372cf7f5d"
-      resolved-ref: "1fd10ffd0eea6642377333b4940d7c3372cf7f5d"
-      url: "https://github.com/intersyntactic/docking_station.git"
-    source: git
+      name: is_docking_station_api
+      sha256: cf10508402a18f108db6dffe132852d2d5e3eb6fe0562aef6cddd7d039bc8c79
+      url: "https://pub.dev"
+    source: hosted
     version: "0.4.0"
   is_effects:
     dependency: "direct main"
     description:
-      path: "."
-      ref: "827e7e5aecd503e8e9266403186ad7044d066d69"
-      resolved-ref: "827e7e5aecd503e8e9266403186ad7044d066d69"
-      url: "https://github.com/intersyntactic/effects.git"
-    source: git
+      name: is_effects
+      sha256: "95b051e592edb4e04241e89be3ac1500c0abaf58fdec8e64f40a2cbe7a7ebfc7"
+      url: "https://pub.dev"
+    source: hosted
     version: "0.14.2"
   is_logbook_format:
     dependency: transitive
@@ -220,13 +218,12 @@ packages:
     source: hosted
     version: "0.6.0"
   is_web_address_vocabulary:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
-      path: "."
-      ref: ace08828f6604dd37949029da4c3340f716b81d5
-      resolved-ref: ace08828f6604dd37949029da4c3340f716b81d5
-      url: "https://github.com/intersyntactic/web_address_vocabulary.git"
-    source: git
+      name: is_web_address_vocabulary
+      sha256: "232241a06a2871213e110f52f01c8c68b6c98fdcdf00fcfb491c8e24d10d8dac"
+      url: "https://pub.dev"
+    source: hosted
     version: "0.1.1"
   lints:
     dependency: "direct dev"
