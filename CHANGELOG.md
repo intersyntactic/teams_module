@@ -3,6 +3,19 @@
 Each version is tagged `vX.Y.Z` on main, and the services that use this
 package pin that tag.
 
+## 0.0.5
+
+- is_docking_station_api 0.4.0, where a module's "reading" is its
+  translator: `TeamsReading` is `TeamsEventTranslator`, implementing
+  `TranslatesRelayedEvents`, and `TeamsReadingState` is
+  `TeamsEventTranslatorState`. Each step gives a `TranslatedEvent`; the
+  cases are unchanged. Pinned to docking_station a12f25e until 0.4.0 is
+  published at the fresh-logbook cutover.
+- `TeamsTranslator`, `TeamsReceiver`, `StandInTrajectory`, `TeamsAuthors`
+  and `TeamsConversation` are gone: the way in from before the docking
+  station, which no program ran. `teamsSaid`, which the translator uses
+  for every message, is kept, in `teams_said.dart`.
+
 ## 0.0.4
 
 - `teams-message`, a program (`dart compile exe bin/teams_message.dart`):

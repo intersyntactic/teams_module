@@ -34,19 +34,19 @@ ObjectId _recordedId(Uint8List body) =>
     ObjectId.of(Uint8List.fromList([...utf8.encode('event\n-\n'), ...body]));
 
 /// Every one of [activities], folded from the start, as the docking station
-/// folds them: the readings in order, and the state after the last.
-(TeamsReadingState, List<EventReading>) fold(
+/// folds them: the translated events in order, and the state after the last.
+(TeamsEventTranslatorState, List<TranslatedEvent>) fold(
   Iterable<Map<String, Object?>> activities,
 ) {
-  const reading = TeamsReading();
-  var state = reading.start;
-  final readings = <EventReading>[];
+  const translator = TeamsEventTranslator();
+  var state = translator.start;
+  final translated = <TranslatedEvent>[];
   for (final a in activities) {
-    final (next, r) = reading.step(state, recorded(a));
+    final (next, r) = translator.step(state, recorded(a));
     state = next;
-    readings.add(r);
+    translated.add(r);
   }
-  return (state, readings);
+  return (state, translated);
 }
 
 final ada = ActorId.parse(
@@ -183,9 +183,48 @@ void main() {
         fromBea('act-1'),
         quotingBea(message(id: 'act-2', text: '<at>Bot</at>'), 'act-1'),
       ]);
-      final quotes = (r as MessageSaid).node.quotes!;
+      // Only an @-mention on a quote says "look at this", with no words.
+      expect((r as MessageSaid).node.text, isEmpty);
+      final quotes = r.node.quotes!;
       expect((quotes.author as KnownAuthor).actor, bea);
       expect(quotes.source.value, 'a:1personal|act-1');
+    });
+
+    test('quoting with words carries them and the quote', () {
+      final (_, [r]) = fold([
+        quotingBea(message(id: 'act-2', text: 'not quite'), 'act-1'),
+      ]);
+      expect((r as MessageSaid).node.text, 'not quite');
+      expect(r.node.quotes!.source.value, 'a:1personal|act-1');
+    });
+
+    test('quoting a bot names the bot, which needs nothing learnt first', () {
+      final (_, [r]) = fold([
+        {
+          ...quotingBea(message(id: 'act-2', text: 'this one'), 'act-0'),
+          'entities': [
+            {
+              'type': 'quotedReply',
+              'quotedReply': {'messageId': 'act-0', 'senderId': '28:$appId'},
+            },
+          ],
+        },
+      ]);
+      expect(
+        ((r as MessageSaid).node.quotes!.author as KnownAuthor).actor,
+        bot,
+      );
+    });
+
+    test('by another bot is MessageSaid too: a bot is a user', () {
+      final (_, [r]) = fold([
+        {
+          ...message(id: 'act-2', text: 'Build 41 failed'),
+          'from': {'id': '28:other-bot', 'name': 'CI'},
+        },
+      ]);
+      expect((r as MessageSaid).from.value, 'teams:$tenant/bot:other-bot');
+      expect(r.node.text, 'Build 41 failed');
     });
 
     test('quoting themselves, the first time heard from, names them', () {
@@ -364,8 +403,8 @@ void main() {
         closeActionSubmitted({'confirm': true}),
       ]);
       expect(
-        encodeReading(fromAction as AddressedEvent).asUncheckedMap(),
-        encodeReading(fromCard as AddressedEvent).asUncheckedMap(),
+        encodeTranslatedEvent(fromAction as AddressedEvent).asUncheckedMap(),
+        encodeTranslatedEvent(fromCard as AddressedEvent).asUncheckedMap(),
         reason:
             'one kind, one shape: only the message it names may differ, '
             'and here both name 1730881000000',
@@ -414,11 +453,11 @@ void main() {
 
   group('nothing to admit, for now', () {
     test('an edit or a delete, until a shape says what a message became', () {
-      final (_, readings) = fold([
+      final (_, translated) = fold([
         {...message(text: 'now'), 'type': 'messageUpdate'},
         {...message(), 'type': 'messageDelete'}..remove('text'),
       ]);
-      expect(readings, everyElement(isA<NothingToAdmit>()));
+      expect(translated, everyElement(isA<NothingToAdmit>()));
     });
 
     test('a press of Edit, which only reopens the choice on a card', () {
@@ -427,7 +466,7 @@ void main() {
     });
 
     test('bytes that are not an activity, with the state left as it was', () {
-      const reading = TeamsReading();
+      const translator = TeamsEventTranslator();
       final body = Uint8List.fromList(
         utf8.encode(
           jsonEncode({
@@ -437,26 +476,26 @@ void main() {
           }),
         ),
       );
-      final (state, r) = reading.step(
-        reading.start,
+      final (state, r) = translator.step(
+        translator.start,
         RelayedEvent.read(_recordedId(body), body)!,
       );
       expect(r, isA<NothingToAdmit>());
-      expect(state, same(reading.start));
+      expect(state, same(translator.start));
     });
   });
 
   group('the state', () {
     test('given to a step is never changed by it', () {
-      const reading = TeamsReading();
-      final before = reading.start;
-      reading.step(before, recorded(fromBea('act-1')));
+      const translator = TeamsEventTranslator();
+      final before = translator.start;
+      translator.step(before, recorded(fromBea('act-1')));
       expect(before.entraIdOf(TeamsUserId.parse('29:1bea')!), isNull);
     });
 
     test('is the same one back when the event teaches nothing new', () {
       final (state, _) = fold([fromBea('act-1')]);
-      final (again, _) = const TeamsReading().step(
+      final (again, _) = const TeamsEventTranslator().step(
         state,
         recorded(fromBea('act-2')),
       );
@@ -471,7 +510,7 @@ void main() {
         pressed('notyet'),
         pressed('close'),
       ];
-      String described(EventReading r) => switch (r) {
+      String described(TranslatedEvent r) => switch (r) {
         MessageSaid() => 'said ${r.key} ${r.from} ${r.node.quotes?.author}',
         ActorsJoinedAddress() => 'joined ${r.key} ${r.joiners}',
         MessageChanged() => 'changed ${r.key}',
@@ -491,14 +530,14 @@ void main() {
     const otherAppId = '00000000-0000-0000-0000-0000000b07b2';
     final otherBot = ActorId.parse('teams:$tenant/bot:$otherAppId')!;
 
-    test('is the bot each reading was sent to', () {
-      final (_, readings) = fold([
+    test('is the bot each translated event was sent to', () {
+      final (_, translated) = fold([
         added(),
         fromBea('act-1'),
         pressed('approve'),
         pressed('close'),
       ]);
-      expect(readings.map((r) => (r as AddressedEvent).addressedTo), [
+      expect(translated.map((r) => (r as AddressedEvent).addressedTo), [
         bot,
         bot,
         bot,
@@ -518,19 +557,22 @@ void main() {
 
     test('is written and read back as the docking station and its readers '
         'do', () {
-      final (_, readings) = fold([
+      final (_, translated) = fold([
         added(),
         fromBea('act-1'),
         pressed('approve'),
         pressed('close'),
       ]);
-      for (final r in readings.cast<AddressedEvent>()) {
-        final written = encodeReading(r);
+      for (final r in translated.cast<AddressedEvent>()) {
+        final written = encodeTranslatedEvent(r);
         expect(written.string('addressedTo'), bot.value);
         final stored = jsonEncode(written.asUncheckedMap());
-        final read = decodeReading(JsonObject.decode(stored));
+        final read = decodeTranslatedEvent(JsonObject.decode(stored));
         expect(read.addressedTo, bot);
-        expect(jsonEncode(encodeReading(read).asUncheckedMap()), stored);
+        expect(
+          jsonEncode(encodeTranslatedEvent(read).asUncheckedMap()),
+          stored,
+        );
       }
     });
   });

@@ -6,10 +6,11 @@ import 'package:is_docking_station_api/is_docking_station_api.dart';
 import 'teams_event.dart';
 import 'teams_gate.dart';
 import 'teams_ids.dart';
-import 'teams_translator.dart';
+import 'teams_said.dart';
 
-/// The Teams module's reading, for the docking station: what each event the
-/// Teams relay recorded is, in the logbook's order.
+/// The Teams module's translator, for the docking station: what each event
+/// the Teams relay recorded is, in the docking station's terms, in the
+/// logbook's order.
 ///
 /// It describes and decides nothing, since the docking station is what
 /// admits events under trajectories (RULINGS): a message is [MessageSaid]
@@ -39,19 +40,20 @@ import 'teams_translator.dart';
 /// `conversationUpdate:<id>` for a join, and `invoke:<id>` for a press. Teams
 /// sends a redelivery with the same activity id, so the two events it makes
 /// share a key; two activities have two.
-final class TeamsReading implements ModuleReading<TeamsReadingState> {
-  const TeamsReading();
+final class TeamsEventTranslator
+    implements TranslatesRelayedEvents<TeamsEventTranslatorState> {
+  const TeamsEventTranslator();
 
   /// As the relay records it.
   @override
   String get source => 'teams';
 
   @override
-  TeamsReadingState get start => TeamsReadingState.empty;
+  TeamsEventTranslatorState get start => TeamsEventTranslatorState.empty;
 
   @override
-  (TeamsReadingState, EventReading) step(
-    TeamsReadingState state,
+  (TeamsEventTranslatorState, TranslatedEvent) step(
+    TeamsEventTranslatorState state,
     RelayedEvent recorded,
   ) {
     final TeamsEvent? event;
@@ -59,7 +61,7 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
       event = teamsRecordedEvent(recorded.bytes);
     } on FormatException {
       // The gate took these bytes, so this is a body the gate and this
-      // reading disagree about: nothing to admit, rather than a fold that
+      // translator disagree about: nothing to admit, rather than a fold that
       // stops at it every time the docking station starts.
       return (state, const NothingToAdmit());
     }
@@ -70,7 +72,10 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
     return (next, _read(event, next) ?? const NothingToAdmit());
   }
 
-  static EventReading? _read(TeamsEvent event, TeamsReadingState state) {
+  static TranslatedEvent? _read(
+    TeamsEvent event,
+    TeamsEventTranslatorState state,
+  ) {
     final address = AddressInExternalSystem.parse(
       'teams:${event.conversation}',
     );
@@ -181,18 +186,18 @@ final class TeamsReading implements ModuleReading<TeamsReadingState> {
       };
 }
 
-/// What the Teams reading carries from one event to the next: which Entra
+/// What the Teams translator carries from one event to the next: which Entra
 /// user each Teams channel id belongs to, as far as the logbook says. A
 /// quote names its author only by channel id, and so does a join, so
 /// either is named only if that person has been heard from.
 ///
 /// Never changed: [learnt] gives a new one when there is something new,
 /// and this one otherwise, which is almost always.
-final class TeamsReadingState {
-  const TeamsReadingState._(this._entraIds);
+final class TeamsEventTranslatorState {
+  const TeamsEventTranslatorState._(this._entraIds);
 
   /// Before any event.
-  static const empty = TeamsReadingState._({});
+  static const empty = TeamsEventTranslatorState._({});
 
   final Map<TeamsUserId, EntraObjectId> _entraIds;
 
@@ -202,10 +207,12 @@ final class TeamsReadingState {
 
   /// This, with who sent [event], when Teams named both their channel id
   /// and their Entra object id.
-  TeamsReadingState learnt(TeamsEvent event) {
+  TeamsEventTranslatorState learnt(TeamsEvent event) {
     if ((event.from, event.fromAadObjectId) case (final from?, final entra?)
         when _entraIds[from] != entra) {
-      return TeamsReadingState._(Map.unmodifiable({..._entraIds, from: entra}));
+      return TeamsEventTranslatorState._(
+        Map.unmodifiable({..._entraIds, from: entra}),
+      );
     }
     return this;
   }
