@@ -357,6 +357,16 @@ void main() {
       );
     });
 
+    test('a sign-in invoke, which carries a token or a code', () {
+      for (final name in ['signin/tokenExchange', 'signin/verifyState']) {
+        refused(
+          _gate({...cardAction(), 'name': name}),
+          403,
+          contains('sign-in invoke'),
+        );
+      }
+    });
+
     test('a token for none of the bots', () {
       final t = signedToken(claims: {...tokenClaims(), 'aud': otherAppId});
       refused(_gate(message(), token: t), 401, contains('none of these bots'));

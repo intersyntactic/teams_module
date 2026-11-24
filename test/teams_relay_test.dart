@@ -233,11 +233,30 @@ void main() {
     });
   });
 
-  test('refuses a bad token with 401, recording nothing', () async {
-    expect((await post(message(), token: 'not.a.token')).$1, 401);
-    expect(logbook.recorded, isEmpty);
-    expect(logged.single, contains('401'));
-  });
+  test(
+    'refuses a bad token with 401, recording nothing, and logs why',
+    () async {
+      expect((await post(message(), token: 'not.a.token')).$1, 401);
+      expect(logbook.recorded, isEmpty);
+      expect(logged.single, allOf(contains('401'), contains('token: ')));
+    },
+  );
+
+  test(
+    'refuses a sign-in invoke, so no token or code is ever recorded',
+    () async {
+      for (final name in ['signin/tokenExchange', 'signin/verifyState']) {
+        final invoke = {
+          ...cardAction(),
+          'name': name,
+          'value': {'id': 'x', 'token': 'eyJ.a.user.token'},
+        };
+        expect((await post(invoke)).$1, 403, reason: name);
+      }
+      expect(logbook.recorded, isEmpty);
+      expect(logged.join('\n'), isNot(contains('eyJ')));
+    },
+  );
 
   test('refuses an activity from a tenant not allowed with 403', () async {
     final elsewhere = {

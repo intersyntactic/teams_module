@@ -11,14 +11,17 @@ package pin that tag.
   `recordEvent` and `RecordAnswer` are gone; serving, the 12-second budget,
   the body read, the write and the bound on writes (600 a minute, 60 at
   once) are is_relay's.
-- Every authentic activity is recorded, typing, reactions and every invoke
+- Every authentic activity is recorded, typing, reactions and invokes
   included, and the translator admits nothing for those it reads no event
-  from. An invoke's response goes out only once it is recorded: with the
+  from. A sign-in invoke (`signin/*`) is refused with a 403 instead: it
+  carries the person's access token or a sign-in code, which must never
+  be recorded, and this bot asks no one to sign in. An invoke's response goes out only once it is recorded: with the
   logbook down, opening the call settings gets a 503 and no dialog.
 - A logbook that doesn't record is a 503 (it was a 500).
 - `BotFrameworkKeySource.keys()` is `current()`, which never waits: a
   request that arrives before any keys have is refused with a 503, and a
-  refresh starts behind it. `refresh()` fetches, for the relay's boot.
+  refresh starts behind it, at most once every `retryAfter` (a minute)
+  after a failed fetch. `refresh()` fetches, for the relay's boot.
 - `LOGBOOK_SOCKET` must be an absolute path.
 
 ## 0.0.8

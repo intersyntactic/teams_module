@@ -344,6 +344,13 @@ TeamsGateDecision _decide(
   final name = a.stringOrNull('name');
   // wire-ok: Teams' activity type, an open set; read once here.
   final isInvoke = type == 'invoke';
+  // A sign-in invoke carries the person's access token or a sign-in code,
+  // and the relay records what the gate takes, for good. This bot asks no
+  // one to sign in, so it takes none of them.
+  // wire-ok: Teams' invoke names, an open set; this prefix is all of sign-in.
+  if (isInvoke && (name?.startsWith('signin/') ?? false)) {
+    return TeamsGateDecision._reject(403, 'sign-in invoke $name not taken');
+  }
   final wakes = isInvoke
       ? spec.wakeInvokes.contains(name)
       : spec.wakeActivityTypes.contains(type);

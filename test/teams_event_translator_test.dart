@@ -508,7 +508,7 @@ void main() {
           ],
         }..remove('text'),
         {...cardAction(), 'name': 'composeExtension/fetchTask'},
-        {...cardAction(), 'name': 'signin/verifyState'},
+        {...cardAction(), 'name': 'task/fetch'},
       ]);
       expect(translated, everyElement(isA<NothingToAdmit>()));
     });
