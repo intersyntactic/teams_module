@@ -3,6 +3,24 @@
 Each version is tagged `vX.Y.Z` on main, and the services that use this
 package pin that tag.
 
+## 0.0.8
+
+- The relay keeps no seen set, so a 200 always means recorded. A copy Teams
+  re-sent while the first was still being recorded used to get a 200
+  unrecorded; if the first copy's record then failed, the event was lost.
+  Every copy is now recorded, and the docking station decides each event
+  once. The gate's `hasSeen` and `TeamsGateDecision.seenKey` are gone with
+  it, and `TeamsRelay`'s `seenFor` and `seenMax`.
+- A chunked body over the cap no longer crashes the relay. Reading it
+  stopped by cancelling the body, after which the refusal's `detachSocket`
+  threw an `Error` the relay didn't catch. The body is now paused, not
+  cancelled. A body cut short is a 400.
+- One budget per request, 12 seconds by default, covers the keys, the body
+  and the record, inside Teams' 15. `TeamsRelay.bodyTimeout` is
+  `TeamsRelay.budget`, and `record` is given what is left of it:
+  `record(body, within)`, which the relay passes to `recordEvent`'s
+  `timeout`. It used to be 10 seconds for the body plus 10 for the record.
+
 ## 0.0.7
 
 - The way out is a drawing: translators bring things in, drawings take

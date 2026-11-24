@@ -18,14 +18,18 @@ void main() {
   late bool keysServed;
   late List<Uint8List> recorded;
 
+  /// The time each record was given.
+  late List<Duration> given;
+
   /// What the logbook answers next, the body already handed over.
-  late RecordAnswer Function() answer;
+  late FutureOr<RecordAnswer> Function() answer;
 
   setUp(() async {
     events = [];
     logged = [];
     keysServed = true;
     recorded = [];
+    given = [];
     answer = () => const Recorded('ab12');
     final relay = TeamsRelay(
       spec: TeamsSourceSpec(botAppIds: {appBot}, tenantAllowlist: {tenant}),
@@ -38,14 +42,15 @@ void main() {
         now: () => now,
       ),
       onEvent: (event) async => events.add(event),
-      record: (body) async {
+      record: (body, within) async {
         recorded.add(body);
+        given.add(within);
         return answer();
       },
       now: () => now,
       log: logged.add,
       maxBodyBytes: 64 * 1024,
-      bodyTimeout: const Duration(milliseconds: 300),
+      budget: const Duration(milliseconds: 300),
     );
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     server.listen(relay.handle);
@@ -98,16 +103,14 @@ void main() {
     expect(events.single, isA<TeamsCardAction>());
   });
 
-  test(
-    'responds to a re-sent card action the same, and hands it on once',
-    () async {
-      final (_, first, _) = await post(cardAction());
-      final (status, again, _) = await post(cardAction());
-      expect(status, 200);
-      expect(again, first);
-      expect(events, hasLength(1));
-    },
-  );
+  test('responds to a re-sent card action the same, and hands each copy on: '
+      'the docking station decides it once', () async {
+    final (_, first, _) = await post(cardAction());
+    final (status, again, _) = await post(cardAction());
+    expect(status, 200);
+    expect(again, first);
+    expect(events, hasLength(2));
+  });
 
   test('refuses a bad token with a bare 401 and no event', () async {
     final (status, body, _) = await post(message(), token: 'not.a.token');
@@ -193,6 +196,58 @@ void main() {
     expect(recorded, isEmpty);
   });
 
+  /// Sends the head of a POST with [head] as its body's framing, then
+  /// [body], and returns the response head, or null when the relay drops
+  /// the connection without one.
+  Future<String?> raw(String head, List<int> body, {bool end = false}) async {
+    final socket = await Socket.connect('127.0.0.1', server.port);
+    addTearDown(socket.destroy);
+    socket.write(
+      'POST ${TeamsRelay.path} HTTP/1.1\r\n'
+      'Host: 127.0.0.1\r\n'
+      'Authorization: Bearer ${signedToken()}\r\n'
+      'Content-Type: application/json\r\n'
+      '$head\r\n'
+      '\r\n',
+    );
+    final response = utf8.decoder.bind(socket).join();
+    try {
+      socket.add(body);
+      await socket.flush();
+      if (end) await socket.close();
+    } on SocketException {
+      // The relay has refused and closed; the rest has nowhere to go.
+    }
+    final text = await response.timeout(const Duration(seconds: 5));
+    return text.isEmpty ? null : text;
+  }
+
+  test('refuses a chunked body once it passes the cap', () async {
+    // No content-length to refuse at the door, so the cap is met while
+    // reading, and the refusal still drops the connection.
+    final chunk = List.filled(16 * 1024, 0x20);
+    final chunks = [
+      for (var i = 0; i < 5; i++) ...[
+        ...ascii.encode('${chunk.length.toRadixString(16)}\r\n'),
+        ...chunk,
+        ...ascii.encode('\r\n'),
+      ],
+    ];
+    final response = await raw('Transfer-Encoding: chunked', chunks);
+    expect(response, startsWith('HTTP/1.1 413'));
+    expect(response!.toLowerCase(), contains('connection: close'));
+    expect(events, isEmpty);
+    expect(recorded, isEmpty);
+  });
+
+  test('a body cut short is refused, recorded nowhere', () async {
+    // Ten bytes promised, two sent, then the sender closes its side.
+    await raw('Content-Length: 10', utf8.encode('{}'), end: true);
+    expect(events, isEmpty);
+    expect(recorded, isEmpty);
+    expect(logged.single, startsWith('teams relay: 400'));
+  });
+
   test('says "try again" while it has no keys', () async {
     keysServed = false;
     expect((await post(message())).$1, 503);
@@ -215,10 +270,47 @@ void main() {
       expect(recorded, isEmpty);
     });
 
-    test('records a repeat once', () async {
-      await post(message());
-      await post(message());
-      expect(recorded, hasLength(1));
+    test('a record gets what is left of the budget, and one that never '
+        'answers is a 500 inside it', () async {
+      answer = () => Completer<RecordAnswer>().future;
+      final sent = DateTime.now();
+      final (status, _, _) = await post(message());
+      expect(status, 500);
+      expect(
+        DateTime.now().difference(sent),
+        lessThan(const Duration(seconds: 1)),
+      );
+      expect(given.single, lessThan(const Duration(milliseconds: 300)));
+      expect(given.single, greaterThan(Duration.zero));
+      expect(logged.single, contains('not recorded: no answer within'));
+      expect(events, isEmpty);
+    });
+
+    test(
+      'records a repeat again: the docking station drops the copy',
+      () async {
+        await post(message());
+        await post(message());
+        expect(recorded, hasLength(2));
+      },
+    );
+
+    test('a resend that arrives while the first copy is being recorded is '
+        'recorded itself, so a 200 always means recorded', () async {
+      final first = Completer<RecordAnswer>();
+      final answers = [() => first.future, () async => const Recorded('cd34')];
+      answer = () => answers.removeAt(0)();
+      final firstPost = post(message());
+      while (recorded.isEmpty) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      final (resendStatus, _, _) = await post(message());
+      first.complete(const RecordUnanswered('socket: refused'));
+      final (firstStatus, _, _) = await firstPost;
+      expect(firstStatus, 500);
+      expect(resendStatus, 200);
+      expect(recorded, hasLength(2));
+      expect(events, hasLength(1));
     });
 
     test('records nothing it does not hand on', () async {

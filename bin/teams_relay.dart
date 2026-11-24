@@ -128,8 +128,12 @@ Future<void> main() async {
       },
     ),
     keys: keys,
-    record: (body) =>
-        recordEvent(logbookSocket, source: teamsEventSource, bytes: body),
+    record: (body, within) => recordEvent(
+      logbookSocket,
+      source: teamsEventSource,
+      bytes: body,
+      timeout: within,
+    ),
   );
   final server = await HttpServer.bind(address, port);
   stdout.writeln('teams relay listening on ${address.address}:${server.port}');

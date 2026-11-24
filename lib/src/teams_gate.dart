@@ -1,8 +1,7 @@
 /// Decides whether an inbound Teams delivery is authentic, and what the relay
 /// should do with it.
 ///
-/// It is pure: the key set and the seen set are the caller's, so every case
-/// is testable without a clock, a socket, or Microsoft. Four things about it
+/// It is pure: the key set is the caller's, so every case is testable without a clock, a socket, or Microsoft. Four things about it
 /// are forced by Teams:
 ///
 /// 1. AUTHENTICATION is a JWT that Microsoft signs with a private key and the
@@ -51,10 +50,9 @@ enum TeamsGateOutcome {
   /// [TeamsGateDecision.invokeResponse] as the body when there is one.
   trigger,
 
-  /// Authentic but not for waking anyone: a quiet activity type, or one
-  /// already seen. Respond with 200, still with
-  /// [TeamsGateDecision.invokeResponse] as the body when there is one, since
-  /// a re-sent card action wants the same response the first one got.
+  /// Authentic but not for waking anyone: a quiet activity type. Respond
+  /// with 200, still with [TeamsGateDecision.invokeResponse] as the body
+  /// when there is one.
   ignore,
 
   /// Refused. Respond with [TeamsGateDecision.status] and never say why in
@@ -69,7 +67,6 @@ final class TeamsGateDecision {
     this.status = 200,
     this.event,
     this.invokeResponse,
-    this.seenKey,
   });
 
   const TeamsGateDecision._reject(int status, String reason)
@@ -94,18 +91,9 @@ final class TeamsGateDecision {
   /// showing the person anything, and the agent is too far away to respond
   /// in time, so the gate responds with a fixed body: an acknowledgement
   /// for a card action, which the agent edits afterwards, or the invoke's
-  /// entry in [TeamsSourceSpec.invokeResponses]. Present for either, seen
-  /// or not.
+  /// entry in [TeamsSourceSpec.invokeResponses]. The same for every copy
+  /// of one invoke Teams sends.
   final JsonObject? invokeResponse;
-
-  /// What the caller adds to its seen set: the conversation id, the
-  /// activity's type, its id and its timestamp, as a JSON list so no part
-  /// can run into the next. The id alone is not enough: an edit, delete or
-  /// restore of a message carries the message's id, and each has its own
-  /// type or time (measured 16 Nov: a delete 18 s after an edit was dropped
-  /// as a repeat). Present on every outcome except a rejection, so an
-  /// unauthenticated request never fills the set.
-  final String? seenKey;
 
   bool get shouldWake => outcome == TeamsGateOutcome.trigger;
 }
@@ -205,7 +193,6 @@ TeamsGateDecision teamsGate({
   required Map<String, String> headers,
   required List<int> body,
   required DateTime now,
-  bool Function(String seenKey)? hasSeen,
   Duration maxClockSkew = const Duration(minutes: 5),
   int maxBodyBytes = 1024 * 1024,
 }) => switch (teamsToken(
@@ -220,7 +207,6 @@ TeamsGateDecision teamsGate({
     spec: spec,
     token: token,
     body: body,
-    hasSeen: hasSeen,
     maxBodyBytes: maxBodyBytes,
   ),
 };
@@ -276,7 +262,6 @@ TeamsGateDecision teamsGateBody({
   required TeamsSourceSpec spec,
   required TeamsToken token,
   required List<int> body,
-  bool Function(String seenKey)? hasSeen,
   int maxBodyBytes = 1024 * 1024,
 }) {
   if (body.length > maxBodyBytes) {
@@ -289,7 +274,7 @@ TeamsGateDecision teamsGateBody({
     return const TeamsGateDecision._reject(400, 'body is not a JSON object');
   }
   try {
-    return _decide(spec, activity, token, hasSeen);
+    return _decide(spec, activity, token);
   } on FormatException catch (e) {
     return TeamsGateDecision._reject(400, 'activity: ${e.message}');
   }
@@ -299,7 +284,6 @@ TeamsGateDecision _decide(
   TeamsSourceSpec spec,
   JsonObject a,
   TeamsToken token,
-  bool Function(String seenKey)? hasSeen,
 ) {
   final TeamsToken(_claims: claims, _key: key) = token;
   // The endorsement is what makes channelId trustworthy: a key Microsoft
@@ -360,12 +344,6 @@ TeamsGateDecision _decide(
   final name = a.stringOrNull('name');
   // wire-ok: Teams' activity type, an open set; read once here.
   final isInvoke = type == 'invoke';
-  final seenKey = jsonEncode([
-    conversation.string('id'),
-    type,
-    a.string('id'),
-    a.stringOrNull('timestamp'),
-  ]);
   final wakes = isInvoke
       ? spec.wakeInvokes.contains(name)
       : spec.wakeActivityTypes.contains(type);
@@ -381,25 +359,15 @@ TeamsGateDecision _decide(
                   })
                 : null);
 
-  if (hasSeen?.call(seenKey) ?? false) {
-    return TeamsGateDecision._(
-      TeamsGateOutcome.ignore,
-      'activity already seen',
-      invokeResponse: invokeResponse,
-      seenKey: seenKey,
-    );
-  }
   if (!wakes) {
-    return TeamsGateDecision._(
-      TeamsGateOutcome.ignore,
-      switch ((isInvoke, invokeResponse)) {
-        (false, _) => 'quiet activity $type',
-        (true, null) => 'quiet invoke $name',
-        (true, _) => 'answered invoke $name',
-      },
-      invokeResponse: invokeResponse,
-      seenKey: seenKey,
-    );
+    return TeamsGateDecision._(TeamsGateOutcome.ignore, switch ((
+      isInvoke,
+      invokeResponse,
+    )) {
+      (false, _) => 'quiet activity $type',
+      (true, null) => 'quiet invoke $name',
+      (true, _) => 'answered invoke $name',
+    }, invokeResponse: invokeResponse);
   }
   final event = _read(a, type, name, tenant, conversation);
   if (event == null) {
@@ -407,7 +375,6 @@ TeamsGateDecision _decide(
       TeamsGateOutcome.ignore,
       'no event is read from $type',
       invokeResponse: invokeResponse,
-      seenKey: seenKey,
     );
   }
   return TeamsGateDecision._(
@@ -415,7 +382,6 @@ TeamsGateDecision _decide(
     isInvoke ? 'invoke $name' : type,
     event: event,
     invokeResponse: invokeResponse,
-    seenKey: seenKey,
   );
 }
 
@@ -428,10 +394,12 @@ TeamsGateDecision _decide(
 /// read an event from, so this is for reading those back, never for anything
 /// that came any other way.
 ///
-/// The same activity can be recorded more than once, as two events with one
-/// activity: the relay forgets what it has seen when it restarts, and a
-/// recording that failed is retried. Act on one per [TeamsEvent.conversation]
-/// and [TeamsEvent.id].
+/// The same activity can be recorded more than once: Teams sends again when
+/// it has no 200 in time, and the relay records every copy. Two records are
+/// one activity when their conversation, activity type, id and timestamp
+/// all match. Conversation, type and id are enough to tell a message, a
+/// join or a card press from another; an edit or a delete carries its
+/// message's id, so telling it apart takes the timestamp too.
 ///
 /// Null for an activity type no event is read as. Throws a
 /// [FormatException] for a body that isn't an activity, which a recorded

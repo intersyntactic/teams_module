@@ -11,10 +11,10 @@ or approval plugs into this one rather than speaking Teams itself.
 ```
 Teams ──POST (Bot Framework JWT)──▶ Teams relay ──event, with content────▶ receiver
                                      │  checks the token against            │  writes nodes,
-                                     │  Microsoft's public keys; responds   │  feeds the mission
-                                     │  a card action with "Got it"         ▼
-                                     │  at once; drops repeats       Bot Connector REST
-                                     │  by activity id               (posts and edits cards)
+                                     │  Microsoft's public keys; records    │  feeds the mission
+                                     │  the body, then responds; a card     ▼
+                                     │  action gets "Got it"         Bot Connector REST
+                                     │                               (posts and edits cards)
 ```
 
 Three things about it are forced by Teams:
@@ -25,8 +25,10 @@ Three things about it are forced by Teams:
 - **An event carries the message and what was submitted.** A card
   submission exists nowhere but the request that delivers it, and the bot
   can't read a chat back, so there is nothing to fetch later.
-- **Repeats are dropped by activity id.** Teams re-sends anything it gets
-  no response to within 15 seconds, so duplicates are ordinary traffic.
+- **Repeats are ordinary traffic.** Teams re-sends anything it gets no
+  response to within 15 seconds. The relay records every copy and responds
+  200 only to a copy it recorded, inside 12 seconds; the docking station
+  decides each event once, by the reading's key.
 
 v1 mirrors what is addressed to the bot: card actions, form submissions and
 @-mentions, which in a one-to-one chat is every message. It asks for no Graph

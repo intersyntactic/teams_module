@@ -16,15 +16,6 @@ void main() {
       expect(d.outcome, TeamsGateOutcome.trigger);
       expect(d.status, 200);
       expect(d.invokeResponse, isNull);
-      expect(
-        d.seenKey,
-        jsonEncode([
-          'a:1personal',
-          'message',
-          '1730881234567',
-          '2026-11-06T10:00:00.000Z',
-        ]),
-      );
       final said = d.event! as TeamsMessage;
       expect(said.tenant, tenant);
       expect(said.conversation, 'a:1personal');
@@ -262,12 +253,11 @@ void main() {
   });
 
   group('ignores', () {
-    test('a quiet activity type, but still marks it seen', () {
+    test('a quiet activity type', () {
       final d = _gate({...message(), 'type': 'typing'}..remove('text'));
       expect(d.outcome, TeamsGateOutcome.ignore);
       expect(d.status, 200);
       expect(d.event, isNull);
-      expect(d.seenKey, isNotNull);
     });
 
     test('a type it was told to wake on that no event is read as', () {
@@ -282,7 +272,6 @@ void main() {
       expect(d.outcome, TeamsGateOutcome.ignore);
       expect(d.reason, 'no event is read from typing');
       expect(d.event, isNull);
-      expect(d.seenKey, isNotNull);
     });
 
     test('an invoke it was not built for, with no response to give', () {
@@ -321,31 +310,16 @@ void main() {
         },
       });
       // Teams re-sends what it got no response to; the retry gets the same.
-      final again = _gate(fetch, spec: spec, hasSeen: {d.seenKey!}.contains);
-      expect(again.invokeResponse, isNotNull);
+      expect(
+        _gate(fetch, spec: spec).invokeResponse!.asUncheckedMap(),
+        d.invokeResponse!.asUncheckedMap(),
+      );
     });
+  });
 
-    test('an activity already seen', () {
-      final seen = <String>{};
-      final first = _gate(message(), hasSeen: seen.contains);
-      seen.add(first.seenKey!);
-      final again = _gate(message(), hasSeen: seen.contains);
-      expect(again.outcome, TeamsGateOutcome.ignore);
-      expect(again.event, isNull);
-    });
-
-    test('a card action re-sent, still responded to as the first was', () {
-      final seen = {_gate(cardAction()).seenKey!};
-      final again = _gate(cardAction(), hasSeen: seen.contains);
-      expect(again.outcome, TeamsGateOutcome.ignore);
-      expect(again.invokeResponse!.string('value'), 'Got it');
-    });
-
-    // Measured 16 Nov: an edit, then a delete 18 s later and its undo 2 s
-    // after that, all carrying the message's id. The delete and the undo
-    // were dropped as repeats of the edit.
-    test('a change to a message seen moments ago is not a repeat', () {
-      final seen = <String>{};
+  group('takes each of', () {
+    // An edit, a delete and its undo all carry the message's id.
+    test('a message, its edit, its delete and the undo', () {
       for (final (type, eventType, at) in [
         ('message', null, '2026-11-16T02:19:00.000Z'),
         ('messageUpdate', 'editMessage', '2026-11-16T02:19:49.762Z'),
@@ -360,22 +334,9 @@ void main() {
             'tenant': {'id': tenant},
             'eventType': ?eventType,
           },
-        }, hasSeen: seen.contains);
+        });
         expect(d.outcome, TeamsGateOutcome.trigger, reason: '$type at $at');
-        seen.add(d.seenKey!);
       }
-    });
-
-    test('the same activity id in another conversation is not a repeat', () {
-      final seen = {_gate(message()).seenKey!};
-      final elsewhere = {
-        ...message(),
-        'conversation': {'id': '19:group@thread.v2', 'tenantId': tenant},
-      };
-      expect(
-        _gate(elsewhere, hasSeen: seen.contains).outcome,
-        TeamsGateOutcome.trigger,
-      );
     });
   });
 
@@ -386,8 +347,6 @@ void main() {
       expect(d.reason, reason);
       expect(d.event, isNull);
       expect(d.invokeResponse, isNull);
-      // An unauthenticated request never reaches the seen set.
-      expect(d.seenKey, isNull);
     }
 
     test('when no app id is configured', () {
@@ -761,7 +720,6 @@ TeamsGateDecision _gate(
   String? token,
   Map<String, String>? headers,
   TeamsSourceSpec? spec,
-  bool Function(String)? hasSeen,
   List<int>? body,
 }) => teamsGate(
   spec: spec ?? TeamsSourceSpec(botAppIds: {appBot}, tenantAllowlist: {tenant}),
@@ -769,5 +727,4 @@ TeamsGateDecision _gate(
   headers: headers ?? {'Authorization': 'Bearer ${token ?? signedToken()}'},
   body: body ?? utf8.encode(jsonEncode(activity)),
   now: now,
-  hasSeen: hasSeen,
 );

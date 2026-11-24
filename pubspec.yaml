@@ -2,7 +2,7 @@ name: is_teams_module
 description: >-
   The Teams module for intersyntactic: what people say and press in
   Microsoft Teams, taken in as nodes on a trajectory.
-version: 0.0.7
+version: 0.0.8
 repository: https://github.com/intersyntactic/teams_module
 publish_to: none
 
