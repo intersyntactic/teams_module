@@ -26,9 +26,11 @@ Three things about it are forced by Teams:
   submission exists nowhere but the request that delivers it, and the bot
   can't read a chat back, so there is nothing to fetch later.
 - **Repeats are ordinary traffic.** Teams re-sends anything it gets no
-  response to within 15 seconds. The relay records every copy and responds
-  200 only to a copy it recorded, inside 12 seconds; the docking station
-  decides each event once, by the reading's key.
+  response to within 15 seconds. The relay records every authentic copy,
+  whatever its type, and responds 200 only to a copy it recorded, inside
+  12 seconds; the docking station decides each event once, by the
+  reading's key. The serving and recording are is_relay's `RelayServer`;
+  the Teams check is `TeamsDeliveryCheck`.
 
 v1 mirrors what is addressed to the bot: card actions, form submissions and
 @-mentions, which in a one-to-one chat is every message. It asks for no Graph

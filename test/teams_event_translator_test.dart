@@ -494,6 +494,25 @@ void main() {
       expect(r, isA<NothingToAdmit>());
     });
 
+    // The relay records every authentic activity, so these reach the
+    // translator too.
+    test('typing, a reaction, and an invoke nothing is read from', () {
+      final (_, translated) = fold([
+        {...message(), 'type': 'typing'}..remove('text'),
+        {
+          ...message(),
+          'type': 'messageReaction',
+          'replyToId': '1730881234567',
+          'reactionsAdded': [
+            {'type': 'like'},
+          ],
+        }..remove('text'),
+        {...cardAction(), 'name': 'composeExtension/fetchTask'},
+        {...cardAction(), 'name': 'signin/verifyState'},
+      ]);
+      expect(translated, everyElement(isA<NothingToAdmit>()));
+    });
+
     test('bytes that are not an activity, with the state left as it was', () {
       const translator = TeamsEventTranslator();
       final (state, r) = translator.step(

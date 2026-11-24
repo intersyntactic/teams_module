@@ -4,8 +4,9 @@
 /// Microsoft asks a bot to refresh its copy "at least once every 24 hours".
 /// This refreshes every [BotFrameworkKeySource.maxAge] (12 hours by default)
 /// without making anyone wait: a request that finds the keys old is checked
-/// against them while the refresh runs, and only the first request, before
-/// any keys have arrived, waits for the fetch.
+/// against them while the refresh runs behind it. No request ever waits on
+/// a fetch; one that arrives before any keys have is refused, and the relay
+/// fetches once at boot.
 library;
 
 import 'dart:async';
@@ -52,19 +53,23 @@ final class BotFrameworkKeySource {
   DateTime? _failedAt;
   Future<void>? _refreshing;
 
-  /// The keys to check a token against, or null when none have arrived. A
-  /// set older than [maxAge] is returned and refreshed behind it.
-  Future<BotFrameworkKeys?> keys() async {
+  /// The keys to check a token against now, or null when none have
+  /// arrived. When the set is older than [maxAge], or there is none and the
+  /// last failure is older than [retryAfter], a refresh starts behind it;
+  /// nothing waits on it.
+  BotFrameworkKeys? current() {
     final now = _now();
     final fresh = _fetchedAt != null && now.difference(_fetchedAt!) < maxAge;
     final waiting =
         _failedAt != null && now.difference(_failedAt!) < retryAfter;
-    if (!fresh && !waiting) {
-      final refresh = _refreshing ??= _refresh().whenComplete(
-        () => _refreshing = null,
-      );
-      if (_keys == null) await refresh;
-    }
+    if (!fresh && !waiting) unawaited(refresh());
+    return _keys;
+  }
+
+  /// Fetches the keys, or joins the fetch already running, and returns the
+  /// set it leaves: for the relay's boot, before it takes requests.
+  Future<BotFrameworkKeys?> refresh() async {
+    await (_refreshing ??= _refresh().whenComplete(() => _refreshing = null));
     return _keys;
   }
 

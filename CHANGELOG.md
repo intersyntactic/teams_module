@@ -3,6 +3,24 @@
 Each version is tagged `vX.Y.Z` on main, and the services that use this
 package pin that tag.
 
+## 0.0.9
+
+- The Teams relay runs on is_relay 0.1.0's `RelayServer`. Teams' part is
+  `TeamsDeliveryCheck`, a `ChecksDeliveries<TeamsToken>`: `checkHeaders` is
+  `teamsToken`, `checkBody` is `teamsGateBody`. `TeamsRelay`,
+  `recordEvent` and `RecordAnswer` are gone; serving, the 12-second budget,
+  the body read, the write and the bound on writes (600 a minute, 60 at
+  once) are is_relay's.
+- Every authentic activity is recorded, typing, reactions and every invoke
+  included, and the translator admits nothing for those it reads no event
+  from. An invoke's response goes out only once it is recorded: with the
+  logbook down, opening the call settings gets a 503 and no dialog.
+- A logbook that doesn't record is a 503 (it was a 500).
+- `BotFrameworkKeySource.keys()` is `current()`, which never waits: a
+  request that arrives before any keys have is refused with a 503, and a
+  refresh starts behind it. `refresh()` fetches, for the relay's boot.
+- `LOGBOOK_SOCKET` must be an absolute path.
+
 ## 0.0.8
 
 - The relay keeps no seen set, so a 200 always means recorded. A copy Teams
