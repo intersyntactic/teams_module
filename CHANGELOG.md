@@ -20,6 +20,10 @@ package pin that tag.
   `TeamsRelay.budget`, and `record` is given what is left of it:
   `record(body, within)`, which the relay passes to `recordEvent`'s
   `timeout`. It used to be 10 seconds for the body plus 10 for the record.
+- is_effects ^0.14.3, so the relay and `teams-reply-drawing` build at the
+  same versions as the is_flight_rules 0.6.0 window. Its
+  `decodeAddressPrefix` refuses a `--reply-endpoint` with keys other than
+  `origin` and `pathPrefix`.
 
 ## 0.0.7
 
