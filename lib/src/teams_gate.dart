@@ -390,9 +390,9 @@ TeamsGateDecision _decide(
 ///
 /// It trusts that [body] passed [teamsGate] before it was recorded, and
 /// checks none of that again: not the token, its `serviceurl` claim, the
-/// channel, nor the tenant allowlist. The relay records only bodies the gate
-/// read an event from, so this is for reading those back, never for anything
-/// that came any other way.
+/// channel, nor the tenant allowlist. The relay records every body the gate
+/// takes, whether or not an event is read from it, so this is for reading
+/// those back, never for anything that came any other way.
 ///
 /// The same activity can be recorded more than once: Teams sends again when
 /// it has no 200 in time, and the relay records every copy. Two records are

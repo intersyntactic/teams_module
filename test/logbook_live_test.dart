@@ -1,12 +1,14 @@
 /// The relay against a real logbook writer, skipped unless asked for:
 ///
-///     LOGBOOK_LIVE=/abs/dir/holding/j.sock \
+///     LOGBOOK_LIVE=/abs/path/to/j.sock \
 ///     LOGBOOK_LIVE_EXPECT=recorded|unrecorded \
 ///       dart test test/logbook_live_test.dart
 ///
 /// It posts one signed message through is_relay's `RelayServer` with
 /// [TeamsDeliveryCheck], and prints the status Teams would get and the
-/// relay's log line, which says what the writer answered.
+/// relay's log line, which says what the writer answered. The path must be
+/// absolute, and macOS caps a socket's path at 104 bytes, so put the writer's
+/// socket somewhere short, such as /tmp/j.sock.
 library;
 
 import 'dart:convert';

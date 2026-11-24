@@ -119,18 +119,25 @@ void main() {
     await logbook.stop();
   });
 
-  Future<(int, String)> post(Object? activity, {String? token}) async {
+  Future<(int, String, ContentType?)> post(
+    Object? activity, {
+    String? token,
+  }) async {
     final req = await client.post('127.0.0.1', server.port, '/api/messages');
     req.headers.set('authorization', 'Bearer ${token ?? signedToken()}');
     req.headers.contentType = ContentType.json;
     req.add(utf8.encode(jsonEncode(activity)));
     final res = await req.close();
-    return (res.statusCode, await res.transform(utf8.decoder).join());
+    return (
+      res.statusCode,
+      await res.transform(utf8.decoder).join(),
+      res.headers.contentType,
+    );
   }
 
   test('records a message as a teams-event, byte for byte, then 200', () async {
     final bytes = utf8.encode(jsonEncode(message()));
-    final (status, body) = await post(message());
+    final (status, body, _) = await post(message());
     expect(status, 200);
     expect(body, isEmpty);
     final (kind, entry) = encodeRelayedEvent(
@@ -144,8 +151,9 @@ void main() {
   });
 
   test('answers a card press with the acknowledgement once recorded', () async {
-    final (status, body) = await post(cardAction());
+    final (status, body, type) = await post(cardAction());
     expect(status, 200);
+    expect(type?.mimeType, 'application/json');
     expect(jsonDecode(body), {
       'statusCode': 200,
       'type': 'application/vnd.microsoft.activity.message',
@@ -160,7 +168,7 @@ void main() {
       200,
     );
     final fetch = {...cardAction(), 'name': 'composeExtension/fetchTask'};
-    final (status, body) = await post(fetch);
+    final (status, body, _) = await post(fetch);
     expect(status, 200);
     expect(jsonDecode(body), dialog.asUncheckedMap());
     expect(logbook.recorded, hasLength(2));
@@ -175,9 +183,54 @@ void main() {
   test('with the logbook failing, answers 503 and no dialog', () async {
     logbook.answer = _Answer.failed;
     final fetch = {...cardAction(), 'name': 'composeExtension/fetchTask'};
-    final (status, body) = await post(fetch);
+    final (status, body, _) = await post(fetch);
     expect(status, 503);
     expect(body, isEmpty);
+  });
+
+  test('logs the reason, never the text', () async {
+    await post(message(text: 'a sentence that must not be logged'));
+    expect(logged, isNotEmpty);
+    expect(logged.join('\n'), isNot(contains('must not be logged')));
+  });
+
+  group('the check alone', () {
+    TeamsDeliveryCheck check() => TeamsDeliveryCheck(
+      spec: TeamsSourceSpec(botAppIds: {appBot}, tenantAllowlist: {tenant}),
+      keys: keys,
+    );
+
+    TeamsToken vouched() => switch (check().checkHeaders(
+      DeliveryHeaders({'Authorization': 'Bearer ${signedToken()}'}),
+      now,
+    )) {
+      HeadersVouch(:final vouched) => vouched,
+      final other => fail('headers not vouched for: $other'),
+    };
+
+    // The gate's own refusals, each as the status is_relay answers with.
+    test('refuses a body over the cap as too large', () {
+      final big = Uint8List(1024 * 1024 + 1);
+      expect(
+        check().checkBody(vouched(), big),
+        isA<Refuse>().having(
+          (r) => r.status,
+          'status',
+          RefusalStatus.payloadTooLarge,
+        ),
+      );
+    });
+
+    test('refuses a body that is not an activity as a bad request', () {
+      expect(
+        check().checkBody(vouched(), utf8.encode('not json')),
+        isA<Refuse>().having(
+          (r) => r.status,
+          'status',
+          RefusalStatus.badRequest,
+        ),
+      );
+    });
   });
 
   test('refuses a bad token with 401, recording nothing', () async {

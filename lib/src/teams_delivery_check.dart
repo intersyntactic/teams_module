@@ -64,9 +64,13 @@ final class TeamsDeliveryCheck implements ChecksDeliveries<TeamsToken> {
     };
   }
 
-  /// The gate refuses with 400, 401, 403 or 413.
-  static RefusalStatus _refusal(int status) => RefusalStatus.values.firstWhere(
-    (s) => s.code == status,
-    orElse: () => RefusalStatus.badRequest,
-  );
+  /// The gate refuses with 400, 401, 403 or 413. Any other is a bug here,
+  /// answered 500 so Teams sends the activity again.
+  static RefusalStatus _refusal(int status) => switch (status) {
+    400 => RefusalStatus.badRequest,
+    401 => RefusalStatus.unauthorized,
+    403 => RefusalStatus.forbidden,
+    413 => RefusalStatus.payloadTooLarge,
+    _ => RefusalStatus.internalServerError,
+  };
 }

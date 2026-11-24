@@ -104,7 +104,9 @@ Future<void> main() async {
   if (logbook == null) {
     // A relay that can't record what arrives must not respond 200 to it.
     stderr.writeln(
-      'abort: LOGBOOK_SOCKET "$rawLogbook" is not an absolute path',
+      rawLogbook.isEmpty
+          ? 'abort: LOGBOOK_SOCKET not set'
+          : 'abort: LOGBOOK_SOCKET "$rawLogbook" is not an absolute path',
     );
     exit(78);
   }
