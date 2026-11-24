@@ -3,6 +3,15 @@
 Each version is tagged `vX.Y.Z` on main, and the services that use this
 package pin that tag.
 
+## 0.0.9
+
+- On is_docking_station_api ^0.5.0, where a reply endpoint is the sealed
+  `ReplyEndpoint`. The translator gives Teams' as
+  `RepliesUnderWebAddress(teamsReplyEndpoint(...))`: the Bot Connector
+  takes a reply under a web address that names the conversation.
+  `teams-reply-drawing`'s `--reply-endpoint` is unchanged, still the
+  address prefix itself.
+
 ## 0.0.8
 
 - The relay keeps no seen set, so a 200 always means recorded. A copy Teams

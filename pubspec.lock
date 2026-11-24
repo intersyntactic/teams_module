@@ -181,10 +181,10 @@ packages:
     dependency: "direct main"
     description:
       name: is_docking_station_api
-      sha256: cf10508402a18f108db6dffe132852d2d5e3eb6fe0562aef6cddd7d039bc8c79
+      sha256: cb2c228c8f01ed8fae796a6e0626de512d0210d4659d9f566c059fdd65024392
       url: "https://pub.dev"
     source: hosted
-    version: "0.4.0"
+    version: "0.5.0"
   is_effects:
     dependency: "direct main"
     description:
