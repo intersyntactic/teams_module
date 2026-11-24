@@ -40,11 +40,12 @@ void main() {
           now: () => now,
         ),
         onEvent: (_) async {},
-        record: (body) async {
+        record: (body, within) async {
           final a = await recordEvent(
             socket,
             source: teamsEventSource,
             bytes: body,
+            timeout: within,
           );
           answers.add(a);
           return a;

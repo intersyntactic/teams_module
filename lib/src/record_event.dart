@@ -115,7 +115,7 @@ Future<RecordAnswer> recordEvent(
           : RecordAnswer.read(answer);
     }().timeout(timeout);
   } on TimeoutException {
-    return RecordUnanswered('no answer within ${timeout.inSeconds}s');
+    return RecordUnanswered('no answer within ${timeout.inMilliseconds}ms');
   } on SocketException catch (e) {
     return RecordUnanswered('socket: ${e.message}');
   } finally {
