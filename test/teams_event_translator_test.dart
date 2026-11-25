@@ -558,7 +558,7 @@ void main() {
       expect(chat, isNotNull);
       expect(
         translated.map((r) => (r as AddressedEvent).replyEndpoint),
-        everyElement(chat),
+        everyElement(RepliesUnderWebAddress(chat!)),
       );
     });
 
@@ -582,7 +582,9 @@ void main() {
       ]);
       expect(
         (r as MessageSaid).replyEndpoint,
-        teamsReplyEndpoint(Uri.parse(serviceUrl), thread),
+        RepliesUnderWebAddress(
+          teamsReplyEndpoint(Uri.parse(serviceUrl), thread)!,
+        ),
       );
     });
 
@@ -593,7 +595,9 @@ void main() {
       ]);
       expect(
         (r as MessageSaid).replyEndpoint,
-        teamsReplyEndpoint(Uri.parse(au), 'a:1personal'),
+        RepliesUnderWebAddress(
+          teamsReplyEndpoint(Uri.parse(au), 'a:1personal')!,
+        ),
       );
     });
   });

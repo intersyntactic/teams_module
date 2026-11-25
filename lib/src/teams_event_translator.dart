@@ -102,10 +102,15 @@ final class TeamsEventTranslator
     final addressedTo = teamsBotActor(event.tenant, event.bot);
     // The gate held serviceUrl to the token's `serviceurl` claim, so the
     // origin is the one Microsoft signed for; the path is the conversation.
-    final replyEndpoint = teamsReplyEndpoint(
+    // Teams' Bot Connector takes a reply under a web address that names
+    // the conversation.
+    final replyEndpoint = switch (teamsReplyEndpoint(
       event.serviceUrl,
       event.conversation,
-    );
+    )) {
+      final prefix? => RepliesUnderWebAddress(prefix),
+      null => null,
+    };
     switch (event) {
       case TeamsMessage():
         final key = EventKey.parse('message:${event.id}');
