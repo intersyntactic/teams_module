@@ -3,6 +3,13 @@
 Each version is tagged `vX.Y.Z` on main, and the services that use this
 package pin that tag.
 
+## 0.0.10
+
+- Every dependency at its newest on pub.dev, so the builds that compile
+  this package in lock the same versions: is_effects ^0.15.0 and
+  is_docking_station_api ^0.6.0 (its JSON is unchanged from 0.5.0). No code
+  change: the module names neither `Outcome.Refused` nor `ModelReply`.
+
 ## 0.0.9
 
 - On is_docking_station_api ^0.5.0, where a reply endpoint is the sealed
