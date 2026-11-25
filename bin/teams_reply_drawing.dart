@@ -30,7 +30,7 @@ import 'dart:io';
 
 import 'package:is_effects/is_effects.dart'
     show BodyToKeep, ProposedRequest, encodeProposedRequest;
-import 'package:is_reply_vocabulary/is_reply_vocabulary.dart'
+import 'package:is_conversation_reply_vocabulary/is_conversation_reply_vocabulary.dart'
     show RepliesUnderWebAddress, ReplyContent, ReplyText;
 import 'package:is_shapes/is_shapes.dart' show TrajectoryId;
 import 'package:is_sign_in_vocabulary/is_sign_in_vocabulary.dart' show SignIn;

@@ -3,6 +3,16 @@
 Each version is tagged `vX.Y.Z` on main, and the services that use this
 package pin that tag.
 
+## 0.0.13
+
+- The reply types (`RepliesUnderWebAddress`, `ReplyContent`, `ReplyText`,
+  `ServerAssignedMessageId`) come from is_conversation_reply_vocabulary
+  ^0.1.0. is_docking_station_api ^0.8.0 no longer re-exports them, and
+  is_reply_requests_api ^0.2.0 uses them, so the module and everything it
+  hands a reply endpoint to share one `ReplyEndpoint`. is_reply_vocabulary
+  is gone. No behaviour change: `teams-reply-drawing` prints exactly what
+  0.0.12 printed.
+
 ## 0.0.12
 
 - `TeamsReplyRequests` implements is_reply_requests_api's
