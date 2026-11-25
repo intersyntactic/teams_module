@@ -3,6 +3,12 @@
 Each version is tagged `vX.Y.Z` on main, and the services that use this
 package pin that tag.
 
+## 0.0.11
+
+- is_docking_station_api ^0.7.0, which brings is_reply_vocabulary 0.2.0.
+  The lock holds the version set frozen at 05:51 UTC on 25 Nov, the same set
+  as the other builds that compile this package in. No code change.
+
 ## 0.0.10
 
 - Every dependency at its newest on pub.dev, so the builds that compile

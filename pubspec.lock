@@ -181,10 +181,10 @@ packages:
     dependency: "direct main"
     description:
       name: is_docking_station_api
-      sha256: "7229805d1b8a62bd4e4fcf0601063cbe73bb26ee8bb2ac8614fa182d81e68dc4"
+      sha256: "464cf0649057724fc83a8efc413f1d4381a0d95e90465438257828cdc3e8a84e"
       url: "https://pub.dev"
     source: hosted
-    version: "0.6.0"
+    version: "0.7.0"
   is_effects:
     dependency: "direct main"
     description:
@@ -221,10 +221,10 @@ packages:
     dependency: transitive
     description:
       name: is_reply_vocabulary
-      sha256: "58db7570c6e118b5207ac13435f6e7b44c98ad5471531f458829b35fd07b0a78"
+      sha256: da0e47b45ee22fef87e6b81dcb8a24adf954c46ff50b62952cd12f5699398e65
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.2"
+    version: "0.2.0"
   is_shapes:
     dependency: "direct main"
     description:
