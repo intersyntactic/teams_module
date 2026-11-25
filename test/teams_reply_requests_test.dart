@@ -112,6 +112,13 @@ void main() {
       expect(outcome.why, contains('BotNotInConversation'));
     });
 
+    test('is NothingRan for a 429: throttled before anything posted, as '
+        'slack_module reads it', () {
+      final outcome = writer.posted(const WebResponse(status: 429));
+      expect(outcome, isA<NothingRan>());
+      expect((outcome as NothingRan).why, contains('429'));
+    });
+
     test('is StoppedPartway with nothing done when it cannot be told', () {
       for (final response in [
         const WebResponse(status: 502),
