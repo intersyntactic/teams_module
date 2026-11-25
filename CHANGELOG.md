@@ -3,6 +3,26 @@
 Each version is tagged `vX.Y.Z` on main, and the services that use this
 package pin that tag.
 
+## 0.0.12
+
+- `TeamsReplyRequests` implements is_reply_requests_api's
+  `WritesWebAddressReplyRequests`, so the airlock can post a Teams reply as
+  it posts a Slack one. `draw` gives each message of the reply, as
+  `drawTeamsReply` draws it, as a `POST {prefix}activities` under the
+  recorded `RepliesUnderWebAddress`, with no sign-in (the airlock sets the
+  one it granted) and the response's body kept. `posted` reads the Bot
+  Connector's `{"id"}` from that body: `Ran` with the id, `NothingRan` for a
+  4xx, `StoppedPartway` with nothing done when it can't be told.
+- The footer comes in with the reply's `ReplyContent`, decided with it,
+  rather than being worked out here.
+- `postTeamsReplyDrawing` and `teamsPostToEndpoint` are gone.
+  `teams-reply-drawing` stays until the airlock posts replies itself; it
+  now signs `TeamsReplyRequests`' requests, and prints exactly what 0.0.11
+  printed.
+- On is_effects ^0.17.0, which re-exports nothing, so the module depends on
+  is_model_vocabulary, is_reply_vocabulary, is_sign_in_vocabulary and
+  is_web_address_vocabulary directly.
+
 ## 0.0.11
 
 - is_docking_station_api ^0.7.0, which brings is_reply_vocabulary 0.2.0.

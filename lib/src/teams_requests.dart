@@ -10,7 +10,10 @@ library;
 
 import 'dart:convert';
 
-import 'package:is_effects/is_effects.dart';
+import 'package:is_effects/is_effects.dart' show Method, ProposedRequest;
+import 'package:is_sign_in_vocabulary/is_sign_in_vocabulary.dart' show SignIn;
+import 'package:is_web_address_vocabulary/is_web_address_vocabulary.dart'
+    show AddressPrefix, Origin, PathPrefix, WebPath;
 
 import 'teams_post.dart';
 
@@ -25,28 +28,6 @@ ProposedRequest teamsPostRequest(TeamsPost post, SignIn signIn) => _request(
   post.activity,
   signIn,
 );
-
-/// [activity] as a new message in the conversation at [replyEndpoint], the
-/// conversation's as the logbook recorded it: [teamsReplyEndpoint] made it,
-/// and nothing here works it out again.
-ProposedRequest teamsPostToEndpoint({
-  required AddressPrefix replyEndpoint,
-  required Map<String, Object?> activity,
-  required SignIn signIn,
-}) {
-  final path = WebPath.parse('${replyEndpoint.pathPrefix.value}activities');
-  if (path == null) {
-    throw ArgumentError.value(replyEndpoint, 'replyEndpoint', 'has no path');
-  }
-  return ProposedRequest(
-    replyEndpoint.origin,
-    method: Method.post,
-    path: path,
-    signIn: signIn,
-    headers: _headers,
-    body: jsonEncode(activity),
-  );
-}
 
 const _headers = {'content-type': 'application/json; charset=utf-8'};
 
