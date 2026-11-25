@@ -23,17 +23,6 @@ dependencies:
   is_web_address_vocabulary: ^0.1.2
   pointycastle: ^4.0.0
 
-# Until is_effects 0.17.0 and is_reply_requests_api 0.1.0 are on pub.dev.
-dependency_overrides:
-  is_effects:
-    git:
-      url: https://github.com/intersyntactic/effects.git
-      ref: '63369738d9e3f0ec699fbf4abbbda31057216f08'
-  is_reply_requests_api:
-    git:
-      url: https://github.com/intersyntactic/reply_requests_api.git
-      ref: '2f7b9814186977b973616445a86fc85495e1f8dd'
-
 dev_dependencies:
   is_content_id: ^0.2.0
   lints: ^6.1.0
