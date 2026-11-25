@@ -189,10 +189,10 @@ packages:
     dependency: "direct main"
     description:
       name: is_effects
-      sha256: bea7444e36b51bf749b2fa0fc3e69a7f9d49b657475e6be5f792d3d046c9175c
+      sha256: "2d1014ac6b36a7658910a0278b573277fe3cac4be0533e597734bd89c908727a"
       url: "https://pub.dev"
     source: hosted
-    version: "0.15.0"
+    version: "0.17.0"
   is_logbook_format:
     dependency: transitive
     description:
@@ -202,7 +202,7 @@ packages:
     source: hosted
     version: "0.1.0"
   is_model_vocabulary:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: is_model_vocabulary
       sha256: "48927abc9d91422f92e370dc8a7698a2ee29c4bfa44712f5e88c9ab126185e57"
@@ -217,14 +217,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.1.0"
-  is_reply_vocabulary:
-    dependency: transitive
+  is_reply_requests_api:
+    dependency: "direct main"
     description:
-      name: is_reply_vocabulary
-      sha256: da0e47b45ee22fef87e6b81dcb8a24adf954c46ff50b62952cd12f5699398e65
+      name: is_reply_requests_api
+      sha256: "9e817455820ca266642f45357e4332d87dfa409aa52aa99032c05119f70a6dbc"
       url: "https://pub.dev"
     source: hosted
-    version: "0.2.0"
+    version: "0.1.0"
+  is_reply_vocabulary:
+    dependency: "direct main"
+    description:
+      name: is_reply_vocabulary
+      sha256: c46f7d9f8f3ffdb7ee10f396e7c2e58118f07f02b2ed35646cb83d4d730b4ea3
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.1"
   is_shapes:
     dependency: "direct main"
     description:
@@ -234,7 +242,7 @@ packages:
     source: hosted
     version: "0.6.0"
   is_sign_in_vocabulary:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: is_sign_in_vocabulary
       sha256: dfffa15f57f7fb076e89aca0d27e33def3b2786efa730ee0c6cbca5473aefb15
@@ -242,7 +250,7 @@ packages:
     source: hosted
     version: "0.1.0"
   is_web_address_vocabulary:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: is_web_address_vocabulary
       sha256: a0b58425fc7eaf98e740cdfac614201fa426594fafdf198903e961f0ee4ed6dd

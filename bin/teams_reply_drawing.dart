@@ -11,7 +11,10 @@
 /// reads the reply's text, UTF-8, on stdin, and prints the requests as one
 /// JSON array of is_effects' encodeProposedRequest, in posting order, on
 /// stdout.
-/// The reply endpoint is is_effects' AddressPrefix as the logbook recorded
+/// The requests are [TeamsReplyRequests]' with the sign-in set, as the
+/// airlock will set it once it sends replies itself; until then this
+/// program is how a Teams reply goes out.
+/// The reply endpoint is the AddressPrefix the logbook recorded
 /// it for the conversation, passed as it is; nothing here works it out
 /// again or reaches the network. The footer says the turn and how full the
 /// model's context is, each when given. The trajectory is the one the reply
@@ -25,9 +28,15 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:is_effects/is_effects.dart';
+import 'package:is_effects/is_effects.dart'
+    show BodyToKeep, ProposedRequest, encodeProposedRequest;
+import 'package:is_reply_vocabulary/is_reply_vocabulary.dart'
+    show RepliesUnderWebAddress, ReplyContent, ReplyText;
 import 'package:is_shapes/is_shapes.dart' show TrajectoryId;
+import 'package:is_sign_in_vocabulary/is_sign_in_vocabulary.dart' show SignIn;
 import 'package:is_teams_module/is_teams_module.dart';
+import 'package:is_web_address_vocabulary/is_web_address_vocabulary.dart'
+    show AddressPrefix, decodeAddressPrefix;
 
 const usage =
     'usage: teams-reply-drawing --reply-endpoint JSON --sign-in NAME '
@@ -111,22 +120,37 @@ Future<int> run(
     err.writeln('teams-reply-drawing: stdin is not UTF-8');
     return 65;
   }
-  if (text.trim().isEmpty) {
+  final replyText = ReplyText.parse(text);
+  if (replyText == null) {
     err.writeln('teams-reply-drawing: nothing to say on stdin');
     return 65;
   }
-
-  final requests = postTeamsReplyDrawing(
-    text: text,
-    trajectory: trajectory,
-    replyEndpoint: replyEndpoint,
-    signIn: signIn,
-    footer: replyFooter(
-      turn: turn,
-      contextTokens: contextTokens,
-      contextWindow: contextWindow,
-    ),
+  final footer = replyFooter(
+    turn: turn,
+    contextTokens: contextTokens,
+    contextWindow: contextWindow,
   );
+
+  final requests = [
+    for (final r in const TeamsReplyRequests().draw(
+      RepliesUnderWebAddress(replyEndpoint),
+      trajectory,
+      ReplyContent(
+        text: replyText,
+        footer: footer == null ? null : ReplyText.parse(footer),
+      ),
+    ))
+      // As this program has always printed them: signed, keeping no body.
+      ProposedRequest(
+        r.origin,
+        method: r.method,
+        path: r.path,
+        signIn: signIn,
+        headers: r.headers,
+        body: r.body,
+        keep: BodyToKeep.none,
+      ),
+  ];
   out.write(jsonEncode([for (final r in requests) encodeProposedRequest(r)]));
   return 0;
 }

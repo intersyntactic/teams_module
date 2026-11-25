@@ -10,8 +10,8 @@
 /// [TeamsEventTranslator], which translates each recorded event into the
 /// docking station's terms. Translators bring things in; drawings take
 /// things out. The way out: [drawTeamsReply], the Teams drawing of a reply,
-/// and [postTeamsReplyDrawing], which the `teams-reply-drawing` program
-/// prints, the drawing addressed and signed; and [teamsPostRequest] and
+/// and [TeamsReplyRequests], the requests that post it and what each one
+/// posted, for the airlock to grant and sign; and [teamsPostRequest] and
 /// [teamsUpdateRequest], which describe a message as a request for a web
 /// driver to sign and send. The module holds no bot secret and sends
 /// nothing itself.
@@ -26,5 +26,6 @@ export 'src/teams_gate.dart';
 export 'src/teams_ids.dart';
 export 'src/teams_post.dart';
 export 'src/teams_reply.dart';
+export 'src/teams_reply_requests.dart';
 export 'src/teams_requests.dart';
 export 'src/teams_relay.dart';
