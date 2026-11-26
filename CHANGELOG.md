@@ -5,18 +5,47 @@ package pin that tag.
 
 ## 0.0.14
 
-- The Teams relay runs on is_relay 0.1.0's `RelayServer`. Teams' part is
-  `TeamsDeliveryCheck`, a `ChecksDeliveries<TeamsToken>`: `checkHeaders` is
+- The Teams relay runs on is_relay ^0.5.0's projecting `RelayServer`.
+  Teams' part is `TeamsDeliveryCheck`, a
+  `ChecksAndProjectsDeliveries<TeamsToken>`: `checkHeaders` is
   `teamsToken`, `checkBody` is `teamsGateBody`. `TeamsRelay`,
   `recordEvent` and `RecordAnswer` are gone; serving, the 12-second budget,
   the body read, the write and the bound on writes (600 a minute, 60 at
   once) are is_relay's.
-- Every authentic activity is recorded, typing, reactions and invokes
-  included, and the translator admits nothing for those it reads no event
-  from. A sign-in invoke (`signin/*`) is refused with a 403 instead: it
-  carries the person's access token or a sign-in code, which must never
-  be recorded, and this bot asks no one to sign in. An invoke's response goes out only once it is recorded: with the
-  logbook down, opening the call settings gets a 503 and no dialog.
+- **A `teams-event` entry holds a projection, not the body.** The relay
+  records `TeamsEvent.projection()`: `"projection": 1`, the case, and only
+  the fields the module reads, each typed, with no open subtree. A
+  credential in a field the module never reads (a sign-in token, a
+  single-sign-on token on a card press, a file's pre-authorised download
+  link) is never written, whatever activity it arrives on. Text a person
+  types is kept, on purpose. `teamsRecordedEvent` reads a projection back
+  with `TeamsEvent.fromProjection`, strictly: another version, an unknown
+  case or field, or a raw activity throws, and the translator reads that as
+  nothing to admit.
+- What each case keeps: a message's text, mentions (who, and the name
+  shown), quote, `replyTo` and attachments by reference (type, name, and
+  its address without query, fragment or password, never its content); an
+  edit's text and mentions; a card press's verb and the trajectory a Close
+  names, not the rest of its `value`; a message action's command and the
+  message it was opened on, not what was submitted; who joined or left; an
+  install's action.
+- **Only kinds with a case are recorded.** A message, edit, delete, card
+  press, conversation update, install, and call settings opened (when the
+  relay has a dialog for it) or submitted. Anything else is refused with a
+  403 and recorded nowhere: typing, reactions, `event` activities, sign-in
+  invokes in any spelling, other invokes, and message actions the manifest
+  doesn't declare. The `signin/*` denylist, the wake sets, the
+  `TeamsInvoke` catch-all and `invokeResponses` are gone;
+  `TeamsSourceSpec.callSettingsDialog` replaces the last.
+- An invoke's response is fixed by its case, and goes out only once the
+  projection is recorded: with the logbook down, opening call settings
+  gets a 503 and no dialog.
+- Every gate refusal is a `TeamsRefusal`, with its own status and a fixed
+  reason. Nothing a sender wrote reaches the log: the token refusals used
+  to print its `kid`, `alg` and `iss`, and the tenant refusal its tenant.
+- `TeamsCardAction.verb`, `.trajectory` and `TeamsMessage.quote` are fields,
+  read once by the gate. New: `TeamsMessageActionOpen`, `TeamsMention`,
+  `TeamsAttachmentReference`, `TeamsMessageAction`, `InstallationAction`.
 - A logbook that doesn't record is a 503 (it was a 500).
 - `BotFrameworkKeySource.keys()` is `current()`, which never waits: a
   request that arrives before any keys have is refused with a 503, and a

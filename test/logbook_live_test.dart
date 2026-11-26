@@ -37,7 +37,7 @@ void main() {
         now: () => now,
       );
       await keys.refresh();
-      final relay = RelayServer(
+      final relay = RelayServer.projecting(
         check: TeamsDeliveryCheck(
           spec: TeamsSourceSpec(botAppIds: {appBot}, tenantAllowlist: {tenant}),
           keys: keys,
@@ -52,9 +52,8 @@ void main() {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       final serving = relay.serve(server);
       final client = HttpClient();
-      final body = utf8.encode(
-        jsonEncode(message(id: '${DateTime.now().millisecondsSinceEpoch}')),
-      );
+      final activity = message(id: '${DateTime.now().millisecondsSinceEpoch}');
+      final body = utf8.encode(jsonEncode(activity));
       final req = await client.post('127.0.0.1', server.port, '/api/messages');
       req.headers.set('authorization', 'Bearer ${signedToken()}');
       req.add(body);
@@ -66,7 +65,8 @@ void main() {
 
       stdout.writeln('status ${res.statusCode}');
       stdout.writeln('log    ${logged.single}');
-      stdout.writeln('body   ${base64Encode(body)}');
+      // What the entry should hold: the projection, not the body sent.
+      stdout.writeln('entry  ${base64Encode(projectedBytes(activity))}');
       expect(res.statusCode, switch (expectation) {
         'recorded' => 200,
         'unrecorded' => 503,

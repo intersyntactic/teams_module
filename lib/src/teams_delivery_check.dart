@@ -1,11 +1,11 @@
-/// The Teams relay's check of a delivery, for is_relay's `RelayServer`:
-/// the token from the headers alone, then the activity once the body is in
-/// hand.
+/// The Teams relay's check of a delivery, for is_relay's projecting
+/// `RelayServer`: the token from the headers alone, then the activity once
+/// the body is in hand.
 ///
-/// Every authentic activity is recorded, whatever its type: one no event is
-/// read from is recorded too, and the reading admits nothing for it. An
-/// invoke's response (a card press's acknowledgement, a dialog) goes out
-/// with the 200 once the activity is recorded.
+/// What is recorded is the activity's [TeamsEvent] projection, never its
+/// body, and an activity of a kind the module has no case for is refused
+/// unrecorded. An invoke's response (a card press's acknowledgement, a
+/// dialog) goes out with the 200 once the projection is recorded.
 library;
 
 import 'dart:typed_data';
@@ -18,7 +18,8 @@ import 'key_source.dart';
 import 'teams_event_translator.dart';
 import 'teams_gate.dart';
 
-final class TeamsDeliveryCheck implements ChecksDeliveries<TeamsToken> {
+final class TeamsDeliveryCheck
+    implements ChecksAndProjectsDeliveries<TeamsToken> {
   TeamsDeliveryCheck({required this.spec, required this.keys});
 
   final TeamsSourceSpec spec;
@@ -46,31 +47,24 @@ final class TeamsDeliveryCheck implements ChecksDeliveries<TeamsToken> {
       headers: {'authorization': ?headers['authorization']},
       now: now,
     )) {
-      TeamsTokenRefused(:final decision) => HeadersRefused(
-        _refusal(decision.status),
-        decision.reason,
+      TeamsTokenRefused(:final refusal) => HeadersRefused(
+        refusal.status,
+        refusal.reason,
       ),
       final TeamsToken token => HeadersVouch(token),
     };
   }
 
   @override
-  BodyVerdict checkBody(TeamsToken vouched, Uint8List body) {
-    final d = teamsGateBody(spec: spec, token: vouched, body: body);
-    return switch (d.outcome) {
-      TeamsGateOutcome.reject => Refuse(_refusal(d.status), d.reason),
-      TeamsGateOutcome.trigger ||
-      TeamsGateOutcome.ignore => Record(response: d.invokeResponse),
-    };
-  }
-
-  /// The gate refuses with 400, 401, 403 or 413. Any other is a bug here,
-  /// answered 500 so Teams sends the activity again.
-  static RefusalStatus _refusal(int status) => switch (status) {
-    400 => RefusalStatus.badRequest,
-    401 => RefusalStatus.unauthorized,
-    403 => RefusalStatus.forbidden,
-    413 => RefusalStatus.payloadTooLarge,
-    _ => RefusalStatus.internalServerError,
-  };
+  ProjectedVerdict checkBody(TeamsToken vouched, Uint8List body) =>
+      switch (teamsGateBody(spec: spec, token: vouched, body: body)) {
+        TeamsActivityTaken(:final event, :final response) => RecordProjection(
+          event.projection(),
+          response: response,
+        ),
+        TeamsActivityRefused(:final refusal) => Refuse(
+          refusal.status,
+          refusal.reason,
+        ),
+      };
 }

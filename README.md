@@ -12,12 +12,12 @@ or approval plugs into this one rather than speaking Teams itself.
 Teams ──POST (Bot Framework JWT)──▶ Teams relay ──event, with content────▶ receiver
                                      │  checks the token against            │  writes nodes,
                                      │  Microsoft's public keys; records    │  feeds the mission
-                                     │  the body, then responds; a card     ▼
+                                     │  a projection, then responds; a card ▼
                                      │  action gets "Got it"         Bot Connector REST
                                      │                               (posts and edits cards)
 ```
 
-Three things about it are forced by Teams:
+Four things about it are forced by Teams:
 
 - **The relay holds no secret.** Microsoft signs with a private key and the
   relay checks against the published public keys, so all it needs is the
@@ -25,12 +25,20 @@ Three things about it are forced by Teams:
 - **An event carries the message and what was submitted.** A card
   submission exists nowhere but the request that delivers it, and the bot
   can't read a chat back, so there is nothing to fetch later.
+- **An activity can carry a credential** in fields the module never reads:
+  a person's access token in a sign-in invoke or on a card press, a
+  pre-authorised download link on a file. So the relay records a closed
+  projection of each activity, `TeamsEvent`, never its body: only the
+  fields the module reads, each typed, with no open subtree. An activity
+  of a kind `TeamsEvent` has no case for is refused with a 403, recorded
+  nowhere. Words a person types are kept, on purpose.
 - **Repeats are ordinary traffic.** Teams re-sends anything it gets no
-  response to within 15 seconds. The relay records every authentic copy,
-  whatever its type, and responds 200 only to a copy it recorded, inside
-  12 seconds; the docking station decides each event once, by the
-  reading's key. The serving and recording are is_relay's `RelayServer`;
-  the Teams check is `TeamsDeliveryCheck`.
+  response to within 15 seconds. The relay records every authentic copy
+  and responds 200 only to a copy it recorded, inside 12 seconds; the
+  projection keeps the activity's id, so the docking station decides each
+  event once, by the reading's key. The serving and recording are
+  is_relay's projecting `RelayServer`; the Teams check is
+  `TeamsDeliveryCheck`.
 
 v1 mirrors what is addressed to the bot: card actions, form submissions and
 @-mentions, which in a one-to-one chat is every message. It asks for no Graph
@@ -169,13 +177,13 @@ message became.
 
 ## Status
 
-The way in is here: the relay (`bin/teams_relay.dart`, `lib/src/teams_relay.dart`)
-serves `POST /api/messages`, fetches Microsoft's keys and refreshes them every
-12 hours (`lib/src/key_source.dart`), and passes each delivery through the gate
-(`lib/src/teams_gate.dart`). The receiver (`lib/src/teams_receiver.dart`)
-reads each event as the annotation shapes it writes: an approval, a
-holding off, a withdrawal. Until the module meets a real trajectory it
-writes them to a stand-in (`lib/src/stand_in_trajectory.dart`). The way out
+The way in is here: the relay (`bin/teams_relay.dart`, on is_relay's
+`RelayServer`) serves `POST /api/messages`, fetches Microsoft's keys and
+refreshes them behind requests (`lib/src/key_source.dart`), passes each
+delivery through the gate (`lib/src/teams_gate.dart`), and records the
+`TeamsEvent` projection it makes (`lib/src/teams_event.dart`). The docking
+station reads each recorded projection back through `TeamsEventTranslator`
+(`lib/src/teams_event_translator.dart`). The way out
 is described, never sent: `lib/src/teams_requests.dart` turns a post, a
 reply or an edit into a request the airlock decides and the web driver signs
 and sends. The module holds no bot secret. Still to come: cards drawn from a
@@ -209,8 +217,9 @@ LOGBOOK_SOCKET=<the logbook's writer's Unix socket> \
 ```
 
 It listens on `127.0.0.1:8087` for a TLS proxy in front. The bot's messaging
-endpoint is `https://<host>/api/messages`. Every accepted request's body is
-recorded with the logbook's one writer, as a `teams-event` entry, before
+endpoint is `https://<host>/api/messages`. Every accepted activity's
+projection, never its body, is recorded with the logbook's one writer, as a
+`teams-event` entry, before
 Teams gets its response. The kind names the source, so the writer's sender
 table, which lets only the relay's user send `teams-event`, vouches that
 every such entry came through the gate. The relay keeps

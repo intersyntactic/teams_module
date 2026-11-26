@@ -92,12 +92,12 @@ void main() {
       now: () => now,
     );
     await keys.refresh();
-    final relay = RelayServer(
+    final relay = RelayServer.projecting(
       check: TeamsDeliveryCheck(
         spec: TeamsSourceSpec(
           botAppIds: {appBot},
           tenantAllowlist: {tenant},
-          invokeResponses: {'composeExtension/fetchTask': dialog},
+          callSettingsDialog: dialog,
         ),
         keys: keys,
       ),
@@ -135,8 +135,17 @@ void main() {
     );
   }
 
-  test('records a message as a teams-event, byte for byte, then 200', () async {
-    final bytes = utf8.encode(jsonEncode(message()));
+  /// What every entry recorded so far holds, as text: its `bytes`, decoded.
+  /// The entry around them is only their time and their base64.
+  String recordedText() => [
+    for (final (_, entry) in logbook.recorded)
+      utf8.decode(
+        base64.decode(JsonObject.decode(utf8.decode(entry)).string('bytes')),
+      ),
+  ].join('\n');
+
+  test('records a message as its projection, then 200', () async {
+    final bytes = Uint8List.fromList(projectedBytes(message()));
     final (status, body, _) = await post(message());
     expect(status, 200);
     expect(body, isEmpty);
@@ -162,16 +171,83 @@ void main() {
     expect(logbook.recorded, hasLength(1));
   });
 
-  test('records a quiet activity too: typing, a dialog opened', () async {
-    expect(
-      (await post({...message(), 'type': 'typing'}..remove('text'))).$1,
-      200,
-    );
-    final fetch = {...cardAction(), 'name': 'composeExtension/fetchTask'};
-    final (status, body, _) = await post(fetch);
+  final openSettings = {
+    ...cardAction(),
+    'name': 'composeExtension/fetchTask',
+    'value': {
+      'commandId': callSettingsCommandId,
+      'messagePayload': {'id': '1730881000000'},
+    },
+  };
+
+  test('answers call settings opened with the dialog once recorded', () async {
+    final (status, body, _) = await post(openSettings);
     expect(status, 200);
     expect(jsonDecode(body), dialog.asUncheckedMap());
-    expect(logbook.recorded, hasLength(2));
+    expect(logbook.recorded, hasLength(1));
+  });
+
+  test('refuses a kind it has no case for with 403, recording nothing', () {
+    return Future.forEach(
+      <Map<String, Object?>>[
+        {...message(), 'type': 'typing'}..remove('text'),
+        {...message(), 'type': 'messageReaction'}..remove('text'),
+        {...message(), 'type': 'event', 'name': 'tokens/response'},
+        {...cardAction(), 'name': 'task/fetch'},
+        {...cardAction()}..remove('name'),
+      ],
+      (activity) async {
+        expect((await post(activity)).$1, 403, reason: '$activity');
+      },
+    ).then((_) => expect(logbook.recorded, isEmpty));
+  });
+
+  test("never records a card press's token, only its verb", () async {
+    // Universal Actions single sign-on puts a person's token on the press.
+    final press = cardAction();
+    (press['value']! as Map<String, Object?>)['authentication'] = {
+      'id': 'x',
+      'token': 'a-person-s-access-token',
+    };
+    (press['value']! as Map<String, Object?>)['state'] = 'magic-code-123456';
+    expect((await post(press)).$1, 200);
+    expect(logbook.recorded, hasLength(1));
+    expect(
+      recordedText(),
+      allOf(
+        contains('"verb":"approve"'),
+        isNot(contains('access-token')),
+        isNot(contains('magic-code')),
+      ),
+    );
+  });
+
+  test("never records a file's download link, or what it holds", () async {
+    final shared = {
+      ...message(),
+      'attachments': [
+        {
+          'contentType': 'application/vnd.microsoft.teams.file.download.info',
+          'contentUrl':
+              'https://x.sharepoint.com/sites/s/plan.docx?tempauth=secret1',
+          'name': 'plan.docx',
+          'content': {
+            'downloadUrl': 'https://x.sharepoint.com/dl?tempauth=secret2',
+            'uniqueId': 'u-1',
+            'fileType': 'docx',
+          },
+        },
+      ],
+    };
+    expect((await post(shared)).$1, 200);
+    expect(
+      recordedText(),
+      allOf(
+        contains('https://x.sharepoint.com/sites/s/plan.docx'),
+        isNot(contains('tempauth')),
+        isNot(contains('secret')),
+      ),
+    );
   });
 
   test('records a resend again: the docking station decides it once', () async {
@@ -182,8 +258,7 @@ void main() {
 
   test('with the logbook failing, answers 503 and no dialog', () async {
     logbook.answer = _Answer.failed;
-    final fetch = {...cardAction(), 'name': 'composeExtension/fetchTask'};
-    final (status, body, _) = await post(fetch);
+    final (status, body, _) = await post(openSettings);
     expect(status, 503);
     expect(body, isEmpty);
   });
@@ -238,14 +313,21 @@ void main() {
     () async {
       expect((await post(message(), token: 'not.a.token')).$1, 401);
       expect(logbook.recorded, isEmpty);
-      expect(logged.single, allOf(contains('401'), contains('token: ')));
+      expect(
+        logged.single,
+        allOf(contains('401'), contains(TeamsRefusal.tokenUnreadable.reason)),
+      );
     },
   );
 
   test(
     'refuses a sign-in invoke, so no token or code is ever recorded',
     () async {
-      for (final name in ['signin/tokenExchange', 'signin/verifyState']) {
+      for (final name in [
+        'signin/tokenExchange',
+        'signin/verifyState',
+        'SignIn/tokenExchange',
+      ]) {
         final invoke = {
           ...cardAction(),
           'name': name,
@@ -255,8 +337,17 @@ void main() {
       }
       expect(logbook.recorded, isEmpty);
       expect(logged.join('\n'), isNot(contains('eyJ')));
+      expect(logged.join('\n'), isNot(contains('signin')));
     },
   );
+
+  test("logs a refused token's reason without what the sender wrote", () async {
+    final token = signedToken(
+      header: const {'alg': 'RS256', 'kid': 'kid-chosen-by-sender'},
+    );
+    expect((await post(message(), token: token)).$1, 401);
+    expect(logged.join('\n'), isNot(contains('kid-chosen-by-sender')));
+  });
 
   test('refuses an activity from a tenant not allowed with 403', () async {
     final elsewhere = {
@@ -275,7 +366,7 @@ void main() {
       get: (url) async => throw HttpException('down', uri: url),
       now: () => now,
     );
-    final relay = RelayServer(
+    final relay = RelayServer.projecting(
       check: TeamsDeliveryCheck(
         spec: TeamsSourceSpec(botAppIds: {appBot}, tenantAllowlist: {tenant}),
         keys: noKeys,

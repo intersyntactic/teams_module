@@ -13,20 +13,21 @@
 ///                                    default is loopback, for a proxy on
 ///                                    the same machine.
 ///   LOGBOOK_SOCKET=/run/...sock      the logbook's writer's Unix socket:
-///                                    every authentic request's body is
-///                                    recorded through it as a `teams-event`
-///                                    entry, byte for byte, before Teams
-///                                    gets a response. Required, and an
-///                                    absolute path.
+///                                    every authentic activity's projection
+///                                    is recorded through it as a
+///                                    `teams-event` entry before Teams gets
+///                                    a response. Required, and an absolute
+///                                    path.
 ///   TEAMS_SETTINGS_DIALOG=card.json  optional; an Adaptive Card the call
 ///                                    settings message action opens, read
 ///                                    once at boot, so Teams' wait for it
 ///                                    asks no agent. Unreadable aborts
 ///
 /// The relay keeps nothing of its own: the logbook has one writer, which
-/// knows the relay by its user, and the relay sends it what arrives. The
-/// serving, the 12-second budget, the body read and the write are
-/// is_relay's `RelayServer`; the Teams check is [TeamsDeliveryCheck].
+/// knows the relay by its user, and the relay sends it the projection of
+/// what arrives. The serving, the 12-second budget, the body read and the
+/// write are is_relay's projecting `RelayServer`; the Teams check, and the
+/// projection, are [TeamsDeliveryCheck]'s.
 ///
 /// The bot's messaging endpoint is `https://<host>/api/messages`.
 library;
@@ -124,17 +125,14 @@ Future<void> main() async {
     stderr.writeln('warning: no keys yet; requests get 503 until they arrive');
   }
 
-  final relay = RelayServer(
+  final relay = RelayServer.projecting(
     check: TeamsDeliveryCheck(
       spec: TeamsSourceSpec(
         botAppIds: botAppIds,
         tenantAllowlist: allow,
-        invokeResponses: {
-          if (settingsCard case final card?)
-            'composeExtension/fetchTask': teamsDialog(
-              title: 'Call settings',
-              card: card,
-            ),
+        callSettingsDialog: switch (settingsCard) {
+          final card? => teamsDialog(title: 'Call settings', card: card),
+          null => null,
         },
       ),
       keys: keys,

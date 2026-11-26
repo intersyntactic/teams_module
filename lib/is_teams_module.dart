@@ -1,12 +1,12 @@
 /// The Teams module: what people say and press in Microsoft Teams, taken in
 /// as nodes on a trajectory, and the way back out to them.
 ///
-/// The way in: [TeamsDeliveryCheck], the Teams check is_relay's
-/// `RelayServer` runs on every delivery before recording it; [teamsGate],
-/// the checks it makes; and the keys it checks signatures against,
-/// [BotFrameworkKeys], fetched by [BotFrameworkKeySource]; and
-/// [teamsRecordedEvent], which reads a recorded body back into
-/// the same event, for whatever reads the logbook; and
+/// The way in: [TeamsDeliveryCheck], the Teams check is_relay's projecting
+/// `RelayServer` runs on every delivery; [teamsGate], the checks it makes
+/// and the [TeamsEvent] it makes, whose projection is what is recorded;
+/// the keys it checks signatures against, [BotFrameworkKeys], fetched by
+/// [BotFrameworkKeySource]; [teamsRecordedEvent], which reads a recorded
+/// projection back into the same event, for whatever reads the logbook; and
 /// [TeamsEventTranslator], which translates each recorded event into the
 /// docking station's terms. Translators bring things in; drawings take
 /// things out. The way out: [drawTeamsReply], the Teams drawing of a reply,

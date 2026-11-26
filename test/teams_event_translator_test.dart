@@ -15,10 +15,10 @@ import 'package:test/test.dart';
 
 import 'support/fixtures.dart';
 
-/// [activity] as the docking station hands it over: written as the relay
-/// writes it, and read back from its `teams-event` entry.
+/// [activity] as the docking station hands it over: projected and written
+/// as the relay writes it, and read back from its `teams-event` entry.
 RelayedEvent recorded(Map<String, Object?> activity) =>
-    recordedBytes(utf8.encode(jsonEncode(activity)));
+    recordedBytes(projectedBytes(activity));
 
 /// [bytes] as the relay records them, read back from its entry.
 RelayedEvent recordedBytes(List<int> bytes) {
@@ -138,6 +138,8 @@ Map<String, Object?> added({
 }..remove('text');
 
 void main() {
+  setUpAll(setUpKeys);
+
   group('something said', () {
     test(
       'is MessageSaid, with its UserSaid, in its conversation, under its id',
@@ -439,20 +441,17 @@ void main() {
       }
     });
 
-    test('a message action submitted, whatever its command or data, is '
-        'nothing to admit: no message action closes a trajectory', () {
-      for (final submitted in [
-        messageActionSubmitted(callSettingsCommandId, {'model': 'x'}),
-        // The retired "Close trajectory" action, from an old package.
-        messageActionSubmitted('closeTrajectory', {'confirm': true}),
-        messageActionSubmitted('closeTrajectory', {
-          'confirm': true,
+    // The retired "Close trajectory" action isn't recorded at all: the gate
+    // refuses a command the manifest doesn't declare.
+    test('a message action submitted, whatever its data, is nothing to '
+        'admit: no message action closes a trajectory', () {
+      final (_, [r]) = fold([
+        messageActionSubmitted(callSettingsCommandId, {
+          'model': 'x',
           'trajectory': trajectoryHex,
         }),
-      ]) {
-        final (_, [r]) = fold([submitted]);
-        expect(r, isA<NothingToAdmit>(), reason: '$submitted');
-      }
+      ]);
+      expect(r, isA<NothingToAdmit>());
     });
 
     test('naming no card is nothing to admit', () {
@@ -496,23 +495,32 @@ void main() {
       expect(r, isA<NothingToAdmit>());
     });
 
-    // The relay records every authentic activity, so these reach the
-    // translator too.
-    test('typing, a reaction, and an invoke nothing is read from', () {
+    test('call settings opened or submitted, and an install', () {
+      Map<String, Object?> action(String name) => {
+        ...cardAction(),
+        'name': name,
+        'value': {
+          'commandId': callSettingsCommandId,
+          'messagePayload': {'id': '1730881000000'},
+        },
+      };
       final (_, translated) = fold([
-        {...message(), 'type': 'typing'}..remove('text'),
-        {
-          ...message(),
-          'type': 'messageReaction',
-          'replyToId': '1730881234567',
-          'reactionsAdded': [
-            {'type': 'like'},
-          ],
-        }..remove('text'),
-        {...cardAction(), 'name': 'composeExtension/fetchTask'},
-        {...cardAction(), 'name': 'task/fetch'},
+        action('composeExtension/fetchTask'),
+        action('composeExtension/submitAction'),
+        {...message(), 'type': 'installationUpdate', 'action': 'add'}
+          ..remove('text'),
       ]);
       expect(translated, everyElement(isA<NothingToAdmit>()));
+    });
+
+    test('a raw activity, which is not a projection', () {
+      const translator = TeamsEventTranslator();
+      final (state, r) = translator.step(
+        translator.start,
+        recordedBytes(utf8.encode(jsonEncode(fromBea('act-1')))),
+      );
+      expect(r, isA<NothingToAdmit>());
+      expect(state, same(translator.start));
     });
 
     test('bytes that are not an activity, with the state left as it was', () {

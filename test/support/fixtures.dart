@@ -123,6 +123,37 @@ String signedToken({
 
 String b64(List<int> bytes) => base64Url.encode(bytes).replaceAll('=', '');
 
+/// What the relay records for [activity]: the projection the gate makes of
+/// it, encoded as the relay encodes it, under a token the Bot Connector
+/// would have sent it with. Throws a [StateError] when the gate refuses it,
+/// which a test meaning to record it never wants. Needs [setUpKeys].
+List<int> projectedBytes(Map<String, Object?> activity) {
+  final a = JsonObject.of(activity);
+  final recipient = a.objectOrNull('recipient')?.stringOrNull('id') ?? '';
+  final claims = {
+    ...tokenClaims(),
+    'serviceurl': a.stringOrNull('serviceUrl'),
+    'aud': recipient.startsWith('28:') ? recipient.substring(3) : appId,
+  };
+  return switch (teamsGate(
+    spec: TeamsSourceSpec(
+      botAppIds: {appBot, otherBot},
+      callSettingsDialog: JsonObject.of({'task': 'test dialog'}),
+    ),
+    keys: keys,
+    headers: {'Authorization': 'Bearer ${signedToken(claims: claims)}'},
+    body: utf8.encode(jsonEncode(activity)),
+    now: now,
+  )) {
+    TeamsActivityTaken(:final event) => utf8.encode(
+      jsonEncode(event.projection().asUncheckedMap()),
+    ),
+    TeamsActivityRefused(:final refusal) => throw StateError(
+      'the gate refused it: ${refusal.reason}',
+    ),
+  };
+}
+
 /// A 2048-bit key, seeded so every run makes the same one.
 AsymmetricKeyPair<RSAPublicKey, RSAPrivateKey> _keyPair(int seed) {
   final random = FortunaRandom()

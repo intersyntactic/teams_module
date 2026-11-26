@@ -1,8 +1,9 @@
-/// Decides whether an inbound Teams delivery is authentic, and what the relay
-/// should do with it.
+/// Decides whether an inbound Teams delivery is authentic, and what of it
+/// the relay records.
 ///
-/// It is pure: the key set is the caller's, so every case is testable without a clock, a socket, or Microsoft. Four things about it
-/// are forced by Teams:
+/// It is pure: the key set is the caller's, so every case is testable
+/// without a clock, a socket, or Microsoft. Five things about it are forced
+/// by Teams:
 ///
 /// 1. AUTHENTICATION is a JWT that Microsoft signs with a private key and the
 ///    gate checks against Microsoft's published public keys. The gate holds
@@ -14,24 +15,29 @@
 ///    activity is the only thing tying the two together. So whoever runs the
 ///    relay is trusted with content, in any design.
 ///
-/// 3. AN EVENT CARRIES CONTENT (Nick, 2026-11-06). A card submission
-///    exists nowhere but this request, and nothing can read a one-to-one
-///    chat back short of permission over every chat in the tenant, so there
-///    is nothing to fetch later. Text and submitted values ride in the
-///    [TeamsEvent].
+/// 3. AN EVENT CARRIES CONTENT. A card submission exists nowhere but this
+///    request, and nothing can read a one-to-one chat back short of
+///    permission over every chat in the tenant, so there is nothing to fetch
+///    later. Text rides in the [TeamsEvent].
 ///
-/// 4. REPEATS ARE KEYED BY ACTIVITY. What arrives is acted on, so the same
-///    activity must not be acted on twice. The signature can't be the key:
-///    the Bot Connector reuses one token across many deliveries until it
-///    expires. The key is the conversation id with the activity id. Teams
-///    also re-sends anything it gets no response to within 15 seconds, so
-///    duplicates are ordinary traffic, not only attacks.
+/// 4. AN ACTIVITY CAN CARRY A CREDENTIAL in fields this module never reads:
+///    a person's access token in a sign-in invoke, a single-sign-on token on
+///    a card press, a pre-authorised download link on a file. So the relay
+///    records the [TeamsEvent], a closed projection, never the body, and an
+///    activity of a kind that isn't one of its cases is refused unrecorded.
+///
+/// 5. REPEATS ARE KEYED BY ACTIVITY. Teams re-sends anything it gets no
+///    response to within 15 seconds, so the same activity can be recorded
+///    more than once; the projection keeps its conversation and id, and the
+///    docking station decides each once.
 library;
 
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:checked_json/checked_json.dart';
+import 'package:is_relay/is_relay.dart' show RefusalStatus;
+import 'package:is_shapes/is_shapes.dart' show TrajectoryId;
 import 'package:pointycastle/api.dart';
 import 'package:pointycastle/asymmetric/api.dart';
 import 'package:pointycastle/digests/sha256.dart';
@@ -44,77 +50,89 @@ import 'teams_ids.dart';
 /// The issuer of every token the Bot Connector sends to a bot.
 const botFrameworkIssuer = 'https://api.botframework.com';
 
-/// What the caller should do.
-enum TeamsGateOutcome {
-  /// Hand [TeamsGateDecision.event] on; respond with 200, with
-  /// [TeamsGateDecision.invokeResponse] as the body when there is one.
-  trigger,
+/// Why the gate refused a delivery. A fixed set, each with its status and a
+/// fixed reason to log, so nothing a sender wrote ever reaches the log.
+enum TeamsRefusal {
+  /// A deploy that forgot its app ids refuses rather than opens.
+  noBotAppIds(RefusalStatus.unauthorized, 'no bot app ids configured'),
+  noBearerToken(RefusalStatus.unauthorized, 'no bearer token'),
+  tokenUnreadable(RefusalStatus.unauthorized, 'token is not a readable JWT'),
+  tokenAlgorithm(RefusalStatus.unauthorized, 'token alg is not RS256'),
+  tokenNamesNoKey(RefusalStatus.unauthorized, 'token names no key'),
+  tokenKeyUnknown(RefusalStatus.unauthorized, 'token key is not in the set'),
+  badSignature(RefusalStatus.unauthorized, 'bad signature'),
+  tokenIssuer(RefusalStatus.unauthorized, 'token is not the Bot Connector\'s'),
+  tokenAudience(
+    RefusalStatus.unauthorized,
+    'token audience is not exactly one of these bots',
+  ),
+  tokenNoExpiry(RefusalStatus.unauthorized, 'token has no expiry'),
+  tokenExpired(RefusalStatus.unauthorized, 'token expired'),
+  tokenNotYetValid(RefusalStatus.unauthorized, 'token not yet valid'),
+  bodyTooLarge(RefusalStatus.payloadTooLarge, 'body over the cap'),
+  bodyNotJson(RefusalStatus.badRequest, 'body is not a JSON object'),
+  activityMalformed(RefusalStatus.badRequest, 'activity is not in its form'),
+  notTeams(RefusalStatus.forbidden, 'channel is not msteams'),
 
-  /// Authentic but not for waking anyone: a quiet activity type. Respond
-  /// with 200, still with [TeamsGateDecision.invokeResponse] as the body
-  /// when there is one.
-  ignore,
+  /// The endorsement is what makes `channelId` trustworthy.
+  keyNotEndorsed(RefusalStatus.forbidden, 'key not endorsed for msteams'),
+  noServiceUrlClaim(RefusalStatus.unauthorized, 'token has no serviceurl'),
+  serviceUrlMismatch(
+    RefusalStatus.unauthorized,
+    'serviceurl claim does not match the activity',
+  ),
+  recipientNotTokenBot(
+    RefusalStatus.unauthorized,
+    'recipient is not the bot the token is for',
+  ),
+  tenantNotAllowed(RefusalStatus.forbidden, 'tenant not allowed'),
 
-  /// Refused. Respond with [TeamsGateDecision.status] and never say why in
-  /// the body; the log may.
-  reject,
+  /// Authentic, but not one of [TeamsEvent]'s cases, so there is nothing
+  /// the relay may record of it.
+  kindNotRecorded(RefusalStatus.forbidden, 'activity kind is not recorded');
+
+  const TeamsRefusal(this.status, this.reason);
+
+  /// What the relay answers.
+  final RefusalStatus status;
+
+  /// Logged, never sent: a reason in a response is a hint to whoever is
+  /// guessing.
+  final String reason;
 }
 
-final class TeamsGateDecision {
-  const TeamsGateDecision._(
-    this.outcome,
-    this.reason, {
-    this.status = 200,
-    this.event,
-    this.invokeResponse,
-  });
+/// What the gate decided about a delivery.
+sealed class TeamsGateDecision {
+  const TeamsGateDecision();
+}
 
-  const TeamsGateDecision._reject(int status, String reason)
-    : this._(TeamsGateOutcome.reject, reason, status: status);
+/// Authentic and of a recorded kind: record [event]'s projection, then
+/// answer 200 with [response] as the body when there is one.
+final class TeamsActivityTaken extends TeamsGateDecision {
+  const TeamsActivityTaken(this.event, {this.response});
 
-  final TeamsGateOutcome outcome;
-
-  /// Operator-facing, logged. A rejection reason in a response body is a
-  /// hint to whoever is guessing.
-  final String reason;
-
-  /// The HTTP status to respond with: 200 unless refused. 401 for a request
-  /// that is not from the Bot Connector, 403 for an authentic one this bot
-  /// won't take (a key not endorsed for Teams, a tenant not allowed), 400 for
-  /// an authentic activity that isn't one, 413 for a body over the cap.
-  final int status;
-
-  /// What happened, present iff [outcome] is [TeamsGateOutcome.trigger].
-  final TeamsEvent? event;
+  final TeamsEvent event;
 
   /// The body of the response to an invoke. Teams waits for it before
   /// showing the person anything, and the agent is too far away to respond
-  /// in time, so the gate responds with a fixed body: an acknowledgement
-  /// for a card action, which the agent edits afterwards, or the invoke's
-  /// entry in [TeamsSourceSpec.invokeResponses]. The same for every copy
-  /// of one invoke Teams sends.
-  final JsonObject? invokeResponse;
+  /// in time, so it is fixed by the kind: an acknowledgement for a card
+  /// press, which the agent edits afterwards, or the dialog a message action
+  /// opens. The same for every copy of one invoke Teams sends.
+  final JsonObject? response;
+}
 
-  bool get shouldWake => outcome == TeamsGateOutcome.trigger;
+/// Refused, for [refusal]: answered its status, recorded nowhere.
+final class TeamsActivityRefused extends TeamsGateDecision {
+  const TeamsActivityRefused(this.refusal);
+  final TeamsRefusal refusal;
 }
 
 final class TeamsSourceSpec {
   const TeamsSourceSpec({
     required this.botAppIds,
     this.tenantAllowlist = const {},
-    this.wakeActivityTypes = const {
-      'message',
-      'conversationUpdate',
-      'installationUpdate',
-      'messageUpdate',
-      'messageDelete',
-    },
-    this.wakeInvokes = const {
-      'adaptiveCard/action',
-      'composeExtension/submitAction',
-    },
     this.acknowledgement = 'Got it',
-    this.invokeResponses = const {},
+    this.callSettingsDialog,
   });
 
   /// The app ids of the bots this endpoint serves: every token's audience
@@ -126,23 +144,12 @@ final class TeamsSourceSpec {
   /// activity is correctly signed", which is only ever right in tests.
   final Set<String> tenantAllowlist;
 
-  /// Activity types that wake the receiver. `conversationUpdate` and
-  /// `installationUpdate` are among them because they carry what the agent
-  /// needs to message a conversation first: its service URL, id and tenant.
-  final Set<String> wakeActivityTypes;
-
-  /// Invoke names that wake the receiver. A card action is responded to
-  /// with [acknowledgement]; any other with its entry in [invokeResponses],
-  /// or with no body.
-  final Set<String> wakeInvokes;
-
-  /// What Teams shows after a card action, before the agent edits the card.
+  /// What Teams shows after a card press, before the agent edits the card.
   final String acknowledgement;
 
-  /// Fixed response bodies by invoke name, given whether or not the invoke
-  /// wakes anyone: how a dialog opens with no agent asked, as
-  /// `composeExtension/fetchTask` answered with a [teamsDialog].
-  final Map<String, JsonObject> invokeResponses;
+  /// The response that opens the call settings dialog, as [teamsDialog]
+  /// makes it. With none, opening call settings is refused.
+  final JsonObject? callSettingsDialog;
 }
 
 /// The response to a `composeExtension/fetchTask` that opens [card], an
@@ -178,11 +185,10 @@ final class TeamsToken extends TeamsTokenCheck {
   final BotAppId bot;
 }
 
-/// A delivery refused on its headers: [decision] is a 401, and no body need
-/// be read.
+/// A delivery refused on its headers: no body need be read.
 final class TeamsTokenRefused extends TeamsTokenCheck {
-  TeamsTokenRefused._(this.decision);
-  final TeamsGateDecision decision;
+  TeamsTokenRefused._(this.refusal);
+  final TeamsRefusal refusal;
 }
 
 /// The whole gate, for a delivery whose body is already in hand: the token
@@ -202,7 +208,7 @@ TeamsGateDecision teamsGate({
   now: now,
   maxClockSkew: maxClockSkew,
 )) {
-  TeamsTokenRefused(:final decision) => decision,
+  TeamsTokenRefused(:final refusal) => TeamsActivityRefused(refusal),
   final TeamsToken token => teamsGateBody(
     spec: spec,
     token: token,
@@ -222,20 +228,14 @@ TeamsTokenCheck teamsToken({
   required DateTime now,
   Duration maxClockSkew = const Duration(minutes: 5),
 }) {
-  // FAIL CLOSED on no app ids: a deploy that forgot an env var becomes a
-  // refuser.
   if (spec.botAppIds.isEmpty) {
-    return TeamsTokenRefused._(
-      const TeamsGateDecision._reject(401, 'no bot app ids configured'),
-    );
+    return TeamsTokenRefused._(TeamsRefusal.noBotAppIds);
   }
   final auth = {
     for (final e in headers.entries) e.key.toLowerCase(): e.value,
   }['authorization'];
   if (auth == null || !auth.startsWith('Bearer ')) {
-    return TeamsTokenRefused._(
-      const TeamsGateDecision._reject(401, 'no bearer token'),
-    );
+    return TeamsTokenRefused._(TeamsRefusal.noBearerToken);
   }
   return switch (_verify(
     auth.substring('Bearer '.length).trim(),
@@ -244,9 +244,7 @@ TeamsTokenCheck teamsToken({
     now: now,
     skew: maxClockSkew,
   )) {
-    _Refused(:final reason) => TeamsTokenRefused._(
-      TeamsGateDecision._reject(401, reason),
-    ),
+    _Refused(:final refusal) => TeamsTokenRefused._(refusal),
     _Verified(:final claims, :final key, :final bot) => TeamsToken._(
       claims,
       key,
@@ -265,20 +263,27 @@ TeamsGateDecision teamsGateBody({
   int maxBodyBytes = 1024 * 1024,
 }) {
   if (body.length > maxBodyBytes) {
-    return TeamsGateDecision._reject(413, 'body ${body.length}b over cap');
+    return const TeamsActivityRefused(TeamsRefusal.bodyTooLarge);
   }
   final JsonObject activity;
   try {
     activity = JsonObject.decode(utf8.decode(body));
   } on FormatException {
-    return const TeamsGateDecision._reject(400, 'body is not a JSON object');
+    return const TeamsActivityRefused(TeamsRefusal.bodyNotJson);
   }
   try {
     return _decide(spec, activity, token);
-  } on FormatException catch (e) {
-    return TeamsGateDecision._reject(400, 'activity: ${e.message}');
+  } on FormatException {
+    return const TeamsActivityRefused(TeamsRefusal.activityMalformed);
   }
 }
+
+/// The event a projection the relay recorded holds, as
+/// [TeamsEvent.fromProjection] reads it. Throws a [FormatException] for
+/// bytes that aren't a projection this module writes, a raw activity among
+/// them.
+TeamsEvent teamsRecordedEvent(List<int> bytes) =>
+    TeamsEvent.fromProjection(JsonObject.decode(utf8.decode(bytes)));
 
 TeamsGateDecision _decide(
   TeamsSourceSpec spec,
@@ -286,18 +291,13 @@ TeamsGateDecision _decide(
   TeamsToken token,
 ) {
   final TeamsToken(_claims: claims, _key: key) = token;
-  // The endorsement is what makes channelId trustworthy: a key Microsoft
-  // has not endorsed for Teams may not sign a Teams activity.
   final channel = a.string('channelId');
   // wire-ok: Bot Framework's channelId; this is the one check made of it.
   if (channel != 'msteams') {
-    return TeamsGateDecision._reject(403, 'channel $channel is not msteams');
+    return const TeamsActivityRefused(TeamsRefusal.notTeams);
   }
   if (!key.endorsements.contains(channel)) {
-    return const TeamsGateDecision._reject(
-      403,
-      'signing key not endorsed for msteams',
-    );
+    return const TeamsActivityRefused(TeamsRefusal.keyNotEndorsed);
   }
 
   // Microsoft's docs name the claim `serviceUrl`, and the tokens it sends
@@ -308,13 +308,10 @@ TeamsGateDecision _decide(
   final claimed =
       claims.stringOrNull('serviceurl') ?? claims.stringOrNull('serviceUrl');
   if (claimed == null) {
-    return const TeamsGateDecision._reject(401, 'token has no serviceurl');
+    return const TeamsActivityRefused(TeamsRefusal.noServiceUrlClaim);
   }
   if (claimed != serviceUrl) {
-    return const TeamsGateDecision._reject(
-      401,
-      'serviceurl claim does not match the activity',
-    );
+    return const TeamsActivityRefused(TeamsRefusal.serviceUrlMismatch);
   }
 
   // The token says which bot it was sent to; the body's recipient is only
@@ -326,10 +323,7 @@ TeamsGateDecision _decide(
   };
   if ((recipient == null ? null : BotAppId.ofChannelAccount(recipient)) !=
       token.bot) {
-    return const TeamsGateDecision._reject(
-      401,
-      'recipient is not the bot the token is for',
-    );
+    return const TeamsActivityRefused(TeamsRefusal.recipientNotTokenBot);
   }
 
   final conversation = a.object('conversation');
@@ -337,90 +331,10 @@ TeamsGateDecision _decide(
   if (spec.tenantAllowlist.isNotEmpty &&
       (tenant == null ||
           !spec.tenantAllowlist.any((t) => t.toLowerCase() == tenant))) {
-    return TeamsGateDecision._reject(403, 'tenant $tenant not allowed');
+    return const TeamsActivityRefused(TeamsRefusal.tenantNotAllowed);
   }
-
-  final type = a.string('type');
-  final name = a.stringOrNull('name');
-  // wire-ok: Teams' activity type, an open set; read once here.
-  final isInvoke = type == 'invoke';
-  // A sign-in invoke carries the person's access token or a sign-in code,
-  // and the relay records what the gate takes, for good. This bot asks no
-  // one to sign in, so it takes none of them.
-  // wire-ok: Teams' invoke names, an open set; this prefix is all of sign-in.
-  if (isInvoke && (name?.startsWith('signin/') ?? false)) {
-    return TeamsGateDecision._reject(403, 'sign-in invoke $name not taken');
-  }
-  final wakes = isInvoke
-      ? spec.wakeInvokes.contains(name)
-      : spec.wakeActivityTypes.contains(type);
-  final invokeResponse = !isInvoke
-      ? null
-      : spec.invokeResponses[name] ??
-            // wire-ok: the one invoke the acknowledgement's shape is for.
-            (wakes && name == 'adaptiveCard/action'
-                ? JsonObject.of({
-                    'statusCode': 200,
-                    'type': 'application/vnd.microsoft.activity.message',
-                    'value': spec.acknowledgement,
-                  })
-                : null);
-
-  if (!wakes) {
-    return TeamsGateDecision._(TeamsGateOutcome.ignore, switch ((
-      isInvoke,
-      invokeResponse,
-    )) {
-      (false, _) => 'quiet activity $type',
-      (true, null) => 'quiet invoke $name',
-      (true, _) => 'answered invoke $name',
-    }, invokeResponse: invokeResponse);
-  }
-  final event = _read(a, type, name, tenant, conversation);
-  if (event == null) {
-    return TeamsGateDecision._(
-      TeamsGateOutcome.ignore,
-      'no event is read from $type',
-      invokeResponse: invokeResponse,
-    );
-  }
-  return TeamsGateDecision._(
-    TeamsGateOutcome.trigger,
-    isInvoke ? 'invoke $name' : type,
-    event: event,
-    invokeResponse: invokeResponse,
-  );
-}
-
-/// The event in a body the relay recorded: the same reading the gate gives
-/// an activity it takes, without the gate's checks.
-///
-/// It trusts that [body] passed [teamsGate] before it was recorded, and
-/// checks none of that again: not the token, its `serviceurl` claim, the
-/// channel, nor the tenant allowlist. The relay records every body the gate
-/// takes, whether or not an event is read from it, so this is for reading
-/// those back, never for anything that came any other way.
-///
-/// The same activity can be recorded more than once: Teams sends again when
-/// it has no 200 in time, and the relay records every copy. Two records are
-/// one activity when their conversation, activity type, id and timestamp
-/// all match. Conversation, type and id are enough to tell a message, a
-/// join or a card press from another; an edit or a delete carries its
-/// message's id, so telling it apart takes the timestamp too.
-///
-/// Null for an activity type no event is read as. Throws a
-/// [FormatException] for a body that isn't an activity, which a recorded
-/// one never is.
-TeamsEvent? teamsRecordedEvent(List<int> body) {
-  final a = JsonObject.decode(utf8.decode(body));
-  final conversation = a.object('conversation');
-  return _read(
-    a,
-    a.string('type'),
-    a.stringOrNull('name'),
-    _tenant(a, conversation),
-    conversation,
-  );
+  return _project(spec, a, token.bot, tenant, conversation) ??
+      const TeamsActivityRefused(TeamsRefusal.kindNotRecorded);
 }
 
 /// The activity's tenant. A tenant id is a GUID, compared and passed on in
@@ -435,12 +349,14 @@ String? _tenant(JsonObject a, JsonObject conversation) =>
             conversation.stringOrNull('tenantId'))
         ?.toLowerCase();
 
-/// The activity read into what happened. Null for an activity type no event
-/// is read as.
-TeamsEvent? _read(
+/// The activity as the [TeamsEvent] the relay records, with the response
+/// its kind is answered with. Null for an activity of no recorded kind:
+/// the one place an activity type or invoke name is read, so a kind is
+/// recorded only by a case written here on purpose.
+TeamsActivityTaken? _project(
+  TeamsSourceSpec spec,
   JsonObject a,
-  String type,
-  String? name,
+  BotAppId bot,
   String? tenant,
   JsonObject conversation,
 ) {
@@ -459,94 +375,23 @@ TeamsEvent? _read(
     final s? => EntraObjectId.parse(s),
     null => null,
   };
-  // The gate has held the recipient to the token's audience by now, and a
-  // recorded body passed the gate, so a recipient that names no bot isn't
-  // an activity.
-  final bot = switch (user(a.objectOrNull('recipient')?.stringOrNull('id'))) {
-    final r? => BotAppId.ofChannelAccount(r),
-    null => null,
-  };
-  if (bot == null) throw const FormatException('recipient is not a bot');
   final text = a.stringOrNull('text');
-  // As they came: @-mentions, and the quoted-reply entity that says which
-  // earlier message a reply quotes. That is how a free-text reply in a chat
-  // names the node it is about; TeamsMessage.quote reads it.
-  final entities = a.objectsOrNull('entities');
+  final entities = a.objectsOrNull('entities') ?? const <JsonObject>[];
   final channelData = a.objectOrNull('channelData');
   final channelEventType = channelData?.stringOrNull('eventType');
   final channel = channelData?.objectOrNull('channel')?.stringOrNull('id');
   final team = channelData?.objectOrNull('team')?.stringOrNull('id');
+  final value = a.objectOrNull('value');
   List<TeamsUserId> ids(String k) => [
     for (final m in a.objectsOrNull(k) ?? const <JsonObject>[])
       ?user(m.string('id')),
   ];
-  // wire-ok: the activity type and invoke name, parsed here into TeamsEvent.
-  return switch (type) {
-    'message' => TeamsMessage(
-      conversation: conversationId,
-      id: id,
-      serviceUrl: serviceUrl,
-      tenant: tenant,
-      conversationType: conversationType,
-      timestamp: timestamp,
-      from: fromId,
-      fromAadObjectId: fromAadObjectId,
-      bot: bot,
-      channel: channel,
-      team: team,
-      text: text,
-      entities: entities,
-      replyTo: a.stringOrNull('replyToId'),
-    ),
-    'messageUpdate' => TeamsMessageUpdate(
-      conversation: conversationId,
-      id: id,
-      serviceUrl: serviceUrl,
-      tenant: tenant,
-      conversationType: conversationType,
-      timestamp: timestamp,
-      from: fromId,
-      fromAadObjectId: fromAadObjectId,
-      bot: bot,
-      channel: channel,
-      team: team,
-      text: text,
-      entities: entities,
-      channelEventType: channelEventType,
-    ),
-    'messageDelete' => TeamsMessageDelete(
-      conversation: conversationId,
-      id: id,
-      serviceUrl: serviceUrl,
-      tenant: tenant,
-      conversationType: conversationType,
-      timestamp: timestamp,
-      from: fromId,
-      fromAadObjectId: fromAadObjectId,
-      bot: bot,
-      channel: channel,
-      team: team,
-      channelEventType: channelEventType,
-    ),
-    // wire-ok: the activity type and invoke name, parsed here into TeamsEvent.
-    'invoke' when name == 'adaptiveCard/action' => TeamsCardAction(
-      conversation: conversationId,
-      id: id,
-      serviceUrl: serviceUrl,
-      tenant: tenant,
-      conversationType: conversationType,
-      timestamp: timestamp,
-      from: fromId,
-      fromAadObjectId: fromAadObjectId,
-      bot: bot,
-      channel: channel,
-      team: team,
-      card: a.stringOrNull('replyToId'),
-      value: a.objectOrNull('value'),
-    ),
-    // wire-ok: the invoke name, parsed here into TeamsEvent.
-    'invoke' when name == 'composeExtension/submitAction' =>
-      TeamsMessageActionSubmit(
+  final type = a.string('type');
+  final name = a.stringOrNull('name');
+  // wire-ok: the activity type and invoke name, read here into TeamsEvent.
+  return switch ((type, name)) {
+    ('message', _) => TeamsActivityTaken(
+      TeamsMessage(
         conversation: conversationId,
         id: id,
         serviceUrl: serviceUrl,
@@ -558,60 +403,226 @@ TeamsEvent? _read(
         bot: bot,
         channel: channel,
         team: team,
-        command: a.objectOrNull('value')?.stringOrNull('commandId'),
-        message: a
-            .objectOrNull('value')
-            ?.objectOrNull('messagePayload')
-            ?.stringOrNull('id'),
-        data: a.objectOrNull('value')?.objectOrNull('data'),
+        text: text,
+        mentions: _mentions(entities),
+        quote: _quote(entities),
+        replyTo: a.stringOrNull('replyToId'),
+        attachments: _attachments(a),
       ),
-    'invoke' => TeamsInvoke(
-      conversation: conversationId,
-      id: id,
-      serviceUrl: serviceUrl,
-      tenant: tenant,
-      conversationType: conversationType,
-      timestamp: timestamp,
-      from: fromId,
-      fromAadObjectId: fromAadObjectId,
-      bot: bot,
-      channel: channel,
-      team: team,
-      name: name,
-      value: a.objectOrNull('value'),
     ),
-    'conversationUpdate' => TeamsConversationUpdate(
-      conversation: conversationId,
-      id: id,
-      serviceUrl: serviceUrl,
-      tenant: tenant,
-      conversationType: conversationType,
-      timestamp: timestamp,
-      from: fromId,
-      fromAadObjectId: fromAadObjectId,
-      bot: bot,
-      channel: channel,
-      team: team,
-      added: ids('membersAdded'),
-      removed: ids('membersRemoved'),
+    ('messageUpdate', _) => TeamsActivityTaken(
+      TeamsMessageUpdate(
+        conversation: conversationId,
+        id: id,
+        serviceUrl: serviceUrl,
+        tenant: tenant,
+        conversationType: conversationType,
+        timestamp: timestamp,
+        from: fromId,
+        fromAadObjectId: fromAadObjectId,
+        bot: bot,
+        channel: channel,
+        team: team,
+        text: text,
+        mentions: _mentions(entities),
+        channelEventType: channelEventType,
+      ),
     ),
-    'installationUpdate' => TeamsInstallationUpdate(
-      conversation: conversationId,
-      id: id,
-      serviceUrl: serviceUrl,
-      tenant: tenant,
-      conversationType: conversationType,
-      timestamp: timestamp,
-      from: fromId,
-      fromAadObjectId: fromAadObjectId,
-      bot: bot,
-      channel: channel,
-      team: team,
-      action: a.stringOrNull('action'),
+    ('messageDelete', _) => TeamsActivityTaken(
+      TeamsMessageDelete(
+        conversation: conversationId,
+        id: id,
+        serviceUrl: serviceUrl,
+        tenant: tenant,
+        conversationType: conversationType,
+        timestamp: timestamp,
+        from: fromId,
+        fromAadObjectId: fromAadObjectId,
+        bot: bot,
+        channel: channel,
+        team: team,
+        channelEventType: channelEventType,
+      ),
+    ),
+    ('invoke', 'adaptiveCard/action') => TeamsActivityTaken(
+      TeamsCardAction(
+        conversation: conversationId,
+        id: id,
+        serviceUrl: serviceUrl,
+        tenant: tenant,
+        conversationType: conversationType,
+        timestamp: timestamp,
+        from: fromId,
+        fromAadObjectId: fromAadObjectId,
+        bot: bot,
+        channel: channel,
+        team: team,
+        card: a.stringOrNull('replyToId'),
+        verb: CardActionVerb.parse(
+          value?.objectOrNull('action')?.stringOrNull('verb'),
+        ),
+        trajectory: switch (value
+            ?.objectOrNull('action')
+            ?.objectOrNull('data')
+            ?.stringOrNull('trajectory')) {
+          final hex? => TrajectoryId.parse(hex),
+          null => null,
+        },
+      ),
+      response: JsonObject.of({
+        'statusCode': 200,
+        'type': 'application/vnd.microsoft.activity.message',
+        'value': spec.acknowledgement,
+      }),
+    ),
+    ('invoke', 'composeExtension/fetchTask') => switch ((
+      TeamsMessageAction.parse(value?.stringOrNull('commandId')),
+      spec.callSettingsDialog,
+    )) {
+      (TeamsMessageAction.callSettings, final dialog?) => TeamsActivityTaken(
+        TeamsMessageActionOpen(
+          conversation: conversationId,
+          id: id,
+          serviceUrl: serviceUrl,
+          tenant: tenant,
+          conversationType: conversationType,
+          timestamp: timestamp,
+          from: fromId,
+          fromAadObjectId: fromAadObjectId,
+          bot: bot,
+          channel: channel,
+          team: team,
+          command: TeamsMessageAction.callSettings,
+          message: _messageActedOn(value),
+        ),
+        response: dialog,
+      ),
+      _ => null,
+    },
+    ('invoke', 'composeExtension/submitAction') =>
+      switch (TeamsMessageAction.parse(value?.stringOrNull('commandId'))) {
+        final command? => TeamsActivityTaken(
+          TeamsMessageActionSubmit(
+            conversation: conversationId,
+            id: id,
+            serviceUrl: serviceUrl,
+            tenant: tenant,
+            conversationType: conversationType,
+            timestamp: timestamp,
+            from: fromId,
+            fromAadObjectId: fromAadObjectId,
+            bot: bot,
+            channel: channel,
+            team: team,
+            command: command,
+            message: _messageActedOn(value),
+          ),
+        ),
+        null => null,
+      },
+    ('conversationUpdate', _) => TeamsActivityTaken(
+      TeamsConversationUpdate(
+        conversation: conversationId,
+        id: id,
+        serviceUrl: serviceUrl,
+        tenant: tenant,
+        conversationType: conversationType,
+        timestamp: timestamp,
+        from: fromId,
+        fromAadObjectId: fromAadObjectId,
+        bot: bot,
+        channel: channel,
+        team: team,
+        added: ids('membersAdded'),
+        removed: ids('membersRemoved'),
+      ),
+    ),
+    ('installationUpdate', _) => TeamsActivityTaken(
+      TeamsInstallationUpdate(
+        conversation: conversationId,
+        id: id,
+        serviceUrl: serviceUrl,
+        tenant: tenant,
+        conversationType: conversationType,
+        timestamp: timestamp,
+        from: fromId,
+        fromAadObjectId: fromAadObjectId,
+        bot: bot,
+        channel: channel,
+        team: team,
+        action: InstallationAction.parse(a.stringOrNull('action')),
+      ),
     ),
     _ => null,
   };
 }
+
+/// The id of the message a message action was opened on.
+String? _messageActedOn(JsonObject? value) =>
+    value?.objectOrNull('messagePayload')?.stringOrNull('id');
+
+// wire-ok: Teams' entity types, an open set; only these two are read.
+const _mentionEntity = 'mention';
+const _quotedReplyEntity = 'quotedReply';
+
+/// The people and bots @-mentioned: each `mention` entity whose `mentioned`
+/// names a channel account.
+List<TeamsMention> _mentions(List<JsonObject> entities) => [
+  for (final e in entities)
+    if (e.stringOrNull('type') == _mentionEntity)
+      if (e.objectOrNull('mentioned') case final m?)
+        if (TeamsUserId.parse(m.stringOrNull('id') ?? '') case final id?)
+          TeamsMention(id: id, name: m.stringOrNull('name')),
+];
+
+/// What a Reply quotes: the first `quotedReply` entity that names both a
+/// message and its author. That is how a free-text reply in a chat names
+/// the node it is about.
+TeamsQuote? _quote(List<JsonObject> entities) {
+  for (final e in entities) {
+    if (e.stringOrNull('type') != _quotedReplyEntity) continue;
+    final q = e.objectOrNull('quotedReply');
+    final messageId = q?.stringOrNull('messageId');
+    final senderId = switch (q?.stringOrNull('senderId')) {
+      final s? => TeamsUserId.parse(s),
+      null => null,
+    };
+    if (q == null || messageId == null || senderId == null) continue;
+    return TeamsQuote(
+      messageId: messageId,
+      senderId: senderId,
+      senderName: q.stringOrNull('senderName'),
+      preview: q.stringOrNull('preview'),
+    );
+  }
+  return null;
+}
+
+/// What a message carried, by reference: each attachment's type, name and
+/// where it lives. Its content, and any `downloadUrl` inside it, is never
+/// read.
+List<TeamsAttachmentReference> _attachments(JsonObject a) => [
+  for (final at in a.objectsOrNull('attachments') ?? const <JsonObject>[])
+    if (at.stringOrNull('contentType') case final contentType?)
+      TeamsAttachmentReference(
+        contentType: contentType,
+        name: at.stringOrNull('name'),
+        contentUrl: _addressOnly(at.stringOrNull('contentUrl')),
+      ),
+];
+
+/// [url]'s scheme, host, port and path only. A pre-authorised link carries
+/// its grant in the query, and a URL can carry a password before its host,
+/// so neither is kept. Null for no URL, or one with no host.
+Uri? _addressOnly(String? url) => switch (Uri.tryParse(url ?? '')) {
+  final u? when u.hasScheme && u.host.isNotEmpty => Uri(
+    scheme: u.scheme,
+    host: u.host,
+    port: u.hasPort ? u.port : null,
+    path: u.path,
+  ),
+  _ => null,
+};
 
 sealed class _Check {}
 
@@ -623,8 +634,8 @@ final class _Verified extends _Check {
 }
 
 final class _Refused extends _Check {
-  _Refused(this.reason);
-  final String reason;
+  _Refused(this.refusal);
+  final TeamsRefusal refusal;
 }
 
 /// The token's claims and the bot it is for, if Microsoft signed it for
@@ -638,25 +649,26 @@ _Check _verify(
   required Duration skew,
 }) {
   final parts = token.split('.');
-  if (parts.length != 3) return _Refused('token is not three parts');
+  if (parts.length != 3) return _Refused(TeamsRefusal.tokenUnreadable);
   try {
     final header = _segment(parts[0]);
     // RS256 exactly. A token that names `none`, or an HMAC keyed with
     // something public, is the classic way past a verifier that trusts the
     // header's choice of algorithm.
-    final alg = header.stringOrNull('alg');
     // wire-ok: the JWT header's alg, checked against the one we accept.
-    if (alg != 'RS256') return _Refused('token alg $alg is not RS256');
+    if (header.stringOrNull('alg') != 'RS256') {
+      return _Refused(TeamsRefusal.tokenAlgorithm);
+    }
     final kid = header.stringOrNull('kid') ?? header.stringOrNull('x5t');
-    if (kid == null) return _Refused('token names no key');
+    if (kid == null) return _Refused(TeamsRefusal.tokenNamesNoKey);
     final key = keys.byId(kid);
-    if (key == null) return _Refused('token key $kid is not in the key set');
+    if (key == null) return _Refused(TeamsRefusal.tokenKeyUnknown);
 
     final signature = _bytes(parts[2]);
     // Checked here so that the signer is only ever handed a block of the
     // size it expects.
     if (signature.length != (key.key.modulus!.bitLength + 7) ~/ 8) {
-      return _Refused('signature is the wrong length for its key');
+      return _Refused(TeamsRefusal.badSignature);
     }
     final signer = RSASigner(SHA256Digest(), '0609608648016503040201')
       ..init(false, PublicKeyParameter<RSAPublicKey>(key.key));
@@ -664,12 +676,13 @@ _Check _verify(
       utf8.encode('${parts[0]}.${parts[1]}'),
       RSASignature(signature),
     )) {
-      return _Refused('bad signature');
+      return _Refused(TeamsRefusal.badSignature);
     }
 
     final claims = _segment(parts[1]);
-    final iss = claims.stringOrNull('iss');
-    if (iss != botFrameworkIssuer) return _Refused('token issuer $iss');
+    if (claims.stringOrNull('iss') != botFrameworkIssuer) {
+      return _Refused(TeamsRefusal.tokenIssuer);
+    }
     // Two of ours in one audience would leave which bot it is for to the
     // body, which the token doesn't vouch for.
     final bots = {
@@ -680,26 +693,20 @@ _Check _verify(
       })
         if (BotAppId.parse(s) case final b? when botAppIds.contains(b)) b,
     };
-    if (bots.length != 1) {
-      return _Refused(
-        bots.isEmpty
-            ? 'token audience is none of these bots'
-            : 'token audience names ${bots.length} of these bots',
-      );
-    }
+    if (bots.length != 1) return _Refused(TeamsRefusal.tokenAudience);
     final seconds = now.millisecondsSinceEpoch / 1000;
     final exp = claims.numberOrNull('exp');
-    if (exp == null) return _Refused('token has no expiry');
+    if (exp == null) return _Refused(TeamsRefusal.tokenNoExpiry);
     if (seconds > exp + skew.inSeconds) {
-      return _Refused('token expired ${(seconds - exp).round()}s ago');
+      return _Refused(TeamsRefusal.tokenExpired);
     }
     final nbf = claims.numberOrNull('nbf');
     if (nbf != null && seconds < nbf - skew.inSeconds) {
-      return _Refused('token not valid for ${(nbf - seconds).round()}s');
+      return _Refused(TeamsRefusal.tokenNotYetValid);
     }
     return _Verified(claims, key, bots.single);
-  } on FormatException catch (e) {
-    return _Refused('token: ${e.message}');
+  } on FormatException {
+    return _Refused(TeamsRefusal.tokenUnreadable);
   }
 }
 
