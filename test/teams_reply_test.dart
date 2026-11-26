@@ -1,6 +1,7 @@
 import 'dart:convert';
 
-import 'package:is_effects/is_effects.dart';
+import 'package:is_model_vocabulary/is_model_vocabulary.dart'
+    show CutOffReply, FinishedReply, ModelUsage;
 import 'package:is_shapes/is_shapes.dart' show TrajectoryId;
 import 'package:is_teams_module/is_teams_module.dart';
 import 'package:test/test.dart';
@@ -209,72 +210,6 @@ void main() {
         ),
         hasLength(1),
       );
-    });
-  });
-
-  group('the requests', () {
-    final signIn = SignIn.parse('cam-teams')!;
-    final endpoint = teamsReplyEndpoint(
-      Uri.parse('https://smba.trafficmanager.net/amer/'),
-      '19:c1@thread.v2',
-    )!;
-
-    test('are built from their inputs alone: the same inputs, the same '
-        'requests, every field', () {
-      final text = [for (var i = 0; i < 30; i++) 'p$i ${'é' * 1500}']
-          .join('\n\n');
-      String described(List<ProposedRequest> requests) => jsonEncode([
-        for (final r in requests)
-          [
-            '${r.origin}',
-            '${r.method}',
-            '${r.path}',
-            '${r.signIn}',
-            r.headers,
-            r.body,
-          ],
-      ]);
-      List<ProposedRequest> built() => postTeamsReplyDrawing(
-        text: text,
-        trajectory: trajectory,
-        replyEndpoint: endpoint,
-        signIn: signIn,
-        footer: contextFooter(usage),
-      );
-      expect(built().length, greaterThan(1));
-      expect(described(built()), described(built()));
-    });
-
-    test('post each part, in order, to the recorded reply endpoint', () {
-      final text = [for (var i = 0; i < 8; i++) 'p$i ${'x' * 2000}']
-          .join('\n\n');
-      final footer = contextFooter(usage);
-      final requests = postTeamsReplyDrawing(
-        text: text,
-        trajectory: trajectory,
-        replyEndpoint: endpoint,
-        signIn: signIn,
-        footer: footer,
-      );
-      final activities = drawTeamsReply(
-        text,
-        trajectory: trajectory,
-        footer: footer,
-        maxMessages: teamsReplyMaxMessages,
-      );
-      expect(requests, hasLength(activities.length));
-      for (var i = 0; i < requests.length; i++) {
-        final r = requests[i];
-        expect(r.method, Method.post);
-        expect(r.signIn, signIn);
-        expect('${r.origin}', 'https://smba.trafficmanager.net');
-        expect(
-          '${r.path}',
-          '/amer/v3/conversations/19%3Ac1%40thread.v2/activities',
-        );
-        expect(endpoint.covers(r.origin, r.path), isTrue);
-        expect(r.body, jsonEncode(activities[i]));
-      }
     });
   });
 }

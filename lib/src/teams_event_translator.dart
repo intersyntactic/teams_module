@@ -1,5 +1,7 @@
 import 'package:is_annotation_shapes/is_annotation_shapes.dart'
     show ApprovedVerdict, HeldOffVerdict, VerdictOnShownMessage;
+import 'package:is_conversation_reply_vocabulary/is_conversation_reply_vocabulary.dart'
+    show RepliesUnderWebAddress;
 import 'package:is_docking_station_api/is_docking_station_api.dart';
 
 import 'teams_event.dart';
@@ -102,10 +104,15 @@ final class TeamsEventTranslator
     final addressedTo = teamsBotActor(event.tenant, event.bot);
     // The gate held serviceUrl to the token's `serviceurl` claim, so the
     // origin is the one Microsoft signed for; the path is the conversation.
-    final replyEndpoint = teamsReplyEndpoint(
+    // Teams' Bot Connector takes a reply under a web address that names
+    // the conversation.
+    final replyEndpoint = switch (teamsReplyEndpoint(
       event.serviceUrl,
       event.conversation,
-    );
+    )) {
+      final prefix? => RepliesUnderWebAddress(prefix),
+      null => null,
+    };
     switch (event) {
       case TeamsMessage():
         final key = EventKey.parse('message:${event.id}');

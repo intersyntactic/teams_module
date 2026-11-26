@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:checked_json/checked_json.dart';
 import 'package:is_annotation_shapes/is_annotation_shapes.dart'
     show ApprovedVerdict, HeldOffVerdict;
+import 'package:is_conversation_reply_vocabulary/is_conversation_reply_vocabulary.dart'
+    show RepliesUnderWebAddress;
 import 'package:is_conversation_shapes/is_conversation_shapes.dart';
 import 'package:is_docking_station_api/is_docking_station_api.dart';
 import 'package:is_content_id/is_content_id.dart' show ObjectId;
@@ -577,7 +579,7 @@ void main() {
       expect(chat, isNotNull);
       expect(
         translated.map((r) => (r as AddressedEvent).replyEndpoint),
-        everyElement(chat),
+        everyElement(RepliesUnderWebAddress(chat!)),
       );
     });
 
@@ -601,7 +603,9 @@ void main() {
       ]);
       expect(
         (r as MessageSaid).replyEndpoint,
-        teamsReplyEndpoint(Uri.parse(serviceUrl), thread),
+        RepliesUnderWebAddress(
+          teamsReplyEndpoint(Uri.parse(serviceUrl), thread)!,
+        ),
       );
     });
 
@@ -612,7 +616,9 @@ void main() {
       ]);
       expect(
         (r as MessageSaid).replyEndpoint,
-        teamsReplyEndpoint(Uri.parse(au), 'a:1personal'),
+        RepliesUnderWebAddress(
+          teamsReplyEndpoint(Uri.parse(au), 'a:1personal')!,
+        ),
       );
     });
   });

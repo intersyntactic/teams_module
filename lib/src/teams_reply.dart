@@ -8,18 +8,18 @@
 /// the footer, the menu and any note that the reply was cut off.
 ///
 /// teams_module is the one place these bytes are made: [drawTeamsReply]
-/// draws them, and [postTeamsReplyDrawing], which `teams-reply-drawing`
-/// prints, addresses and signs them as the requests that would post them,
-/// to the conversation's reply endpoint as the logbook recorded it.
+/// draws them, and `TeamsReplyRequests` turns them into the requests that
+/// post them, to the conversation's reply endpoint as the logbook recorded
+/// it.
 library;
 
 import 'dart:convert';
 
-import 'package:is_effects/is_effects.dart';
+import 'package:is_model_vocabulary/is_model_vocabulary.dart'
+    show CutOffReply, ModelReply, ModelUsage;
 import 'package:is_shapes/is_shapes.dart' show TrajectoryId;
 
 import 'teams_event.dart' show CardActionVerb;
-import 'teams_requests.dart';
 
 /// The most a message may weigh, encoded, by Microsoft's docs: about 28 KB.
 /// Not yet measured against Teams.
@@ -88,33 +88,6 @@ List<Map<String, Object?>> drawTeamsReply(
           : _activity(parts[i], closes: null, cutOff: false, footer: null),
   ];
 }
-
-/// The requests that would post the Teams drawing of the reply [text] to
-/// the conversation at [replyEndpoint], signed as [signIn], in posting
-/// order: the reply as [drawTeamsReply] draws it, at most
-/// [teamsReplyMaxMessages] messages, closing [trajectory]. Addressing and
-/// signing are not drawing; they are here until the sending driver takes
-/// them. [replyEndpoint] is the conversation's as the logbook recorded it,
-/// never worked out again here.
-List<ProposedRequest> postTeamsReplyDrawing({
-  required String text,
-  required TrajectoryId trajectory,
-  required AddressPrefix replyEndpoint,
-  required SignIn signIn,
-  String? footer,
-}) => [
-  for (final activity in drawTeamsReply(
-    text,
-    trajectory: trajectory,
-    footer: footer,
-    maxMessages: teamsReplyMaxMessages,
-  ))
-    teamsPostToEndpoint(
-      replyEndpoint: replyEndpoint,
-      activity: activity,
-      signIn: signIn,
-    ),
-];
 
 /// The footer under a reply: `turn 3 · context 152k of 200k (76%)`, either
 /// half on its own, or null when there is neither.

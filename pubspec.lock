@@ -61,10 +61,10 @@ packages:
     dependency: transitive
     description:
       name: cli_util
-      sha256: "89b8801ba49f8b593fbf2d3e59efd0f566c46cd4ba6837ae2610c72b52a0f899"
+      sha256: da2a2b22f919995eb427edab07725e2be0b1281ef26770f6ce3a213355565262
       url: "https://pub.dev"
     source: hosted
-    version: "0.6.0"
+    version: "0.6.1"
   collection:
     dependency: transitive
     description:
@@ -85,10 +85,10 @@ packages:
     dependency: transitive
     description:
       name: coverage
-      sha256: ff89e37c19355194e279d26dafe8e4bece46c9ea63a30be4dc68214f5bc290d3
+      sha256: "8877574b53777c6627f436538eaf4a0485eebb49e19a3cace38474af60584613"
       url: "https://pub.dev"
     source: hosted
-    version: "1.16.0"
+    version: "1.16.2"
   crypto:
     dependency: transitive
     description:
@@ -169,6 +169,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.2.0"
+  is_conversation_reply_vocabulary:
+    dependency: "direct main"
+    description:
+      name: is_conversation_reply_vocabulary
+      sha256: "2c2f7d8e460a15ace0fcdd92c2a22aed51e8f92dedd507902d310a70573e50cf"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.1.0"
   is_conversation_shapes:
     dependency: "direct main"
     description:
@@ -181,26 +189,18 @@ packages:
     dependency: "direct main"
     description:
       name: is_docking_station_api
-      sha256: cf10508402a18f108db6dffe132852d2d5e3eb6fe0562aef6cddd7d039bc8c79
+      sha256: "0bd0de5c076f7321415696a5761d3f86cf933659c66565b0c16e221a1775f021"
       url: "https://pub.dev"
     source: hosted
-    version: "0.4.0"
+    version: "0.8.0"
   is_effects:
     dependency: "direct main"
     description:
       name: is_effects
-      sha256: "0b322e4efe7313479b09121b44c8d49dbf3f0794a9a46da41efcd8cefa937ab7"
+      sha256: "2d1014ac6b36a7658910a0278b573277fe3cac4be0533e597734bd89c908727a"
       url: "https://pub.dev"
     source: hosted
-    version: "0.14.3"
-  is_logbook_client:
-    dependency: transitive
-    description:
-      name: is_logbook_client
-      sha256: aff53c968e53c1b707305adeb212bd700ca0c231fa1caee4774b5db52f8cc4b0
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.3.0"
+    version: "0.17.0"
   is_logbook_format:
     dependency: transitive
     description:
@@ -209,6 +209,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.1.0"
+  is_model_vocabulary:
+    dependency: "direct main"
+    description:
+      name: is_model_vocabulary
+      sha256: "48927abc9d91422f92e370dc8a7698a2ee29c4bfa44712f5e88c9ab126185e57"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.0"
   is_path_confinement:
     dependency: transitive
     description:
@@ -217,14 +225,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.1.0"
-  is_relay:
+  is_reply_requests_api:
     dependency: "direct main"
     description:
-      name: is_relay
-      sha256: "11f2ccd01c7dc541e3fa6f185fd3a3a2b989ae00b63f51691064057d3bd9a133"
+      name: is_reply_requests_api
+      sha256: ed7e249adc312b30a1fa780af99308a2d8bb5f09ed9b0efe1e6b6da8e2edbfe8
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.0"
+    version: "0.2.0"
   is_shapes:
     dependency: "direct main"
     description:
@@ -234,7 +242,7 @@ packages:
     source: hosted
     version: "0.6.0"
   is_sign_in_vocabulary:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: is_sign_in_vocabulary
       sha256: dfffa15f57f7fb076e89aca0d27e33def3b2786efa730ee0c6cbca5473aefb15
@@ -242,13 +250,13 @@ packages:
     source: hosted
     version: "0.1.0"
   is_web_address_vocabulary:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: is_web_address_vocabulary
-      sha256: "232241a06a2871213e110f52f01c8c68b6c98fdcdf00fcfb491c8e24d10d8dac"
+      sha256: a0b58425fc7eaf98e740cdfac614201fa426594fafdf198903e961f0ee4ed6dd
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.1"
+    version: "0.1.2"
   lints:
     dependency: "direct dev"
     description:

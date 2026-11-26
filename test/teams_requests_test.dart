@@ -1,7 +1,10 @@
 import 'dart:convert';
 
-import 'package:is_effects/is_effects.dart';
+import 'package:is_effects/is_effects.dart' show Method;
+import 'package:is_sign_in_vocabulary/is_sign_in_vocabulary.dart' show SignIn;
 import 'package:is_teams_module/is_teams_module.dart';
+import 'package:is_web_address_vocabulary/is_web_address_vocabulary.dart'
+    show Origin;
 import 'package:test/test.dart';
 
 final serviceUrl = Uri.parse('https://smba.trafficmanager.net/amer/');
@@ -46,11 +49,6 @@ void main() {
       for (final r in [
         teamsPostRequest(post(), bot),
         teamsPostRequest(post(replyToId: '1730881000000'), bot),
-        teamsPostToEndpoint(
-          replyEndpoint: endpoint,
-          activity: const {'type': 'message'},
-          signIn: bot,
-        ),
       ]) {
         expect(endpoint.covers(r.origin, r.path), isTrue, reason: '${r.path}');
       }

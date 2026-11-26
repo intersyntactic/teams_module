@@ -3,7 +3,7 @@
 Each version is tagged `vX.Y.Z` on main, and the services that use this
 package pin that tag.
 
-## 0.0.9
+## 0.0.14
 
 - The Teams relay runs on is_relay 0.1.0's `RelayServer`. Teams' part is
   `TeamsDeliveryCheck`, a `ChecksDeliveries<TeamsToken>`: `checkHeaders` is
@@ -23,6 +23,58 @@ package pin that tag.
   refresh starts behind it, at most once every `retryAfter` (a minute)
   after a failed fetch. `refresh()` fetches, for the relay's boot.
 - `LOGBOOK_SOCKET` must be an absolute path.
+
+## 0.0.13
+
+- The reply types (`RepliesUnderWebAddress`, `ReplyContent`, `ReplyText`,
+  `ServerAssignedMessageId`) come from is_conversation_reply_vocabulary
+  ^0.1.0. is_docking_station_api ^0.8.0 no longer re-exports them, and
+  is_reply_requests_api ^0.2.0 uses them, so the module and everything it
+  hands a reply endpoint to share one `ReplyEndpoint`. is_reply_vocabulary
+  is gone. No behaviour change: `teams-reply-drawing` prints exactly what
+  0.0.12 printed.
+
+## 0.0.12
+
+- `TeamsReplyRequests` implements is_reply_requests_api's
+  `WritesWebAddressReplyRequests`, so the airlock can post a Teams reply as
+  it posts a Slack one. `draw` gives each message of the reply, as
+  `drawTeamsReply` draws it, as a `POST {prefix}activities` under the
+  recorded `RepliesUnderWebAddress`, with no sign-in (the airlock sets the
+  one it granted) and the response's body kept. `posted` reads the Bot
+  Connector's `{"id"}` from that body: `Ran` with the id, `NothingRan` for a
+  4xx, `StoppedPartway` with nothing done when it can't be told.
+- The footer comes in with the reply's `ReplyContent`, decided with it,
+  rather than being worked out here.
+- `postTeamsReplyDrawing` and `teamsPostToEndpoint` are gone.
+  `teams-reply-drawing` stays until the airlock posts replies itself; it
+  now signs `TeamsReplyRequests`' requests, and prints exactly what 0.0.11
+  printed.
+- On is_effects ^0.17.0, which re-exports nothing, so the module depends on
+  is_model_vocabulary, is_reply_vocabulary, is_sign_in_vocabulary and
+  is_web_address_vocabulary directly.
+
+## 0.0.11
+
+- is_docking_station_api ^0.7.0, which brings is_reply_vocabulary 0.2.0.
+  The lock holds the version set frozen at 05:51 UTC on 25 Nov, the same set
+  as the other builds that compile this package in. No code change.
+
+## 0.0.10
+
+- Every dependency at its newest on pub.dev, so the builds that compile
+  this package in lock the same versions: is_effects ^0.15.0 and
+  is_docking_station_api ^0.6.0 (its JSON is unchanged from 0.5.0). No code
+  change: the module names neither `Outcome.Refused` nor `ModelReply`.
+
+## 0.0.9
+
+- On is_docking_station_api ^0.5.0, where a reply endpoint is the sealed
+  `ReplyEndpoint`. The translator gives Teams' as
+  `RepliesUnderWebAddress(teamsReplyEndpoint(...))`: the Bot Connector
+  takes a reply under a web address that names the conversation.
+  `teams-reply-drawing`'s `--reply-endpoint` is unchanged, still the
+  address prefix itself.
 
 ## 0.0.8
 
