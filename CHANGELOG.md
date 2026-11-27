@@ -3,6 +3,17 @@
 Each version is tagged `vX.Y.Z` on main, and the services that use this
 package pin that tag.
 
+## 0.0.14
+
+- A reply's footer says the turn and the step: `turn 3 · step 7 · context
+  …`. A turn is a person's message through to its final reply; a step is
+  one model call and what it caused. `teams-reply-drawing` takes
+  `--step N` beside `--turn N`, both counted from 0, and shows each
+  counted from 1. `replyFooter` takes `step`.
+- `--turn` without `--step` is a loop from before steps had a name, whose
+  `--turn` carries the step: its footer is exactly what 0.0.13 printed. That
+  reading goes once every running loop sends both.
+
 ## 0.0.13
 
 - The reply types (`RepliesUnderWebAddress`, `ReplyContent`, `ReplyText`,

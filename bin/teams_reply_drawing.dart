@@ -6,7 +6,8 @@
 ///         --reply-endpoint '{"origin":"https://smba.trafficmanager.net",
 ///                     "pathPrefix":"/amer/v3/conversations/<id>/"}' \
 ///         --sign-in cam-teams --trajectory <64 hex> \
-///         [--turn 3] [--context-tokens 152000] [--context-window 200000]
+///         [--turn 2 --step 6] [--context-tokens 152000] \
+///         [--context-window 200000]
 ///
 /// reads the reply's text, UTF-8, on stdin, and prints the requests as one
 /// JSON array of is_effects' encodeProposedRequest, in posting order, on
@@ -16,8 +17,12 @@
 /// program is how a Teams reply goes out.
 /// The reply endpoint is the AddressPrefix the logbook recorded
 /// it for the conversation, passed as it is; nothing here works it out
-/// again or reaches the network. The footer says the turn and how full the
-/// model's context is, each when given. The trajectory is the one the reply
+/// again or reaches the network. The footer says the turn, the step and how
+/// full the model's context is, each when given: `--turn` and `--step`
+/// count from 0, and the footer counts from 1, so `--turn 2 --step 6` shows
+/// `turn 3 · step 7`. `--turn` without `--step` is a loop from before steps
+/// had a name, whose `--turn` carries the step; its footer reads
+/// `turn <N>` as it always has. The trajectory is the one the reply
 /// is in, a TrajectoryId in hex: the reply's "Close trajectory" closes
 /// that one, wherever and whenever it is pressed.
 ///
@@ -40,8 +45,8 @@ import 'package:is_web_address_vocabulary/is_web_address_vocabulary.dart'
 
 const usage =
     'usage: teams-reply-drawing --reply-endpoint JSON --sign-in NAME '
-    '--trajectory HEX [--turn N] [--context-tokens N] [--context-window N] '
-    '< text';
+    '--trajectory HEX [--turn N --step N] [--context-tokens N] '
+    '[--context-window N] < text';
 
 Future<void> main(List<String> args) async =>
     exit(await run(args, input: stdin, out: stdout, err: stderr));
@@ -59,6 +64,7 @@ Future<int> run(
     '--sign-in',
     '--trajectory',
     '--turn',
+    '--step',
     '--context-tokens',
     '--context-window',
   };
@@ -106,12 +112,22 @@ Future<int> run(
     final s => int.tryParse(s) ?? -1,
   };
   final turn = count('--turn');
+  final step = count('--step');
   final contextTokens = count('--context-tokens');
   final contextWindow = count('--context-window');
-  if ([turn, contextTokens, contextWindow].any((n) => n != null && n < 0)) {
+  if ([
+    turn,
+    step,
+    contextTokens,
+    contextWindow,
+  ].any((n) => n != null && n < 0)) {
     err.writeln('teams-reply-drawing: a count is not a whole number\n$usage');
     return 64;
   }
+  // Without --step, --turn is an older loop's step, shown as it always was.
+  final (shownTurn, shownStep) = step == null
+      ? (turn, null)
+      : (turn == null ? null : turn + 1, step + 1);
 
   final String text;
   try {
@@ -126,7 +142,8 @@ Future<int> run(
     return 65;
   }
   final footer = replyFooter(
-    turn: turn,
+    turn: shownTurn,
+    step: shownStep,
     contextTokens: contextTokens,
     contextWindow: contextWindow,
   );
