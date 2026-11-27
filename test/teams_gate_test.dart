@@ -45,6 +45,18 @@ void main() {
       expect((_event(d) as TeamsMessage).replyTo, '1730881000000');
     });
 
+    test('a message whatever its value holds: only an invoke reads it', () {
+      String projected(Map<String, Object?> a) =>
+          jsonEncode(_event(_gate(a)).projection().asUncheckedMap());
+      for (final value in <Object?>[42, 'text', true, <Object?>[]]) {
+        expect(
+          projected({...message(), 'value': value}),
+          projected(message()),
+          reason: '$value',
+        );
+      }
+    });
+
     test('an edit, with what Teams calls the change', () {
       final d = _gate({
         ...message(text: 'Looks right to me now'),
@@ -113,15 +125,21 @@ void main() {
       expect(submitted.entered, {'model': 'opus', 'effort': 'high'});
     });
 
-    test('what was entered keeps text only, nothing nested', () {
+    test('what was entered keeps each value as text, nothing nested', () {
       final action = _messageAction('composeExtension/submitAction');
       (action['value']! as Map<String, Object?>)['data'] = {
         'model': 'opus',
         'authentication': {'token': 'a-token'},
+        'choices': ['a-listed-token'],
         'count': 3,
+        'thinking': true,
       };
       final submitted = _event(_gate(action)) as TeamsMessageActionSubmit;
-      expect(submitted.entered, {'model': 'opus'});
+      expect(submitted.entered, {
+        'model': 'opus',
+        'count': '3',
+        'thinking': 'true',
+      });
       expect(
         jsonEncode(submitted.projection().asUncheckedMap()),
         isNot(contains('a-token')),

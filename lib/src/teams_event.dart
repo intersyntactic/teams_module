@@ -10,10 +10,12 @@ import 'teams_ids.dart';
 /// of it.
 ///
 /// Closed on purpose. Every field is one the module reads, or will read
-/// for a purpose already named, and each is typed: there is no open
-/// subtree, so a protocol field the module doesn't use is never written,
-/// whatever Teams puts in it. Words a person types or submits are kept, since
-/// they exist nowhere but the request that brought them.
+/// for a purpose already named, and each is typed, so a protocol field the
+/// module doesn't use is never written, whatever Teams puts in it. Words a
+/// person types or submits are kept, since they exist nowhere but the
+/// request that brought them: a message's text, and the one open map,
+/// [TeamsMessageActionSubmit.entered], whose keys are the dialog's input
+/// ids and whose values are only ever text.
 sealed class TeamsEvent {
   const TeamsEvent({
     required this.conversation,
@@ -745,8 +747,9 @@ final class TeamsMessageActionSubmit extends TeamsEvent {
   /// from.
   final String? message;
 
-  /// What was entered, as text, by input id. An input whose value is not
-  /// text is left out, so nothing but what a person typed or chose is kept.
+  /// What was entered, by input id, each as text: a number or a toggle as
+  /// the text it would show. A nested value is not an input's, so it is
+  /// left out.
   final Map<String, String> entered;
 
   /// The message whose menu it was opened from, by where it was said.

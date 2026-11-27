@@ -407,7 +407,9 @@ TeamsActivityTaken? _project(
   final channelEventType = channelData?.stringOrNull('eventType');
   final channel = channelData?.objectOrNull('channel')?.stringOrNull('id');
   final team = channelData?.objectOrNull('team')?.stringOrNull('id');
-  final value = a.objectOrNull('value');
+  // Read only by the invokes, whose value is an object; any other
+  // activity may carry a value of any type, and it is never read.
+  JsonObject? value() => a.objectOrNull('value');
   List<TeamsUserId> ids(String k) => [
     for (final m in a.objectsOrNull(k) ?? const <JsonObject>[])
       ?user(m.string('id')),
@@ -485,9 +487,9 @@ TeamsActivityTaken? _project(
         team: team,
         card: a.stringOrNull('replyToId'),
         verb: CardActionVerb.parse(
-          value?.objectOrNull('action')?.stringOrNull('verb'),
+          value()?.objectOrNull('action')?.stringOrNull('verb'),
         ),
-        trajectory: switch (value
+        trajectory: switch (value()
             ?.objectOrNull('action')
             ?.objectOrNull('data')
             ?.stringOrNull('trajectory')) {
@@ -502,7 +504,7 @@ TeamsActivityTaken? _project(
       }),
     ),
     ('invoke', 'composeExtension/fetchTask') => switch ((
-      TeamsMessageAction.parse(value?.stringOrNull('commandId')),
+      TeamsMessageAction.parse(value()?.stringOrNull('commandId')),
       spec.callSettingsDialog,
     )) {
       (TeamsMessageAction.callSettings, final dialog?) => TeamsActivityTaken(
@@ -519,14 +521,14 @@ TeamsActivityTaken? _project(
           channel: channel,
           team: team,
           command: TeamsMessageAction.callSettings,
-          message: _messageActedOn(value),
+          message: _messageActedOn(value()),
         ),
         response: dialog,
       ),
       _ => null,
     },
     ('invoke', 'composeExtension/submitAction') =>
-      switch (TeamsMessageAction.parse(value?.stringOrNull('commandId'))) {
+      switch (TeamsMessageAction.parse(value()?.stringOrNull('commandId'))) {
         final command? => TeamsActivityTaken(
           TeamsMessageActionSubmit(
             conversation: conversationId,
@@ -541,8 +543,8 @@ TeamsActivityTaken? _project(
             channel: channel,
             team: team,
             command: command,
-            message: _messageActedOn(value),
-            entered: _entered(value?.objectOrNull('data')),
+            message: _messageActedOn(value()),
+            entered: _entered(value()?.objectOrNull('data')),
           ),
         ),
         null => null,
@@ -584,13 +586,21 @@ TeamsActivityTaken? _project(
   };
 }
 
-/// What a dialog's inputs held, by input id, text only: Adaptive Card
-/// inputs submit text, and anything else in [data] is not something a
-/// person entered.
+/// What a dialog's inputs held, by input id, each as text: a number or a
+/// toggle is kept as the text it would show. A nested object or list is
+/// not an input's value, so it is left out.
 Map<String, String> _entered(JsonObject? data) => {
   if (data != null)
-    for (final k in data.keys)
-      if (data.raw(k) case final String v) k: v,
+    for (final k in data.keys) k: ?_asText(data.raw(k)),
+};
+
+/// [value] as the text an input would show, or null for one that no input
+/// submits.
+String? _asText(Object? value) => switch (value) {
+  final String s => s,
+  final num n => '$n',
+  final bool b => '$b',
+  _ => null,
 };
 
 /// The id of the message a message action was opened on.
