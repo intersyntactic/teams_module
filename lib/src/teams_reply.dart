@@ -89,14 +89,22 @@ List<Map<String, Object?>> drawTeamsReply(
   ];
 }
 
-/// The footer under a reply: `turn 3 · context 152k of 200k (76%)`, either
-/// half on its own, or null when there is neither.
-String? replyFooter({int? turn, int? contextTokens, int? contextWindow}) {
-  final halves = [
+/// The footer under a reply: `turn 3 · step 7 · context 152k of 200k (76%)`,
+/// with each part only when given, or null when none is. [turn] and [step]
+/// are as shown. A turn is a person's message through to its final reply;
+/// a step is one model call and what it caused.
+String? replyFooter({
+  int? turn,
+  int? step,
+  int? contextTokens,
+  int? contextWindow,
+}) {
+  final parts = [
     if (turn != null) 'turn $turn',
+    if (step != null) 'step $step',
     if (contextTokens != null) contextFooterOf(contextTokens, contextWindow),
   ];
-  return halves.isEmpty ? null : halves.join(' · ');
+  return parts.isEmpty ? null : parts.join(' · ');
 }
 
 /// How full the model's context is after the call [usage] reports, such as
