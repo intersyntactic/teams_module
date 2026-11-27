@@ -1,12 +1,12 @@
 /// The Teams module: what people say and press in Microsoft Teams, taken in
 /// as nodes on a trajectory, and the way back out to them.
 ///
-/// The way in: [TeamsRelay], the endpoint Teams posts to; [teamsGate],
-/// which every delivery passes first; and the keys it checks signatures
-/// against, [BotFrameworkKeys], fetched by [BotFrameworkKeySource]; and
-/// [recordEvent], which records each accepted body with the logbook's one
-/// writer; and [teamsRecordedEvent], which reads a recorded body back into
-/// the same event, for whatever reads the logbook; and
+/// The way in: [TeamsDeliveryCheck], the Teams check is_relay's projecting
+/// `RelayServer` runs on every delivery; [teamsGate], the checks it makes
+/// and the [TeamsEvent] it makes, whose projection is what is recorded;
+/// the keys it checks signatures against, [BotFrameworkKeys], fetched by
+/// [BotFrameworkKeySource]; [teamsRecordedEvent], which reads a recorded
+/// projection back into the same event, for whatever reads the logbook; and
 /// [TeamsEventTranslator], which translates each recorded event into the
 /// docking station's terms. Translators bring things in; drawings take
 /// things out. The way out: [drawTeamsReply], the Teams drawing of a reply,
@@ -19,7 +19,7 @@ library;
 
 export 'src/bot_framework_keys.dart';
 export 'src/key_source.dart';
-export 'src/record_event.dart';
+export 'src/teams_delivery_check.dart';
 export 'src/teams_event.dart';
 export 'src/teams_event_translator.dart';
 export 'src/teams_gate.dart';
@@ -28,4 +28,3 @@ export 'src/teams_post.dart';
 export 'src/teams_reply.dart';
 export 'src/teams_reply_requests.dart';
 export 'src/teams_requests.dart';
-export 'src/teams_relay.dart';

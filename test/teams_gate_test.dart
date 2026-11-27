@@ -1,10 +1,16 @@
 import 'dart:convert';
 
 import 'package:checked_json/checked_json.dart';
+import 'package:is_relay/is_relay.dart' show RefusalStatus;
 import 'package:is_teams_module/is_teams_module.dart';
 import 'package:test/test.dart';
 
 import 'support/fixtures.dart';
+
+final _dialog = teamsDialog(
+  title: 'Call settings',
+  card: JsonObject.of({'type': 'AdaptiveCard', 'version': '1.5'}),
+);
 
 void main() {
   setUpAll(setUpKeys);
@@ -13,10 +19,8 @@ void main() {
   group('takes', () {
     test('a message in a one-to-one chat, with its text', () {
       final d = _gate(message());
-      expect(d.outcome, TeamsGateOutcome.trigger);
-      expect(d.status, 200);
-      expect(d.invokeResponse, isNull);
-      final said = d.event! as TeamsMessage;
+      expect(_response(d), isNull);
+      final said = _event(d) as TeamsMessage;
       expect(said.tenant, tenant);
       expect(said.conversation, 'a:1personal');
       expect(said.conversationType, 'personal');
@@ -30,13 +34,27 @@ void main() {
       );
       expect(said.bot, appBot);
       expect(said.text, 'Looks right to me');
-      expect(said.entities, isNull);
+      expect(said.mentions, isEmpty);
+      expect(said.quote, isNull);
       expect(said.replyTo, isNull);
+      expect(said.attachments, isEmpty);
     });
 
     test('a message in a channel, with what it replies under', () {
       final d = _gate({...message(), 'replyToId': '1730881000000'});
-      expect((d.event! as TeamsMessage).replyTo, '1730881000000');
+      expect((_event(d) as TeamsMessage).replyTo, '1730881000000');
+    });
+
+    test('a message whatever its value holds: only an invoke reads it', () {
+      String projected(Map<String, Object?> a) =>
+          jsonEncode(_event(_gate(a)).projection().asUncheckedMap());
+      for (final value in <Object?>[42, 'text', true, <Object?>[]]) {
+        expect(
+          projected({...message(), 'value': value}),
+          projected(message()),
+          reason: '$value',
+        );
+      }
     });
 
     test('an edit, with what Teams calls the change', () {
@@ -48,7 +66,7 @@ void main() {
           'eventType': 'editMessage',
         },
       });
-      final edited = d.event! as TeamsMessageUpdate;
+      final edited = _event(d) as TeamsMessageUpdate;
       expect(edited.text, 'Looks right to me now');
       expect(edited.channelEventType, 'editMessage');
     });
@@ -64,240 +82,17 @@ void main() {
           },
         }..remove('text'),
       );
-      final deleted = d.event! as TeamsMessageDelete;
+      final deleted = _event(d) as TeamsMessageDelete;
       expect(deleted.id, '1730881234567');
       expect(deleted.channelEventType, 'softDeleteMessage');
     });
 
-    test('another invoke it was told to take, by its name', () {
-      final d = _gate(
-        {...cardAction(), 'name': 'task/fetch'},
-        spec: TeamsSourceSpec(
-          botAppIds: {appBot},
-          tenantAllowlist: {tenant},
-          wakeInvokes: {'task/fetch'},
-        ),
-      );
-      final invoked = d.event! as TeamsInvoke;
-      expect(invoked.name, 'task/fetch');
-      expect(invoked.value!.object('action').string('verb'), 'approve');
-    });
-
-    test('a message action submitted, with the message it was opened on', () {
-      // As the docs give a message action's submitAction; not yet measured.
-      final d = _gate({
-        ...cardAction(),
-        'name': 'composeExtension/submitAction',
-        'value': {
-          'commandId': callSettingsCommandId,
-          'commandContext': 'message',
-          'messagePayload': {
-            'id': '1730881000000',
-            'body': <String, Object?>{},
-          },
-          'data': {'model': 'opus', 'effort': 'high'},
-        },
-      });
-      expect(d.outcome, TeamsGateOutcome.trigger);
-      expect(d.invokeResponse, isNull);
-      final submitted = d.event! as TeamsMessageActionSubmit;
-      expect(submitted.command, callSettingsCommandId);
-      expect(
-        submitted.messageRef,
-        TeamsMessageRef.of('a:1personal', '1730881000000'),
-      );
-      expect(submitted.data!.asUncheckedMap(), {
-        'model': 'opus',
-        'effort': 'high',
-      });
-    });
-
-    test('a card action, responded to with the acknowledgement', () {
-      final d = _gate(cardAction());
-      expect(d.outcome, TeamsGateOutcome.trigger);
-      expect(d.invokeResponse!.asUncheckedMap(), {
-        'statusCode': 200,
-        'type': 'application/vnd.microsoft.activity.message',
-        'value': 'Got it',
-      });
-      final pressed = d.event! as TeamsCardAction;
-      expect(pressed.card, '1730881000000');
-      expect(pressed.verb, CardActionVerb.approve);
-    });
-
-    test('an audience given as a list', () {
-      final t = signedToken(
-        claims: {
-          ...tokenClaims(),
-          'aud': ['someone', appId],
-        },
-      );
-      expect(_gate(message(), token: t).outcome, TeamsGateOutcome.trigger);
-    });
-
-    test('a second bot from the same endpoint, named by its token', () {
-      final d = _gate(
-        {
-          ...message(),
-          'recipient': {'id': '28:${otherAppId.toUpperCase()}', 'name': 'B'},
-        },
-        token: signedToken(claims: {...tokenClaims(), 'aud': otherAppId}),
-        spec: TeamsSourceSpec(
-          botAppIds: {appBot, otherBot},
-          tenantAllowlist: {tenant},
-        ),
-      );
-      expect(d.outcome, TeamsGateOutcome.trigger);
-      expect(d.event!.bot, otherBot);
-    });
-
-    test('the claim spelled serviceUrl, as the docs spell it', () {
-      final claims = tokenClaims()
-        ..remove('serviceurl')
-        ..['serviceUrl'] = serviceUrl;
-      final t = signedToken(claims: claims);
-      expect(_gate(message(), token: t).outcome, TeamsGateOutcome.trigger);
-    });
-
-    test('a key named by x5t alone', () {
-      final t = signedToken(
-        header: {'typ': 'JWT', 'alg': 'RS256', 'x5t': 'k1'},
-      );
-      expect(_gate(message(), token: t).outcome, TeamsGateOutcome.trigger);
-    });
-
-    test('a token inside the clock skew at either end', () {
-      final late_ = signedToken(
-        claims: {...tokenClaims(), 'exp': nowSeconds - 240},
-      );
-      final early = signedToken(
-        claims: {...tokenClaims(), 'nbf': nowSeconds + 240},
-      );
-      expect(_gate(message(), token: late_).outcome, TeamsGateOutcome.trigger);
-      expect(_gate(message(), token: early).outcome, TeamsGateOutcome.trigger);
-    });
-
-    test('an install, which carries what messaging first needs', () {
-      final d = _gate(
-        {...message(), 'type': 'installationUpdate', 'action': 'add'}
-          ..remove('text'),
-      );
-      expect(d.outcome, TeamsGateOutcome.trigger);
-      final installed = d.event! as TeamsInstallationUpdate;
-      expect(installed.action, 'add');
-      expect(installed.serviceUrl, Uri.parse(serviceUrl));
-    });
-
-    test('a quoted reply, with the entities that say what it quotes', () {
-      // The quotedReply entity as a Reply in a one-to-one chat carried it,
-      // seen in a recorded body on 2026-11-14. The gate passes entities on
-      // unread, which is what this proves.
-      final entities = [
-        {
-          'type': 'mention',
-          'mentioned': {'id': '28:$appId', 'name': 'Bot'},
-          'text': '<at>Bot</at>',
-        },
-        {
-          'type': 'quotedReply',
-          'quotedReply': {
-            'messageId': '1730881000000',
-            'senderId': '29:1ada',
-            'senderName': 'Ada',
-            'preview': 'Looks right to me',
-            'validatedMessageReference': true,
-          },
-        },
-      ];
-      final d = _gate({
-        ...message(
-          text: '<quoted messageId="1730881000000"/> <at>Bot</at> not quite',
-        ),
-        'entities': entities,
-      });
-      expect(d.outcome, TeamsGateOutcome.trigger);
-      final said = d.event! as TeamsMessage;
-      expect(
-        jsonEncode([for (final e in said.entities!) e.asUncheckedMap()]),
-        jsonEncode(entities),
-      );
-      expect(said.text, startsWith('<quoted messageId='));
-    });
-
-    test('a tenant in upper case, matched and passed on in lower', () {
-      final upper = tenant.toUpperCase();
-      final d = _gate({
-        ...message(),
-        'channelData': {
-          'tenant': {'id': upper},
-        },
-      }, spec: TeamsSourceSpec(botAppIds: {appBot}, tenantAllowlist: {upper}));
-      expect(d.outcome, TeamsGateOutcome.trigger);
-      expect(d.event!.tenant, tenant);
-    });
-
-    test('a conversation update, with who joined', () {
-      final d = _gate(
-        {
-          ...message(),
-          'type': 'conversationUpdate',
-          'membersAdded': [
-            {'id': '28:$appId'},
-          ],
-        }..remove('text'),
-      );
-      final changed = d.event! as TeamsConversationUpdate;
-      expect(changed.added, [TeamsUserId.parse('28:$appId')]);
-      expect(changed.removed, isEmpty);
-    });
-  });
-
-  group('ignores', () {
-    test('a quiet activity type', () {
-      final d = _gate({...message(), 'type': 'typing'}..remove('text'));
-      expect(d.outcome, TeamsGateOutcome.ignore);
-      expect(d.status, 200);
-      expect(d.event, isNull);
-    });
-
-    test('a type it was told to wake on that no event is read as', () {
-      final d = _gate(
-        {...message(), 'type': 'typing'}..remove('text'),
-        spec: TeamsSourceSpec(
-          botAppIds: {appBot},
-          tenantAllowlist: {tenant},
-          wakeActivityTypes: {'typing'},
-        ),
-      );
-      expect(d.outcome, TeamsGateOutcome.ignore);
-      expect(d.reason, 'no event is read from typing');
-      expect(d.event, isNull);
-    });
-
-    test('an invoke it was not built for, with no response to give', () {
-      final d = _gate({...cardAction(), 'name': 'composeExtension/query'});
-      expect(d.outcome, TeamsGateOutcome.ignore);
-      expect(d.invokeResponse, isNull);
-    });
-
-    test('an invoke it answers with a dialog, waking no one', () {
-      final card = JsonObject.of({'type': 'AdaptiveCard', 'version': '1.5'});
-      final spec = TeamsSourceSpec(
-        botAppIds: {appBot},
-        tenantAllowlist: {tenant},
-        invokeResponses: {
-          'composeExtension/fetchTask': teamsDialog(
-            title: 'Call settings',
-            card: card,
-          ),
-        },
-      );
-      final fetch = {...cardAction(), 'name': 'composeExtension/fetchTask'};
-      final d = _gate(fetch, spec: spec);
-      expect(d.outcome, TeamsGateOutcome.ignore);
-      expect(d.reason, 'answered invoke composeExtension/fetchTask');
-      expect(d.event, isNull);
-      expect(d.invokeResponse!.asUncheckedMap(), {
+    test('call settings opened, answered with the dialog', () {
+      final d = _gate(_messageAction('composeExtension/fetchTask'));
+      final opened = _event(d) as TeamsMessageActionOpen;
+      expect(opened.command, TeamsMessageAction.callSettings);
+      expect(opened.message, '1730881000000');
+      expect(_response(d)!.asUncheckedMap(), {
         'task': {
           'type': 'continue',
           'value': {
@@ -311,13 +106,169 @@ void main() {
       });
       // Teams re-sends what it got no response to; the retry gets the same.
       expect(
-        _gate(fetch, spec: spec).invokeResponse!.asUncheckedMap(),
-        d.invokeResponse!.asUncheckedMap(),
+        _response(_gate(_messageAction('composeExtension/fetchTask')))!
+            .asUncheckedMap(),
+        _response(d)!.asUncheckedMap(),
       );
     });
-  });
 
-  group('takes each of', () {
+    test('call settings submitted, with the message and what was entered', () {
+      // As the docs give a message action's submitAction; not yet measured.
+      final d = _gate(_messageAction('composeExtension/submitAction'));
+      expect(_response(d), isNull);
+      final submitted = _event(d) as TeamsMessageActionSubmit;
+      expect(submitted.command, TeamsMessageAction.callSettings);
+      expect(
+        submitted.messageRef,
+        TeamsMessageRef.of('a:1personal', '1730881000000'),
+      );
+      expect(submitted.entered, {'model': 'opus', 'effort': 'high'});
+    });
+
+    test('what was entered keeps each value as text, nothing nested', () {
+      final action = _messageAction('composeExtension/submitAction');
+      (action['value']! as Map<String, Object?>)['data'] = {
+        'model': 'opus',
+        'authentication': {'token': 'a-token'},
+        'choices': ['a-listed-token'],
+        'count': 3,
+        'thinking': true,
+      };
+      final submitted = _event(_gate(action)) as TeamsMessageActionSubmit;
+      expect(submitted.entered, {
+        'model': 'opus',
+        'count': '3',
+        'thinking': 'true',
+      });
+      expect(
+        jsonEncode(submitted.projection().asUncheckedMap()),
+        isNot(contains('a-token')),
+      );
+    });
+
+    test('a card action, responded to with the acknowledgement', () {
+      final d = _gate(cardAction());
+      expect(_response(d)!.asUncheckedMap(), {
+        'statusCode': 200,
+        'type': 'application/vnd.microsoft.activity.message',
+        'value': 'Got it',
+      });
+      final pressed = _event(d) as TeamsCardAction;
+      expect(pressed.card, '1730881000000');
+      expect(pressed.verb, CardActionVerb.approve);
+      expect(pressed.trajectory, isNull);
+    });
+
+    test("a Close, with the trajectory its card's data names", () {
+      final press = cardAction();
+      (press['value']! as Map<String, Object?>)['action'] = {
+        'type': 'Action.Execute',
+        'verb': 'close',
+        'data': {'trajectory': 'cd' * 32},
+      };
+      final pressed = _event(_gate(press)) as TeamsCardAction;
+      expect(pressed.verb, CardActionVerb.close);
+      expect(pressed.trajectory?.hex, 'cd' * 32);
+    });
+
+    test('a card action with a verb our cards never send, as no verb', () {
+      final press = cardAction();
+      (press['value']! as Map<String, Object?>)['action'] = {'verb': 'other'};
+      expect((_event(_gate(press)) as TeamsCardAction).verb, isNull);
+    });
+
+    test('an audience given as a list', () {
+      final t = signedToken(
+        claims: {
+          ...tokenClaims(),
+          'aud': ['someone', appId],
+        },
+      );
+      _event(_gate(message(), token: t));
+    });
+
+    test('a second bot from the same endpoint, named by its token', () {
+      final d = _gate(
+        {
+          ...message(),
+          'recipient': {'id': '28:${otherAppId.toUpperCase()}', 'name': 'B'},
+        },
+        token: signedToken(claims: {...tokenClaims(), 'aud': otherAppId}),
+        spec: TeamsSourceSpec(
+          botAppIds: {appBot, otherBot},
+          tenants: TenantsTaken.only({tenant})!,
+        ),
+      );
+      expect(_event(d).bot, otherBot);
+    });
+
+    test('the claim spelled serviceUrl, as the docs spell it', () {
+      final claims = tokenClaims()
+        ..remove('serviceurl')
+        ..['serviceUrl'] = serviceUrl;
+      _event(_gate(message(), token: signedToken(claims: claims)));
+    });
+
+    test('a key named by x5t alone', () {
+      final t = signedToken(
+        header: {'typ': 'JWT', 'alg': 'RS256', 'x5t': 'k1'},
+      );
+      _event(_gate(message(), token: t));
+    });
+
+    test('a token inside the clock skew at either end', () {
+      final late_ = signedToken(
+        claims: {...tokenClaims(), 'exp': nowSeconds - 240},
+      );
+      final early = signedToken(
+        claims: {...tokenClaims(), 'nbf': nowSeconds + 240},
+      );
+      _event(_gate(message(), token: late_));
+      _event(_gate(message(), token: early));
+    });
+
+    test('an install, which carries what messaging first needs', () {
+      final d = _gate(
+        {...message(), 'type': 'installationUpdate', 'action': 'add'}
+          ..remove('text'),
+      );
+      final installed = _event(d) as TeamsInstallationUpdate;
+      expect(installed.action, InstallationAction.add);
+      expect(installed.serviceUrl, Uri.parse(serviceUrl));
+    });
+
+    test('a tenant in upper case, matched and passed on in lower', () {
+      final upper = tenant.toUpperCase();
+      final d = _gate(
+        {
+          ...message(),
+          'channelData': {
+            'tenant': {'id': upper},
+          },
+        },
+        spec: TeamsSourceSpec(
+          botAppIds: {appBot},
+          tenants: TenantsTaken.only({upper})!,
+        ),
+      );
+      expect(_event(d).tenant, tenant);
+    });
+
+    test('a conversation update, with who joined', () {
+      final d = _gate(
+        {
+          ...message(),
+          'type': 'conversationUpdate',
+          'membersAdded': [
+            {'id': '28:$appId'},
+          ],
+        }..remove('text'),
+      );
+      final changed = _event(d) as TeamsConversationUpdate;
+      expect(changed.added, [TeamsUserId.parse('28:$appId')]);
+      expect(changed.removed, isEmpty);
+    });
+
     // An edit, a delete and its undo all carry the message's id.
     test('a message, its edit, its delete and the undo', () {
       for (final (type, eventType, at) in [
@@ -335,31 +286,190 @@ void main() {
             'eventType': ?eventType,
           },
         });
-        expect(d.outcome, TeamsGateOutcome.trigger, reason: '$type at $at');
+        expect(d, isA<TeamsActivityTaken>(), reason: '$type at $at');
       }
     });
   });
 
+  group('reads from a message', () {
+    // As a group-chat Reply with @CAM carried them, recorded 2026-11-15.
+    const mention = {
+      'type': 'mention',
+      'mentioned': {'id': '28:app-id', 'name': 'CAM'},
+      'text': '<at>CAM</at>',
+    };
+    const quoted = {
+      'type': 'quotedReply',
+      'quotedReply': {
+        'messageId': '1794611050347',
+        'senderId': '29:1bea',
+        'senderName': 'Bea',
+        'preview': 'Good morning!',
+        'time': '2026-11-13T23:04:10.3470000Z',
+        'validatedMessageReference': true,
+      },
+    };
+    TeamsMessage carrying(List<Map<String, Object?>> entities) =>
+        _event(_gate({...message(), 'entities': entities})) as TeamsMessage;
+
+    test('who it mentions, and the name Teams showed', () {
+      final m = carrying([mention, quoted]).mentions.single;
+      expect(m.id, TeamsUserId.parse('28:app-id'));
+      expect(m.name, 'CAM');
+    });
+
+    test('a mention naming no channel account, as none', () {
+      expect(
+        carrying([
+          {
+            'type': 'mention',
+            'mentioned': {'id': 'tag:everyone', 'name': 'Everyone'},
+          },
+        ]).mentions,
+        isEmpty,
+      );
+    });
+
+    test('what it quotes, from the quotedReply entity past a mention', () {
+      final q = carrying([mention, quoted]).quote!;
+      expect(q.messageId, '1794611050347');
+      expect(q.senderId, TeamsUserId.parse('29:1bea'));
+      expect(q.senderName, 'Bea');
+      expect(q.preview, 'Good morning!');
+    });
+
+    test('no quote from a message that quotes nothing', () {
+      expect(carrying([mention]).quote, isNull);
+    });
+
+    test('a quote only with both the message and its author', () {
+      Map<String, Object?> without(String key) => {
+        'type': 'quotedReply',
+        'quotedReply': {...(quoted['quotedReply']! as Map<String, Object?>)}
+          ..remove(key),
+      };
+      expect(carrying([without('messageId')]).quote, isNull);
+      expect(carrying([without('senderId')]).quote, isNull);
+      expect(carrying([without('senderName')]).quote!.senderName, isNull);
+    });
+
+    test('what it carried, by type and name, never where it lives', () {
+      final said = _event(
+        _gate({
+          ...message(),
+          'attachments': [
+            {
+              'contentType':
+                  'application/vnd.microsoft.teams.file.download.info',
+              'contentUrl':
+                  'https://x.sharepoint.com/sites/s/plan.docx?tempauth=t#f',
+              'name': 'plan.docx',
+              'content': {
+                'downloadUrl': 'https://x.sharepoint.com/dl?tempauth=t',
+              },
+            },
+            {
+              'contentType': 'image/*',
+              'contentUrl': 'https://user:pass@smba.example:8443/a/1',
+            },
+            {'contentType': 'text/html', 'content': '<p>hi</p>'},
+            {'contentType': 'x', 'contentUrl': 'not a url'},
+            {'name': 'no type'},
+          ],
+        }),
+      ) as TeamsMessage;
+      expect(
+        [for (final a in said.attachments) (a.contentType, a.name)],
+        [
+          ('application/vnd.microsoft.teams.file.download.info', 'plan.docx'),
+          ('image/*', null),
+          ('text/html', null),
+          ('x', null),
+        ],
+      );
+    });
+  });
+
   group('refuses', () {
-    void refused(TeamsGateDecision d, int status, Matcher reason) {
-      expect(d.outcome, TeamsGateOutcome.reject);
-      expect(d.status, status);
-      expect(d.reason, reason);
-      expect(d.event, isNull);
-      expect(d.invokeResponse, isNull);
-    }
+    void refused(TeamsGateDecision d, TeamsRefusal refusal) => expect(
+      d,
+      isA<TeamsActivityRefused>().having((r) => r.refusal, 'refusal', refusal),
+    );
+
+    test('each refusal with a fixed reason and a status that is no 2xx', () {
+      for (final r in TeamsRefusal.values) {
+        expect(r.reason, isNotEmpty);
+        expect(r.status.code, greaterThanOrEqualTo(400));
+      }
+      expect(TeamsRefusal.kindNotRecorded.status, RefusalStatus.forbidden);
+    });
 
     test('when no app id is configured', () {
       refused(
-        _gate(message(), spec: const TeamsSourceSpec(botAppIds: {})),
-        401,
-        contains('app ids'),
+        _gate(
+          message(),
+          spec: const TeamsSourceSpec(
+            botAppIds: {},
+            tenants: TenantsTaken.anyTenant,
+          ),
+        ),
+        TeamsRefusal.noBotAppIds,
+      );
+    });
+
+    test('no tenants is not a way to take every tenant', () {
+      expect(TenantsTaken.only({}), isNull);
+      expect(TenantsTaken.only({'TENANT-ADA'})!.takes('tenant-ada'), isTrue);
+      expect(TenantsTaken.only({tenant})!.takes(null), isFalse);
+      expect(TenantsTaken.anyTenant.takes(null), isTrue);
+    });
+
+    test('a kind it has no case for, whatever it is called', () {
+      for (final activity in <Map<String, Object?>>[
+        {...message(), 'type': 'typing'}..remove('text'),
+        {...message(), 'type': 'messageReaction'}..remove('text'),
+        {...message(), 'type': 'event', 'name': 'tokens/response'},
+        {...message(), 'type': 'endOfConversation'},
+        {...cardAction(), 'name': 'signin/tokenExchange'},
+        {...cardAction(), 'name': 'signin/verifyState'},
+        {...cardAction(), 'name': 'SignIn/tokenExchange'},
+        {...cardAction(), 'name': 'composeExtension/query'},
+        {...cardAction(), 'name': 'task/fetch'},
+        {...cardAction()}..remove('name'),
+      ]) {
+        refused(_gate(activity), TeamsRefusal.kindNotRecorded);
+      }
+    });
+
+    test('a message action the manifest does not declare', () {
+      for (final name in [
+        'composeExtension/fetchTask',
+        'composeExtension/submitAction',
+      ]) {
+        // The retired "Close trajectory" action, from an old package.
+        refused(
+          _gate(_messageAction(name, command: 'closeTrajectory')),
+          TeamsRefusal.kindNotRecorded,
+        );
+      }
+    });
+
+    test('call settings opened, with no dialog to open', () {
+      refused(
+        _gate(
+          _messageAction('composeExtension/fetchTask'),
+          spec: TeamsSourceSpec(
+            botAppIds: {appBot},
+            tenants: TenantsTaken.only({tenant})!,
+          ),
+        ),
+        TeamsRefusal.kindNotRecorded,
       );
     });
 
     test('a token for none of the bots', () {
       final t = signedToken(claims: {...tokenClaims(), 'aud': otherAppId});
-      refused(_gate(message(), token: t), 401, contains('none of these bots'));
+      refused(_gate(message(), token: t), TeamsRefusal.tokenAudience);
     });
 
     test('a token whose audience names two of the bots', () {
@@ -375,11 +485,10 @@ void main() {
           token: t,
           spec: TeamsSourceSpec(
             botAppIds: {appBot, otherBot},
-            tenantAllowlist: {tenant},
+            tenants: TenantsTaken.only({tenant})!,
           ),
         ),
-        401,
-        contains('2 of these bots'),
+        TeamsRefusal.tokenAudience,
       );
     });
 
@@ -394,61 +503,51 @@ void main() {
           },
           spec: TeamsSourceSpec(
             botAppIds: {appBot, otherBot},
-            tenantAllowlist: {tenant},
+            tenants: TenantsTaken.only({tenant})!,
           ),
         ),
-        401,
-        contains('recipient'),
+        TeamsRefusal.recipientNotTokenBot,
       );
     });
 
     test('an activity with no recipient', () {
       refused(
         _gate({...message()}..remove('recipient')),
-        401,
-        contains('recipient'),
+        TeamsRefusal.recipientNotTokenBot,
       );
-    });
-
-    test('a body over the cap', () {
-      final d = teamsGate(
-        spec: TeamsSourceSpec(botAppIds: {appBot}),
-        keys: keys,
-        headers: {'Authorization': 'Bearer ${signedToken()}'},
-        body: utf8.encode(jsonEncode(message())),
-        now: now,
-        maxBodyBytes: 10,
-      );
-      refused(d, 413, contains('over cap'));
     });
 
     test('a request with no bearer token', () {
-      refused(_gate(message(), headers: {}), 401, contains('bearer'));
+      refused(_gate(message(), headers: {}), TeamsRefusal.noBearerToken);
       refused(
         _gate(message(), headers: {'Authorization': 'Basic abc'}),
-        401,
-        contains('bearer'),
+        TeamsRefusal.noBearerToken,
       );
     });
 
     test('a token that is not three parts', () {
-      refused(_gate(message(), token: 'a.b'), 401, contains('three parts'));
+      refused(_gate(message(), token: 'a.b'), TeamsRefusal.tokenUnreadable);
     });
 
     test('an unsigned token that says alg none', () {
       String seg(Object o) => b64(utf8.encode(jsonEncode(o)));
       final t = '${seg({'alg': 'none', 'kid': 'k1'})}.${seg(tokenClaims())}.';
-      refused(_gate(message(), token: t), 401, contains('alg none'));
+      refused(_gate(message(), token: t), TeamsRefusal.tokenAlgorithm);
     });
 
     test('a token that names an HMAC algorithm', () {
       final t = signedToken(header: {'alg': 'HS256', 'kid': 'k1'});
-      refused(_gate(message(), token: t), 401, contains('HS256'));
+      refused(_gate(message(), token: t), TeamsRefusal.tokenAlgorithm);
+    });
+
+    test('a token that names no key', () {
+      final t = signedToken(header: {'alg': 'RS256'});
+      refused(_gate(message(), token: t), TeamsRefusal.tokenNamesNoKey);
     });
 
     test('a token from a key not in the set', () {
       final t = signedToken(header: {'alg': 'RS256', 'kid': 'rotated-out'});
-      refused(_gate(message(), token: t), 401, contains('not in the key set'));
+      refused(_gate(message(), token: t), TeamsRefusal.tokenKeyUnknown);
     });
 
     test('claims changed after signing', () {
@@ -458,8 +557,7 @@ void main() {
       );
       refused(
         _gate(message(), token: '$h.$forged.$s'),
-        401,
-        contains('bad signature'),
+        TeamsRefusal.badSignature,
       );
     });
 
@@ -467,8 +565,7 @@ void main() {
       final [h, c, _] = signedToken().split('.');
       refused(
         _gate(message(), token: '$h.$c.${b64([1, 2, 3])}'),
-        401,
-        contains('wrong length'),
+        TeamsRefusal.badSignature,
       );
     });
 
@@ -476,50 +573,49 @@ void main() {
       final t = signedToken(
         claims: {...tokenClaims(), 'iss': 'https://sts.windows.net/x/'},
       );
-      refused(_gate(message(), token: t), 401, contains('issuer'));
+      refused(_gate(message(), token: t), TeamsRefusal.tokenIssuer);
     });
 
     test('a token for another bot', () {
       final t = signedToken(claims: {...tokenClaims(), 'aud': 'another-bot'});
-      refused(_gate(message(), token: t), 401, contains('audience'));
+      refused(_gate(message(), token: t), TeamsRefusal.tokenAudience);
     });
 
     test('a token past its expiry and the skew', () {
       final t = signedToken(
         claims: {...tokenClaims(), 'exp': nowSeconds - 301},
       );
-      refused(_gate(message(), token: t), 401, contains('expired'));
+      refused(_gate(message(), token: t), TeamsRefusal.tokenExpired);
     });
 
     test('a token not yet valid, beyond the skew', () {
       final t = signedToken(
         claims: {...tokenClaims(), 'nbf': nowSeconds + 301},
       );
-      refused(_gate(message(), token: t), 401, contains('not valid'));
+      refused(_gate(message(), token: t), TeamsRefusal.tokenNotYetValid);
     });
 
     test('a token with no expiry', () {
       final t = signedToken(claims: tokenClaims()..remove('exp'));
-      refused(_gate(message(), token: t), 401, contains('no expiry'));
+      refused(_gate(message(), token: t), TeamsRefusal.tokenNoExpiry);
     });
 
     test('a token with no serviceurl claim', () {
       final t = signedToken(claims: tokenClaims()..remove('serviceurl'));
-      refused(_gate(message(), token: t), 401, contains('no serviceurl'));
+      refused(_gate(message(), token: t), TeamsRefusal.noServiceUrlClaim);
     });
 
-    test('a serviceurl claim that is not the activity\'s', () {
+    test("a serviceurl claim that is not the activity's", () {
       final t = signedToken(
         claims: {...tokenClaims(), 'serviceurl': 'https://elsewhere.example/'},
       );
-      refused(_gate(message(), token: t), 401, contains('does not match'));
+      refused(_gate(message(), token: t), TeamsRefusal.serviceUrlMismatch);
     });
 
     test('an activity from another channel', () {
       refused(
         _gate({...message(), 'channelId': 'slack'}),
-        403,
-        contains('not msteams'),
+        TeamsRefusal.notTeams,
       );
     });
 
@@ -528,7 +624,7 @@ void main() {
         key: otherKey,
         header: {'alg': 'RS256', 'kid': 'k2'},
       );
-      refused(_gate(message(), token: t), 403, contains('not endorsed'));
+      refused(_gate(message(), token: t), TeamsRefusal.keyNotEndorsed);
     });
 
     test('a tenant not on the allowlist, or no tenant at all', () {
@@ -538,27 +634,25 @@ void main() {
           'tenant': {'id': 'someone-else'},
         },
       };
-      refused(_gate(other), 403, contains('someone-else'));
+      refused(_gate(other), TeamsRefusal.tenantNotAllowed);
       final none = {
         ...message(),
         'conversation': {'id': 'a:1personal'},
       }..remove('channelData');
-      refused(_gate(none), 403, contains('not allowed'));
+      refused(_gate(none), TeamsRefusal.tenantNotAllowed);
     });
 
     test('a body that is not a JSON object', () {
       refused(
         _gate(message(), body: utf8.encode('[1]')),
-        400,
-        contains('JSON'),
+        TeamsRefusal.bodyNotJson,
       );
     });
 
     test('an activity missing what every activity has', () {
       refused(
         _gate(message()..remove('conversation')),
-        400,
-        contains('conversation'),
+        TeamsRefusal.activityMalformed,
       );
     });
   });
@@ -569,8 +663,7 @@ void main() {
     // Nothing the gate can check catches that, because no documented check
     // of the token covers the body (see the library comment, point 2).
     final d = _gate(message(text: 'words Ada never typed'));
-    expect(d.outcome, TeamsGateOutcome.trigger);
-    expect((d.event! as TeamsMessage).text, 'words Ada never typed');
+    expect((_event(d) as TeamsMessage).text, 'words Ada never typed');
   });
 
   group('the key set', () {
@@ -597,13 +690,17 @@ void main() {
 }
 
 void _recordedTests() {
-  group('a recorded body', () {
-    final bodies = <String, Map<String, Object?>>{
+  group('a recorded projection', () {
+    final activities = <String, Map<String, Object?>>{
       'message': {
         ...message(),
         'replyToId': '1730881000000',
         'entities': [
-          {'type': 'mention', 'text': '<at>Bot</at>'},
+          {
+            'type': 'mention',
+            'mentioned': {'id': '28:$appId', 'name': 'Bot'},
+            'text': '<at>Bot</at>',
+          },
         ],
       },
       'edit': {
@@ -623,6 +720,10 @@ void _recordedTests() {
         },
       }..remove('text'),
       'card action': cardAction(),
+      'call settings opened': _messageAction('composeExtension/fetchTask'),
+      'call settings submitted': _messageAction(
+        'composeExtension/submitAction',
+      ),
       'conversation update': {
         ...message(),
         'type': 'conversationUpdate',
@@ -636,84 +737,58 @@ void _recordedTests() {
       'install': {...message(), 'type': 'installationUpdate', 'action': 'add'}
         ..remove('text'),
     };
-    for (final MapEntry(key: kind, value: activity) in bodies.entries) {
-      test('reads a $kind as the gate does', () {
-        final body = utf8.encode(jsonEncode(activity));
-        final gated = _gate(activity, body: body).event!;
-        expect(_described(teamsRecordedEvent(body)!), _described(gated));
+    for (final MapEntry(key: kind, value: activity) in activities.entries) {
+      test('of a $kind reads back as the event the gate made', () {
+        final gated = _event(_gate(activity));
+        final read = teamsRecordedEvent(projectedBytes(activity));
+        expect(read.runtimeType, gated.runtimeType);
+        expect(
+          jsonEncode(read.projection().asUncheckedMap()),
+          jsonEncode(gated.projection().asUncheckedMap()),
+        );
       });
     }
 
-    test('is not checked again: a tenant the gate would refuse still reads, '
-        'in lower case', () {
-      final other = {
-        ...message(),
-        'channelData': {
-          'tenant': {'id': 'OTHER-TENANT'},
-        },
-      };
-      final body = utf8.encode(jsonEncode(other));
-      expect(_gate(other, body: body).status, 403);
-      expect(teamsRecordedEvent(body)!.tenant, 'other-tenant');
-    });
-
-    test('of a type no event is read as is null', () {
-      final typing = {...message(), 'type': 'typing'}..remove('text');
-      expect(teamsRecordedEvent(utf8.encode(jsonEncode(typing))), isNull);
-    });
-
-    test('that is not an activity throws a FormatException', () {
+    test('that is a raw activity, or not JSON, throws a FormatException', () {
+      expect(
+        () => teamsRecordedEvent(utf8.encode(jsonEncode(message()))),
+        throwsFormatException,
+      );
       expect(
         () => teamsRecordedEvent(utf8.encode('[1]')),
         throwsFormatException,
       );
       expect(() => teamsRecordedEvent([0xff]), throwsFormatException);
-      expect(
-        () => teamsRecordedEvent(utf8.encode('{"type":"message"}')),
-        throwsFormatException,
-      );
     });
   });
 }
 
-/// Every field of [e], so two events can be compared whole.
-String _described(TeamsEvent e) => jsonEncode({
-  'kind': '${e.runtimeType}',
-  'conversation': e.conversation,
-  'id': e.id,
-  'serviceUrl': '${e.serviceUrl}',
-  'tenant': e.tenant,
-  'conversationType': e.conversationType,
-  'timestamp': e.timestamp,
-  'from': e.from?.value,
-  'fromAadObjectId': e.fromAadObjectId?.value,
-  'bot': e.bot.value,
-  ...switch (e) {
-    TeamsMessage() => {
-      'text': e.text,
-      'entities': e.entities?.map((o) => o.asUncheckedMap()).toList(),
-      'replyTo': e.replyTo,
-    },
-    TeamsMessageUpdate() => {
-      'text': e.text,
-      'entities': e.entities?.map((o) => o.asUncheckedMap()).toList(),
-      'channelEventType': e.channelEventType,
-    },
-    TeamsMessageDelete() => {'channelEventType': e.channelEventType},
-    TeamsCardAction() => {'card': e.card, 'value': e.value?.asUncheckedMap()},
-    TeamsInvoke() => {'name': e.name, 'value': e.value?.asUncheckedMap()},
-    TeamsMessageActionSubmit() => {
-      'command': e.command,
-      'message': e.message,
-      'data': e.data?.asUncheckedMap(),
-    },
-    TeamsConversationUpdate() => {
-      'added': [for (final u in e.added) u.value],
-      'removed': [for (final u in e.removed) u.value],
-    },
-    TeamsInstallationUpdate() => {'action': e.action},
+/// A message action's invoke, [name], for [command], opened on a message.
+Map<String, Object?> _messageAction(
+  String name, {
+  String command = callSettingsCommandId,
+}) => {
+  ...cardAction(),
+  'name': name,
+  'value': {
+    'commandId': command,
+    'commandContext': 'message',
+    'messagePayload': {'id': '1730881000000', 'body': <String, Object?>{}},
+    'data': {'model': 'opus', 'effort': 'high'},
   },
-});
+};
+
+/// The event [d] took; fails the test when it refused.
+TeamsEvent _event(TeamsGateDecision d) => switch (d) {
+  TeamsActivityTaken(:final event) => event,
+  TeamsActivityRefused(:final refusal) => fail('refused: ${refusal.reason}'),
+};
+
+/// The response [d] answers with; fails the test when it refused.
+JsonObject? _response(TeamsGateDecision d) => switch (d) {
+  TeamsActivityTaken(:final response) => response,
+  TeamsActivityRefused(:final refusal) => fail('refused: ${refusal.reason}'),
+};
 
 TeamsGateDecision _gate(
   Map<String, Object?> activity, {
@@ -722,7 +797,13 @@ TeamsGateDecision _gate(
   TeamsSourceSpec? spec,
   List<int>? body,
 }) => teamsGate(
-  spec: spec ?? TeamsSourceSpec(botAppIds: {appBot}, tenantAllowlist: {tenant}),
+  spec:
+      spec ??
+      TeamsSourceSpec(
+        botAppIds: {appBot},
+        tenants: TenantsTaken.only({tenant})!,
+        callSettingsDialog: _dialog,
+      ),
   keys: keys,
   headers: headers ?? {'Authorization': 'Bearer ${token ?? signedToken()}'},
   body: body ?? utf8.encode(jsonEncode(activity)),

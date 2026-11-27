@@ -1,18 +1,20 @@
 /// The relay against a real logbook writer, skipped unless asked for:
 ///
-///     LOGBOOK_LIVE=<dir holding the socket> LOGBOOK_LIVE_SOCKET=j.sock \
-///     LOGBOOK_LIVE_EXPECT=recorded|failed|refused|unanswered \
+///     LOGBOOK_LIVE=/abs/path/to/j.sock \
+///     LOGBOOK_LIVE_EXPECT=recorded|unrecorded \
 ///       dart test test/logbook_live_test.dart
 ///
-/// It posts one signed message through [TeamsRelay], recorded through
-/// [recordEvent], and prints the status Teams would get, the relay's log
-/// line and the writer's answer. The socket is named relative to
-/// LOGBOOK_LIVE, since macOS caps a socket's path at 104 bytes.
+/// It posts one signed message through is_relay's `RelayServer` with
+/// [TeamsDeliveryCheck], and prints the status Teams would get and the
+/// relay's log line, which says what the writer answered. The path must be
+/// absolute, and macOS caps a socket's path at 104 bytes, so put the writer's
+/// socket somewhere short, such as /tmp/j.sock.
 library;
 
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:is_relay/is_relay.dart';
 import 'package:is_teams_module/is_teams_module.dart';
 import 'package:test/test.dart';
 
@@ -20,77 +22,62 @@ import 'support/fixtures.dart';
 
 void main() {
   final env = Platform.environment;
-  final dir = env['LOGBOOK_LIVE'];
+  final socket = env['LOGBOOK_LIVE'];
   final expectation = env['LOGBOOK_LIVE_EXPECT'];
 
   test(
     'a signed message, recorded with a real writer',
     () async {
       setUpKeys();
-      Directory.current = dir;
-      final socket = env['LOGBOOK_LIVE_SOCKET'] ?? 'j.sock';
       final logged = <String>[];
-      final answers = <RecordAnswer>[];
-      final relay = TeamsRelay(
-        spec: TeamsSourceSpec(botAppIds: {appBot}, tenantAllowlist: {tenant}),
-        keys: BotFrameworkKeySource(
-          get: (url) async => url.path.endsWith('openidconfiguration')
-              ? jsonEncode({'jwks_uri': 'https://login.botframework.com/k'})
-              : jwksJson,
-          now: () => now,
+      final keys = BotFrameworkKeySource(
+        get: (url) async => url.path.endsWith('openidconfiguration')
+            ? jsonEncode({'jwks_uri': 'https://login.botframework.com/k'})
+            : jwksJson,
+        now: () => now,
+      );
+      await keys.refresh();
+      final relay = RelayServer.projecting(
+        check: TeamsDeliveryCheck(
+          spec: TeamsSourceSpec(
+            botAppIds: {appBot},
+            tenants: TenantsTaken.only({tenant})!,
+          ),
+          keys: keys,
         ),
-        onEvent: (_) async {},
-        record: (body, within) async {
-          final a = await recordEvent(
-            socket,
-            source: teamsEventSource,
-            bytes: body,
-            timeout: within,
-          );
-          answers.add(a);
-          return a;
-        },
+        logbook: LogbookSocket.parse(socket!)!,
+        path: RelayPath.parse('/api/messages')!,
+        budget: const Duration(seconds: 12),
+        rate: WriteRateBound(perMinute: 600, burst: 60),
         now: () => now,
         log: logged.add,
       );
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      server.listen(relay.handle);
+      final serving = relay.serve(server);
       final client = HttpClient();
-      final body = utf8.encode(
-        jsonEncode(message(id: '${DateTime.now().millisecondsSinceEpoch}')),
-      );
-      final req = await client.post('127.0.0.1', server.port, TeamsRelay.path);
+      final activity = message(id: '${DateTime.now().millisecondsSinceEpoch}');
+      final body = utf8.encode(jsonEncode(activity));
+      final req = await client.post('127.0.0.1', server.port, '/api/messages');
       req.headers.set('authorization', 'Bearer ${signedToken()}');
       req.add(body);
       final res = await req.close();
       await res.drain<void>();
       client.close(force: true);
       await server.close(force: true);
+      await serving;
 
-      final answer = answers.single;
       stdout.writeln('status ${res.statusCode}');
       stdout.writeln('log    ${logged.single}');
-      stdout.writeln(
-        'answer ${switch (answer) {
-          Recorded(:final entry) => 'recorded $entry',
-          RecordFailed(:final why) => 'failed: $why',
-          RecordRefused(:final why) => 'refused: $why',
-          RecordUnanswered(:final why) => 'unanswered: $why',
-        }}',
-      );
-      stdout.writeln('body   ${base64Encode(body)}');
-      final (Type type, int status) = switch (expectation) {
-        'recorded' => (Recorded, 200),
-        'failed' => (RecordFailed, 500),
-        'refused' => (RecordRefused, 500),
-        'unanswered' => (RecordUnanswered, 500),
+      // What the entry should hold: the projection, not the body sent.
+      stdout.writeln('entry  ${base64Encode(projectedBytes(activity))}');
+      expect(res.statusCode, switch (expectation) {
+        'recorded' => 200,
+        'unrecorded' => 503,
         _ => fail('LOGBOOK_LIVE_EXPECT is $expectation'),
-      };
-      expect(answer.runtimeType, type);
-      expect(res.statusCode, status);
+      });
     },
-    skip: dir == null
-        ? 'set LOGBOOK_LIVE to run against a logbook writer'
+    skip: socket == null
+        ? "set LOGBOOK_LIVE to a writer's socket to run against it"
         : false,
   );
 }

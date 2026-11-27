@@ -13,17 +13,21 @@
 ///                                    default is loopback, for a proxy on
 ///                                    the same machine.
 ///   LOGBOOK_SOCKET=/run/...sock      the logbook's writer's Unix socket:
-///                                    every accepted request's body is
-///                                    recorded through it as a `teams-event`
-///                                    entry, byte for byte, before Teams
-///                                    gets a response. Required.
+///                                    every authentic activity's projection
+///                                    is recorded through it as a
+///                                    `teams-event` entry before Teams gets
+///                                    a response. Required, and an absolute
+///                                    path.
 ///   TEAMS_SETTINGS_DIALOG=card.json  optional; an Adaptive Card the call
 ///                                    settings message action opens, read
 ///                                    once at boot, so Teams' wait for it
 ///                                    asks no agent. Unreadable aborts
 ///
 /// The relay keeps nothing of its own: the logbook has one writer, which
-/// knows the relay by its user, and the relay sends it what arrives.
+/// knows the relay by its user, and the relay sends it the projection of
+/// what arrives. The serving, the 12-second budget, the body read and the
+/// write are is_relay's projecting `RelayServer`; the Teams check, and the
+/// projection, are [TeamsDeliveryCheck]'s.
 ///
 /// The bot's messaging endpoint is `https://<host>/api/messages`.
 library;
@@ -33,6 +37,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:checked_json/checked_json.dart';
+import 'package:is_relay/is_relay.dart';
 import 'package:is_teams_module/is_teams_module.dart';
 
 Future<void> main() async {
@@ -56,14 +61,13 @@ Future<void> main() async {
     }
     botAppIds.add(id);
   }
-  final allow = {
+  final tenants = TenantsTaken.only({
     for (final t in (env['TEAMS_TENANT_ALLOWLIST'] ?? '').split(','))
-      if (t.trim().isNotEmpty) t.trim().toLowerCase(),
-  };
-  if (allow.isEmpty) {
-    // Refuse to start rather than fail open: anyone in any tenant who
-    // installs the bot would start journeys here. Tests that want any
-    // tenant build a TeamsSourceSpec directly.
+      if (t.trim().isNotEmpty) t.trim(),
+  });
+  if (tenants == null) {
+    // No tenants is not "any tenant": the relay has no way to take every
+    // tenant, so it can't start open.
     stderr.writeln('abort: TEAMS_TENANT_ALLOWLIST not set');
     exit(78);
   }
@@ -95,45 +99,48 @@ Future<void> main() async {
     }
   }
 
-  final logbookSocket = env['LOGBOOK_SOCKET'] ?? '';
-  if (logbookSocket.isEmpty) {
+  final rawLogbook = env['LOGBOOK_SOCKET'] ?? '';
+  final logbook = LogbookSocket.parse(rawLogbook);
+  if (logbook == null) {
     // A relay that can't record what arrives must not respond 200 to it.
-    stderr.writeln('abort: LOGBOOK_SOCKET not set');
+    stderr.writeln(
+      rawLogbook.isEmpty
+          ? 'abort: LOGBOOK_SOCKET not set'
+          : 'abort: LOGBOOK_SOCKET "$rawLogbook" is not an absolute path',
+    );
     exit(78);
   }
   // Not checked for at boot: the writer may start after the relay, and
-  // until it answers, every message gets a 500 and Teams sends it again.
+  // until it answers, every delivery gets a 503 and Teams sends it again.
 
   final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
   final keys = BotFrameworkKeySource(
     get: (url) => _get(client, url),
     log: stderr.writeln,
   );
-  // Fetch once at boot, so the first message from Teams doesn't wait on it
-  // and a broken route to Microsoft shows up in the log straight away.
-  if (await keys.keys() == null) {
+  // Fetched once at boot and refreshed behind requests after, never for
+  // one; a broken route to Microsoft shows up in the log straight away.
+  if (await keys.refresh() == null) {
     stderr.writeln('warning: no keys yet; requests get 503 until they arrive');
   }
 
-  final relay = TeamsRelay(
-    spec: TeamsSourceSpec(
-      botAppIds: botAppIds,
-      tenantAllowlist: allow,
-      invokeResponses: {
-        if (settingsCard case final card?)
-          'composeExtension/fetchTask': teamsDialog(
-            title: 'Call settings',
-            card: card,
-          ),
-      },
+  final relay = RelayServer.projecting(
+    check: TeamsDeliveryCheck(
+      spec: TeamsSourceSpec(
+        botAppIds: botAppIds,
+        tenants: tenants,
+        callSettingsDialog: switch (settingsCard) {
+          final card? => teamsDialog(title: 'Call settings', card: card),
+          null => null,
+        },
+      ),
+      keys: keys,
     ),
-    keys: keys,
-    record: (body, within) => recordEvent(
-      logbookSocket,
-      source: teamsEventSource,
-      bytes: body,
-      timeout: within,
-    ),
+    logbook: logbook,
+    path: RelayPath.parse('/api/messages')!,
+    // Teams sends again after 15 seconds with no response.
+    budget: const Duration(seconds: 12),
+    rate: WriteRateBound(perMinute: 600, burst: 60),
   );
   final server = await HttpServer.bind(address, port);
   stdout.writeln('teams relay listening on ${address.address}:${server.port}');
@@ -143,9 +150,7 @@ Future<void> main() async {
       'put TLS in front',
     );
   }
-  await for (final req in server) {
-    unawaited(relay.handle(req));
-  }
+  await relay.serve(server);
 }
 
 Future<String> _get(HttpClient client, Uri url) async {

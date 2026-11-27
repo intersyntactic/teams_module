@@ -39,38 +39,46 @@ void main() {
   );
 
   test('fetches the OpenID document, then the key set it names', () async {
-    final keys = await source().keys();
+    final keys = await source().refresh();
     expect(fetched, [BotFrameworkKeySource.defaultMetadata, jwksUri]);
     expect(keys!.byId('k1')!.endorsements, contains('msteams'));
   });
 
+  test('has none before a fetch, and starts one without waiting', () async {
+    final s = source();
+    expect(s.current(), isNull);
+    await pumpEventQueue();
+    expect(fetched, hasLength(2));
+    expect(s.current(), isNotNull);
+  });
+
   test('uses the set it has until it is twelve hours old', () async {
     final s = source();
-    await s.keys();
+    await s.refresh();
     clock = now.add(const Duration(hours: 11));
-    await s.keys();
+    s.current();
+    await pumpEventQueue();
     expect(fetched, hasLength(2));
   });
 
   test('answers with the old set while refreshing it behind', () async {
     final s = source();
-    final first = await s.keys();
+    final first = await s.refresh();
     clock = now.add(const Duration(hours: 12));
-    final during = await s.keys();
-    expect(during, same(first));
+    expect(s.current(), same(first));
     await pumpEventQueue();
     expect(fetched, hasLength(4));
-    expect(await s.keys(), isNot(same(first)));
+    expect(s.current(), isNot(same(first)));
   });
 
   test('keeps the old set when a refresh fails', () async {
     final s = source();
-    final first = await s.keys();
+    final first = await s.refresh();
     served.remove(jwksUri);
     clock = now.add(const Duration(hours: 13));
-    await s.keys();
+    s.current();
     await pumpEventQueue();
-    expect(await s.keys(), same(first));
+    expect(s.current(), same(first));
     expect(logged.single, contains('refresh failed'));
   });
 
@@ -79,12 +87,15 @@ void main() {
     () async {
       served.remove(jwksUri);
       final s = source();
-      expect(await s.keys(), isNull);
-      expect(await s.keys(), isNull);
+      expect(await s.refresh(), isNull);
+      expect(s.current(), isNull);
+      await pumpEventQueue();
       expect(fetched, hasLength(2), reason: 'no second try inside a minute');
       served[jwksUri] = jwksJson;
       clock = now.add(const Duration(minutes: 1));
-      expect(await s.keys(), isNotNull);
+      s.current();
+      await pumpEventQueue();
+      expect(s.current(), isNotNull);
     },
   );
 
@@ -92,13 +103,15 @@ void main() {
     served[BotFrameworkKeySource.defaultMetadata] = jsonEncode({
       'jwks_uri': 'http://login.botframework.com/v1/.well-known/keys',
     });
-    expect(await source().keys(), isNull);
+    expect(await source().refresh(), isNull);
     expect(logged.single, contains('not https'));
   });
 
   test('fetches once for requests that arrive together', () async {
     final s = source();
-    await Future.wait([s.keys(), s.keys(), s.keys()]);
+    s.current();
+    s.current();
+    await s.refresh();
     expect(fetched, hasLength(2));
   });
 }

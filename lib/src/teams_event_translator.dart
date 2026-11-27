@@ -32,7 +32,8 @@ final teamsEventSource = RelayedEventSource.parse('teams')!;
 ///   the docking station closes it only while it is the trajectory open at
 ///   the press's address, so a forged one reaches only what the presser
 ///   could close anyway;
-/// - a message action's submission, such as call settings';
+/// - a message action's dialog opening, or its submission, such as call
+///   settings';
 /// - an `installationUpdate`, which Teams sends beside the
 ///   `conversationUpdate` of the same join, so one join is read once;
 /// - an edit or a delete, until conversation_shapes has a shape for what a
@@ -67,16 +68,14 @@ final class TeamsEventTranslator
     TeamsEventTranslatorState state,
     RelayedEvent recorded,
   ) {
-    final TeamsEvent? event;
+    final TeamsEvent event;
     try {
       event = teamsRecordedEvent(recorded.bytes);
     } on FormatException {
-      // The gate took these bytes, so this is a body the gate and this
-      // translator disagree about: nothing to admit, rather than a fold that
-      // stops at it every time the docking station starts.
+      // Not a projection this module writes: nothing to admit, rather than
+      // a fold that stops at it every time the docking station starts.
       return (state, const NothingToAdmit());
     }
-    if (event == null) return (state, const NothingToAdmit());
     // Learnt first, so a person quoting themselves is named even when this
     // is the first the logbook has heard from them.
     final next = state.learnt(event);
@@ -184,7 +183,7 @@ final class TeamsEventTranslator
       case TeamsCardAction() ||
           TeamsMessageUpdate() ||
           TeamsMessageDelete() ||
-          TeamsInvoke() ||
+          TeamsMessageActionOpen() ||
           TeamsMessageActionSubmit() ||
           TeamsInstallationUpdate():
         return null;

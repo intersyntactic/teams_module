@@ -201,6 +201,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.17.0"
+  is_logbook_client:
+    dependency: transitive
+    description:
+      name: is_logbook_client
+      sha256: aff53c968e53c1b707305adeb212bd700ca0c231fa1caee4774b5db52f8cc4b0
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.3.0"
   is_logbook_format:
     dependency: transitive
     description:
@@ -225,6 +233,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.1.0"
+  is_relay:
+    dependency: "direct main"
+    description:
+      name: is_relay
+      sha256: c2929e57503f13a54bf98b94ac24a0cab3782f470d9cabf0378b4cf6af014cfd
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.5.0"
   is_reply_requests_api:
     dependency: "direct main"
     description:
