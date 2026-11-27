@@ -23,12 +23,18 @@ package pin that tag.
   case or field, or a raw activity throws, and the translator reads that as
   nothing to admit.
 - What each case keeps: a message's text, mentions (who, and the name
-  shown), quote, `replyTo` and attachments by reference (type, name, and
-  its address without query, fragment or password, never its content); an
-  edit's text and mentions; a card press's verb and the trajectory a Close
-  names, not the rest of its `value`; a message action's command and the
-  message it was opened on, not what was submitted; who joined or left; an
-  install's action.
+  shown), quote, `replyTo` and attachments by type and name only (never
+  an address, since a sharing link carries its grant in its path, and
+  never content); an edit's text and mentions; a card press's verb and the
+  trajectory a Close names, not the rest of its `value`; a message action's
+  command, the message it was opened on, and what a person entered, as
+  text by input id (nothing nested); who joined or left; an install's
+  action.
+- `TeamsSourceSpec.tenants` is a `TenantsTaken`: `TenantsTaken.only(set)`,
+  null for an empty set, or `TenantsTaken.anyTenant` by name. An empty
+  allowlist no longer means every tenant, and the field is required.
+- The gate no longer caps the body: is_relay reads it, and refuses one
+  over its own cap first.
 - **Only kinds with a case are recorded.** A message, edit, delete, card
   press, conversation update, install, and call settings opened (when the
   relay has a dialog for it) or submitted. Anything else is refused with a

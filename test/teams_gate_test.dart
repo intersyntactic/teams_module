@@ -100,7 +100,7 @@ void main() {
       );
     });
 
-    test('call settings submitted, with the message, not what was in it', () {
+    test('call settings submitted, with the message and what was entered', () {
       // As the docs give a message action's submitAction; not yet measured.
       final d = _gate(_messageAction('composeExtension/submitAction'));
       expect(_response(d), isNull);
@@ -110,9 +110,21 @@ void main() {
         submitted.messageRef,
         TeamsMessageRef.of('a:1personal', '1730881000000'),
       );
+      expect(submitted.entered, {'model': 'opus', 'effort': 'high'});
+    });
+
+    test('what was entered keeps text only, nothing nested', () {
+      final action = _messageAction('composeExtension/submitAction');
+      (action['value']! as Map<String, Object?>)['data'] = {
+        'model': 'opus',
+        'authentication': {'token': 'a-token'},
+        'count': 3,
+      };
+      final submitted = _event(_gate(action)) as TeamsMessageActionSubmit;
+      expect(submitted.entered, {'model': 'opus'});
       expect(
         jsonEncode(submitted.projection().asUncheckedMap()),
-        isNot(contains('opus')),
+        isNot(contains('a-token')),
       );
     });
 
@@ -166,7 +178,7 @@ void main() {
         token: signedToken(claims: {...tokenClaims(), 'aud': otherAppId}),
         spec: TeamsSourceSpec(
           botAppIds: {appBot, otherBot},
-          tenantAllowlist: {tenant},
+          tenants: TenantsTaken.only({tenant})!,
         ),
       );
       expect(_event(d).bot, otherBot);
@@ -209,12 +221,18 @@ void main() {
 
     test('a tenant in upper case, matched and passed on in lower', () {
       final upper = tenant.toUpperCase();
-      final d = _gate({
-        ...message(),
-        'channelData': {
-          'tenant': {'id': upper},
+      final d = _gate(
+        {
+          ...message(),
+          'channelData': {
+            'tenant': {'id': upper},
+          },
         },
-      }, spec: TeamsSourceSpec(botAppIds: {appBot}, tenantAllowlist: {upper}));
+        spec: TeamsSourceSpec(
+          botAppIds: {appBot},
+          tenants: TenantsTaken.only({upper})!,
+        ),
+      );
       expect(_event(d).tenant, tenant);
     });
 
@@ -317,7 +335,7 @@ void main() {
       expect(carrying([without('senderName')]).quote!.senderName, isNull);
     });
 
-    test('what it carried, by reference, never a grant to read it', () {
+    test('what it carried, by type and name, never where it lives', () {
       final said = _event(
         _gate({
           ...message(),
@@ -343,19 +361,12 @@ void main() {
         }),
       ) as TeamsMessage;
       expect(
+        [for (final a in said.attachments) (a.contentType, a.name)],
         [
-          for (final a in said.attachments)
-            (a.contentType, a.name, '${a.contentUrl}'),
-        ],
-        [
-          (
-            'application/vnd.microsoft.teams.file.download.info',
-            'plan.docx',
-            'https://x.sharepoint.com/sites/s/plan.docx',
-          ),
-          ('image/*', null, 'https://smba.example:8443/a/1'),
-          ('text/html', null, 'null'),
-          ('x', null, 'null'),
+          ('application/vnd.microsoft.teams.file.download.info', 'plan.docx'),
+          ('image/*', null),
+          ('text/html', null),
+          ('x', null),
         ],
       );
     });
@@ -377,9 +388,22 @@ void main() {
 
     test('when no app id is configured', () {
       refused(
-        _gate(message(), spec: const TeamsSourceSpec(botAppIds: {})),
+        _gate(
+          message(),
+          spec: const TeamsSourceSpec(
+            botAppIds: {},
+            tenants: TenantsTaken.anyTenant,
+          ),
+        ),
         TeamsRefusal.noBotAppIds,
       );
+    });
+
+    test('no tenants is not a way to take every tenant', () {
+      expect(TenantsTaken.only({}), isNull);
+      expect(TenantsTaken.only({'TENANT-ADA'})!.takes('tenant-ada'), isTrue);
+      expect(TenantsTaken.only({tenant})!.takes(null), isFalse);
+      expect(TenantsTaken.anyTenant.takes(null), isTrue);
     });
 
     test('a kind it has no case for, whatever it is called', () {
@@ -416,7 +440,10 @@ void main() {
       refused(
         _gate(
           _messageAction('composeExtension/fetchTask'),
-          spec: TeamsSourceSpec(botAppIds: {appBot}, tenantAllowlist: {tenant}),
+          spec: TeamsSourceSpec(
+            botAppIds: {appBot},
+            tenants: TenantsTaken.only({tenant})!,
+          ),
         ),
         TeamsRefusal.kindNotRecorded,
       );
@@ -440,7 +467,7 @@ void main() {
           token: t,
           spec: TeamsSourceSpec(
             botAppIds: {appBot, otherBot},
-            tenantAllowlist: {tenant},
+            tenants: TenantsTaken.only({tenant})!,
           ),
         ),
         TeamsRefusal.tokenAudience,
@@ -458,7 +485,7 @@ void main() {
           },
           spec: TeamsSourceSpec(
             botAppIds: {appBot, otherBot},
-            tenantAllowlist: {tenant},
+            tenants: TenantsTaken.only({tenant})!,
           ),
         ),
         TeamsRefusal.recipientNotTokenBot,
@@ -470,18 +497,6 @@ void main() {
         _gate({...message()}..remove('recipient')),
         TeamsRefusal.recipientNotTokenBot,
       );
-    });
-
-    test('a body over the cap', () {
-      final d = teamsGate(
-        spec: TeamsSourceSpec(botAppIds: {appBot}),
-        keys: keys,
-        headers: {'Authorization': 'Bearer ${signedToken()}'},
-        body: utf8.encode(jsonEncode(message())),
-        now: now,
-        maxBodyBytes: 10,
-      );
-      refused(d, TeamsRefusal.bodyTooLarge);
     });
 
     test('a request with no bearer token', () {
@@ -768,7 +783,7 @@ TeamsGateDecision _gate(
       spec ??
       TeamsSourceSpec(
         botAppIds: {appBot},
-        tenantAllowlist: {tenant},
+        tenants: TenantsTaken.only({tenant})!,
         callSettingsDialog: _dialog,
       ),
   keys: keys,

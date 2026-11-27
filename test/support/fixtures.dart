@@ -138,6 +138,7 @@ List<int> projectedBytes(Map<String, Object?> activity) {
   return switch (teamsGate(
     spec: TeamsSourceSpec(
       botAppIds: {appBot, otherBot},
+      tenants: TenantsTaken.anyTenant,
       callSettingsDialog: JsonObject.of({'task': 'test dialog'}),
     ),
     keys: keys,

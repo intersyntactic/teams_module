@@ -39,7 +39,10 @@ void main() {
       await keys.refresh();
       final relay = RelayServer.projecting(
         check: TeamsDeliveryCheck(
-          spec: TeamsSourceSpec(botAppIds: {appBot}, tenantAllowlist: {tenant}),
+          spec: TeamsSourceSpec(
+            botAppIds: {appBot},
+            tenants: TenantsTaken.only({tenant})!,
+          ),
           keys: keys,
         ),
         logbook: LogbookSocket.parse(socket!)!,

@@ -53,7 +53,6 @@ List<TeamsEvent> _everyCase() {
         TeamsAttachmentReference(
           contentType: 'application/vnd.microsoft.teams.file.download.info',
           name: 'plan.docx',
-          contentUrl: Uri.parse('https://x.sharepoint.com/sites/s/plan.docx'),
         ),
       ],
     ),
@@ -99,6 +98,7 @@ List<TeamsEvent> _everyCase() {
       bot: _bot,
       command: TeamsMessageAction.callSettings,
       message: '1794700000000',
+      entered: {'model': 'opus', 'effort': 'high'},
     ),
     TeamsConversationUpdate(
       conversation: common.conversation,

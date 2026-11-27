@@ -96,7 +96,7 @@ void main() {
       check: TeamsDeliveryCheck(
         spec: TeamsSourceSpec(
           botAppIds: {appBot},
-          tenantAllowlist: {tenant},
+          tenants: TenantsTaken.only({tenant})!,
           callSettingsDialog: dialog,
         ),
         keys: keys,
@@ -222,7 +222,7 @@ void main() {
     );
   });
 
-  test("never records a file's download link, or what it holds", () async {
+  test("never records a file's address, link or contents", () async {
     final shared = {
       ...message(),
       'attachments': [
@@ -237,14 +237,21 @@ void main() {
             'fileType': 'docx',
           },
         },
+        // A sharing link carries its grant in the path, not the query.
+        {
+          'contentType': 'reference',
+          'contentUrl': 'https://x.sharepoint.com/:w:/g/secret3-in-the-path',
+          'name': 'shared.docx',
+        },
       ],
     };
     expect((await post(shared)).$1, 200);
     expect(
       recordedText(),
       allOf(
-        contains('https://x.sharepoint.com/sites/s/plan.docx'),
-        isNot(contains('tempauth')),
+        contains('"name":"plan.docx"'),
+        contains('"name":"shared.docx"'),
+        isNot(contains('sharepoint')),
         isNot(contains('secret')),
       ),
     );
@@ -271,7 +278,10 @@ void main() {
 
   group('the check alone', () {
     TeamsDeliveryCheck check() => TeamsDeliveryCheck(
-      spec: TeamsSourceSpec(botAppIds: {appBot}, tenantAllowlist: {tenant}),
+      spec: TeamsSourceSpec(
+        botAppIds: {appBot},
+        tenants: TenantsTaken.only({tenant})!,
+      ),
       keys: keys,
     );
 
@@ -283,19 +293,8 @@ void main() {
       final other => fail('headers not vouched for: $other'),
     };
 
-    // The gate's own refusals, each as the status is_relay answers with.
-    test('refuses a body over the cap as too large', () {
-      final big = Uint8List(1024 * 1024 + 1);
-      expect(
-        check().checkBody(vouched(), big),
-        isA<Refuse>().having(
-          (r) => r.status,
-          'status',
-          RefusalStatus.payloadTooLarge,
-        ),
-      );
-    });
-
+    // The gate's own refusals, each as the status is_relay answers with. A
+    // body over the cap is is_relay's to refuse: it reads the body.
     test('refuses a body that is not an activity as a bad request', () {
       expect(
         check().checkBody(vouched(), utf8.encode('not json')),
@@ -368,7 +367,10 @@ void main() {
     );
     final relay = RelayServer.projecting(
       check: TeamsDeliveryCheck(
-        spec: TeamsSourceSpec(botAppIds: {appBot}, tenantAllowlist: {tenant}),
+        spec: TeamsSourceSpec(
+          botAppIds: {appBot},
+          tenants: TenantsTaken.only({tenant})!,
+        ),
         keys: noKeys,
       ),
       logbook: logbook.socket,

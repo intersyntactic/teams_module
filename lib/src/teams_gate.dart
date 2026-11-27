@@ -69,7 +69,6 @@ enum TeamsRefusal {
   tokenNoExpiry(RefusalStatus.unauthorized, 'token has no expiry'),
   tokenExpired(RefusalStatus.unauthorized, 'token expired'),
   tokenNotYetValid(RefusalStatus.unauthorized, 'token not yet valid'),
-  bodyTooLarge(RefusalStatus.payloadTooLarge, 'body over the cap'),
   bodyNotJson(RefusalStatus.badRequest, 'body is not a JSON object'),
   activityMalformed(RefusalStatus.badRequest, 'activity is not in its form'),
   notTeams(RefusalStatus.forbidden, 'channel is not msteams'),
@@ -127,10 +126,49 @@ final class TeamsActivityRefused extends TeamsGateDecision {
   final TeamsRefusal refusal;
 }
 
+/// Which tenants' activities the gate takes. Taking every tenant is a
+/// value of its own, [anyTenant], never what an empty set means: a set of
+/// tenants can't be empty, so a forgotten setting can't open the gate.
+sealed class TenantsTaken {
+  const TenantsTaken();
+
+  /// Only [tenants], compared in lower case; null when [tenants] is empty,
+  /// which names no one and is a configuration error.
+  static TenantsTaken? only(Set<String> tenants) => tenants.isEmpty
+      ? null
+      : OnlyTheseTenants._({for (final t in tenants) t.toLowerCase()});
+
+  /// Every tenant whose activity is correctly signed. Only ever right in
+  /// tests.
+  static const TenantsTaken anyTenant = AnyTenant._();
+
+  /// Whether an activity from [tenant], in lower case, is taken.
+  bool takes(String? tenant);
+}
+
+/// Only the tenants in [tenants].
+final class OnlyTheseTenants extends TenantsTaken {
+  const OnlyTheseTenants._(this.tenants);
+
+  /// In lower case, never empty.
+  final Set<String> tenants;
+
+  @override
+  bool takes(String? tenant) => tenant != null && tenants.contains(tenant);
+}
+
+/// Every tenant.
+final class AnyTenant extends TenantsTaken {
+  const AnyTenant._();
+
+  @override
+  bool takes(String? tenant) => true;
+}
+
 final class TeamsSourceSpec {
   const TeamsSourceSpec({
     required this.botAppIds,
-    this.tenantAllowlist = const {},
+    required this.tenants,
     this.acknowledgement = 'Got it',
     this.callSettingsDialog,
   });
@@ -140,9 +178,8 @@ final class TeamsSourceSpec {
   /// refuses rather than opens.
   final Set<BotAppId> botAppIds;
 
-  /// Tenants whose activities are taken. Empty means "any tenant whose
-  /// activity is correctly signed", which is only ever right in tests.
-  final Set<String> tenantAllowlist;
+  /// The tenants whose activities are taken.
+  final TenantsTaken tenants;
 
   /// What Teams shows after a card press, before the agent edits the card.
   final String acknowledgement;
@@ -200,7 +237,6 @@ TeamsGateDecision teamsGate({
   required List<int> body,
   required DateTime now,
   Duration maxClockSkew = const Duration(minutes: 5),
-  int maxBodyBytes = 1024 * 1024,
 }) => switch (teamsToken(
   spec: spec,
   keys: keys,
@@ -209,12 +245,7 @@ TeamsGateDecision teamsGate({
   maxClockSkew: maxClockSkew,
 )) {
   TeamsTokenRefused(:final refusal) => TeamsActivityRefused(refusal),
-  final TeamsToken token => teamsGateBody(
-    spec: spec,
-    token: token,
-    body: body,
-    maxBodyBytes: maxBodyBytes,
-  ),
+  final TeamsToken token => teamsGateBody(spec: spec, token: token, body: body),
 };
 
 /// The checks the headers alone can make, so a sender with no valid token
@@ -255,16 +286,13 @@ TeamsTokenCheck teamsToken({
 
 /// The checks that need the body, for a delivery whose [token] passed: what
 /// the activity is, and whether it is the one the token was sent with, as
-/// far as the `serviceurl` claim can tell.
+/// far as the `serviceurl` claim can tell. How much of a body is read is
+/// the relay's to bound, since the relay reads it.
 TeamsGateDecision teamsGateBody({
   required TeamsSourceSpec spec,
   required TeamsToken token,
   required List<int> body,
-  int maxBodyBytes = 1024 * 1024,
 }) {
-  if (body.length > maxBodyBytes) {
-    return const TeamsActivityRefused(TeamsRefusal.bodyTooLarge);
-  }
   final JsonObject activity;
   try {
     activity = JsonObject.decode(utf8.decode(body));
@@ -328,9 +356,7 @@ TeamsGateDecision _decide(
 
   final conversation = a.object('conversation');
   final tenant = _tenant(a, conversation);
-  if (spec.tenantAllowlist.isNotEmpty &&
-      (tenant == null ||
-          !spec.tenantAllowlist.any((t) => t.toLowerCase() == tenant))) {
+  if (!spec.tenants.takes(tenant)) {
     return const TeamsActivityRefused(TeamsRefusal.tenantNotAllowed);
   }
   return _project(spec, a, token.bot, tenant, conversation) ??
@@ -516,6 +542,7 @@ TeamsActivityTaken? _project(
             team: team,
             command: command,
             message: _messageActedOn(value),
+            entered: _entered(value?.objectOrNull('data')),
           ),
         ),
         null => null,
@@ -556,6 +583,15 @@ TeamsActivityTaken? _project(
     _ => null,
   };
 }
+
+/// What a dialog's inputs held, by input id, text only: Adaptive Card
+/// inputs submit text, and anything else in [data] is not something a
+/// person entered.
+Map<String, String> _entered(JsonObject? data) => {
+  if (data != null)
+    for (final k in data.keys)
+      if (data.raw(k) case final String v) k: v,
+};
 
 /// The id of the message a message action was opened on.
 String? _messageActedOn(JsonObject? value) =>
@@ -598,31 +634,16 @@ TeamsQuote? _quote(List<JsonObject> entities) {
   return null;
 }
 
-/// What a message carried, by reference: each attachment's type, name and
-/// where it lives. Its content, and any `downloadUrl` inside it, is never
-/// read.
+/// What a message carried: each attachment's type and name. Its address,
+/// its content and any `downloadUrl` inside it are never read.
 List<TeamsAttachmentReference> _attachments(JsonObject a) => [
   for (final at in a.objectsOrNull('attachments') ?? const <JsonObject>[])
     if (at.stringOrNull('contentType') case final contentType?)
       TeamsAttachmentReference(
         contentType: contentType,
         name: at.stringOrNull('name'),
-        contentUrl: _addressOnly(at.stringOrNull('contentUrl')),
       ),
 ];
-
-/// [url]'s scheme, host, port and path only. A pre-authorised link carries
-/// its grant in the query, and a URL can carry a password before its host,
-/// so neither is kept. Null for no URL, or one with no host.
-Uri? _addressOnly(String? url) => switch (Uri.tryParse(url ?? '')) {
-  final u? when u.hasScheme && u.host.isNotEmpty => Uri(
-    scheme: u.scheme,
-    host: u.host,
-    port: u.hasPort ? u.port : null,
-    path: u.path,
-  ),
-  _ => null,
-};
 
 sealed class _Check {}
 

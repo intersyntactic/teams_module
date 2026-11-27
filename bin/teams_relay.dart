@@ -61,14 +61,13 @@ Future<void> main() async {
     }
     botAppIds.add(id);
   }
-  final allow = {
+  final tenants = TenantsTaken.only({
     for (final t in (env['TEAMS_TENANT_ALLOWLIST'] ?? '').split(','))
-      if (t.trim().isNotEmpty) t.trim().toLowerCase(),
-  };
-  if (allow.isEmpty) {
-    // Refuse to start rather than fail open: anyone in any tenant who
-    // installs the bot would start journeys here. Tests that want any
-    // tenant build a TeamsSourceSpec directly.
+      if (t.trim().isNotEmpty) t.trim(),
+  });
+  if (tenants == null) {
+    // No tenants is not "any tenant": the relay has no way to take every
+    // tenant, so it can't start open.
     stderr.writeln('abort: TEAMS_TENANT_ALLOWLIST not set');
     exit(78);
   }
@@ -129,7 +128,7 @@ Future<void> main() async {
     check: TeamsDeliveryCheck(
       spec: TeamsSourceSpec(
         botAppIds: botAppIds,
-        tenantAllowlist: allow,
+        tenants: tenants,
         callSettingsDialog: switch (settingsCard) {
           final card? => teamsDialog(title: 'Call settings', card: card),
           null => null,

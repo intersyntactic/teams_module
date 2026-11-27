@@ -97,7 +97,12 @@ sealed class TeamsEvent {
     'channel': ?channel,
     'team': ?team,
     for (final MapEntry(:key, :value) in _own.entries)
-      if (value != null && !(value is List && value.isEmpty)) key: value,
+      if (switch (value) {
+        null => false,
+        List(isEmpty: true) || Map(isEmpty: true) => false,
+        _ => true,
+      })
+        key: value,
   });
 
   /// The event [projection] recorded. Strict: a projection of another
@@ -241,6 +246,10 @@ sealed class TeamsEvent {
         team: team,
         command: _command(p),
         message: p.stringOrNull('message'),
+        entered: switch (p.objectOrNull('entered')) {
+          final e? => {for (final k in e.keys) k: e.string(k)},
+          null => const {},
+        },
       ),
       _Kind.conversationUpdate => TeamsConversationUpdate(
         conversation: conversation,
@@ -308,7 +317,7 @@ enum _Kind {
   messageDelete('messageDelete', {'channelEventType'}),
   cardAction('cardAction', {'card', 'verb', 'trajectory'}),
   messageActionOpen('messageActionOpen', {'command', 'message'}),
-  messageActionSubmit('messageActionSubmit', {'command', 'message'}),
+  messageActionSubmit('messageActionSubmit', {'command', 'message', 'entered'}),
   conversationUpdate('conversationUpdate', {'added', 'removed'}),
   installationUpdate('installationUpdate', {'action'});
 
@@ -441,25 +450,18 @@ final class TeamsMention {
   Map<String, Object?> get _projection => {'id': id.value, 'name': ?name};
 }
 
-/// A file or card a message carried, by reference only: what it is and
-/// where it lives, never its content, and never a download link that
-/// grants access by itself.
+/// That a message carried a file or card: its type and name, and nothing
+/// that says where it lives. An address can carry the grant to read what
+/// is there, in its query or in its path (a sharing link's token), so none
+/// is recorded until something needs one and its shape has been measured.
 final class TeamsAttachmentReference {
-  const TeamsAttachmentReference({
-    required this.contentType,
-    this.name,
-    this.contentUrl,
-  });
+  const TeamsAttachmentReference({required this.contentType, this.name});
 
   factory TeamsAttachmentReference._fromProjection(JsonObject a) {
-    _onlyKeys(a, const {'contentType', 'name', 'contentUrl'}, 'attachment');
+    _onlyKeys(a, const {'contentType', 'name'}, 'attachment');
     return TeamsAttachmentReference(
       contentType: a.string('contentType'),
       name: a.stringOrNull('name'),
-      contentUrl: switch (a.stringOrNull('contentUrl')) {
-        final u? => Uri.parse(u),
-        null => null,
-      },
     );
   }
 
@@ -469,14 +471,9 @@ final class TeamsAttachmentReference {
   /// Its file name, when it has one.
   final String? name;
 
-  /// Where it lives. Reading it there takes the bot's or a person's own
-  /// access; the address alone grants none.
-  final Uri? contentUrl;
-
   Map<String, Object?> get _projection => {
     'contentType': contentType,
     'name': ?name,
-    'contentUrl': ?contentUrl?.toString(),
   };
 }
 
@@ -721,8 +718,9 @@ final class TeamsMessageActionOpen extends TeamsEvent {
 }
 
 /// A `composeExtension/submitAction`: someone filled in the dialog a
-/// message action opened, and submitted it. What they submitted is not
-/// kept until something reads it.
+/// message action opened, and submitted it. What they entered exists
+/// nowhere but this request, so it is kept: the text of each input, by its
+/// id.
 final class TeamsMessageActionSubmit extends TeamsEvent {
   const TeamsMessageActionSubmit({
     required super.conversation,
@@ -738,6 +736,7 @@ final class TeamsMessageActionSubmit extends TeamsEvent {
     super.team,
     required this.command,
     this.message,
+    this.entered = const {},
   });
 
   final TeamsMessageAction command;
@@ -745,6 +744,10 @@ final class TeamsMessageActionSubmit extends TeamsEvent {
   /// The id, in [conversation], of the message whose menu it was opened
   /// from.
   final String? message;
+
+  /// What was entered, as text, by input id. An input whose value is not
+  /// text is left out, so nothing but what a person typed or chose is kept.
+  final Map<String, String> entered;
 
   /// The message whose menu it was opened from, by where it was said.
   TeamsMessageRef? get messageRef => switch (message) {
@@ -759,6 +762,7 @@ final class TeamsMessageActionSubmit extends TeamsEvent {
   Map<String, Object?> get _own => {
     'command': command.commandId,
     'message': message,
+    'entered': entered,
   };
 }
 
