@@ -3,6 +3,14 @@
 Each version is tagged `vX.Y.Z` on main, and the services that use this
 package pin that tag.
 
+## 0.0.16
+
+- is_relay ^0.5.1, which writes with is_logbook_client ^0.4.0, the client
+  for the 0.5 logbook. 0.0.15 locked is_logbook_client 0.3.0 through is_relay
+  0.5.0, so the docking station service, on 0.4, couldn't build on it. No
+  code change. The relay and the docking station still go in together, on
+  this version.
+
 ## 0.0.15
 
 - The Teams relay runs on is_relay ^0.5.0's projecting `RelayServer`.
