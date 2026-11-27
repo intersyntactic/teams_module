@@ -3,7 +3,7 @@
 Each version is tagged `vX.Y.Z` on main, and the services that use this
 package pin that tag.
 
-## 0.0.14
+## 0.0.15
 
 - The Teams relay runs on is_relay ^0.5.0's projecting `RelayServer`.
   Teams' part is `TeamsDeliveryCheck`, a
