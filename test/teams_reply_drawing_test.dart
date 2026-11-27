@@ -99,6 +99,48 @@ void main() {
     expect(close.object('data').string('trajectory'), trajectoryHex);
   });
 
+  group('the footer', () {
+    Future<String> footer(List<String> flags) async {
+      final (code, requests, _) = await run([...endpointArgs, ...flags]);
+      expect(code, 0);
+      return texts(requests.single).last;
+    }
+
+    test('counts the turn and step from 1, given them from 0', () async {
+      expect(await footer(['--turn', '2', '--step', '6']), 'turn 3 · step 7');
+      expect(await footer(['--step', '0', '--turn', '0']), 'turn 1 · step 1');
+    });
+
+    test('says the step alone when given no turn', () async {
+      expect(await footer(['--step', '6']), 'step 7');
+    });
+
+    test(
+      'reads --turn without --step as an older loop does: unchanged',
+      () async {
+        // An older loop's --turn carries its step, and its footer has always
+        // shown that number as given.
+        expect(await footer(['--turn', '3']), 'turn 3');
+      },
+    );
+
+    test('puts the context after the turn and step', () async {
+      expect(
+        await footer([
+          '--turn',
+          '2',
+          '--step',
+          '6',
+          '--context-tokens',
+          '152000',
+          '--context-window',
+          '200000',
+        ]),
+        'turn 3 · step 7 · context 152k of 200k (76%)',
+      );
+    });
+  });
+
   test('no turn or context given: no footer', () async {
     final (_, requests, _) = await run(endpointArgs);
     expect(texts(requests.single), ['hi']);
@@ -163,6 +205,9 @@ void main() {
       ],
       ['--reply-endpoint', 'not json', '--sign-in', 'x'],
       [...endpointArgs, '--turn', 'three'],
+      [...endpointArgs, '--step', '-1'],
+      [...endpointArgs, '--step'],
+      [...endpointArgs, '--step', '1', '--step', '2'],
       // No trajectory, or one not a TrajectoryId in lower-case hex.
       endpointArgs.sublist(0, 4),
       [
