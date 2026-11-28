@@ -11,6 +11,7 @@ import 'package:is_shapes/is_shapes.dart';
 import 'package:is_teams_module/is_teams_module.dart';
 import 'package:test/test.dart';
 
+import '../tool/app_package.dart' show manifest;
 import 'support/fixtures.dart';
 
 /// [activity] as the docking station hands it over: projected and written
@@ -198,6 +199,22 @@ void main() {
           WhetherForTheAgent.everyMessageHereIsForTheAgent,
           reason: type,
         );
+      }
+    });
+
+    test('the app package asks for no permission to read every message, '
+        'which is what makes every delivered message for the agent', () {
+      // If this fails, the package now grants ChannelMessage.Read.Group or
+      // ChatMessage.Read.Chat, so Teams delivers messages that don't
+      // @mention the bot: the translator's forTheAgent must become
+      // per-message before that package ships.
+      final appId = BotAppId.parse('00000000-0000-0000-0000-00000000b07a')!;
+      for (final settingsAction in [false, true]) {
+        final written = jsonEncode(
+          manifest(appId, 'CAM', '1.0.0', settingsAction: settingsAction),
+        );
+        expect(written, isNot(contains('ChannelMessage.Read')));
+        expect(written, isNot(contains('ChatMessage.Read')));
       }
     });
 
