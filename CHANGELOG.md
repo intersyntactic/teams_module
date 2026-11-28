@@ -3,6 +3,23 @@
 Each version is tagged `vX.Y.Z` on main, and the services that use this
 package pin that tag.
 
+## 0.0.17
+
+- On the checked_json ^0.3.0 set: checked_json ^0.3.0, is_docking_station_api
+  ^0.9.0, is_relay ^0.6.0, is_annotation_shapes ^0.4.0, is_model_vocabulary
+  ^0.3.0 and is_effects ^0.18.0. JSON with a key named twice, or an
+  integer past 2^53 - 1, is refused rather than read.
+- The conversation and reply types (`UserSaid`, `Quote`, `SourceMessageId`,
+  `RepliesUnderWebAddress`, `ReplyContent`, `ReplyText`) come from
+  is_conversation_vocabulary ^0.1.1, which replaces is_conversation_shapes
+  and is_conversation_reply_vocabulary. `WritesWebAddressReplyRequests`
+  comes from is_airlock_api ^0.24.0, which replaces the retired
+  is_reply_requests_api.
+- `teams-reply-drawing` reads `--reply-endpoint` with the same refusals, so
+  an endpoint naming `origin` twice is a usage error (exit 64). Its output is
+  otherwise byte for byte what 0.0.16 printed. No change to the projection or
+  the wire.
+
 ## 0.0.16
 
 - is_relay ^0.5.1, which writes with is_logbook_client ^0.4.0, the client

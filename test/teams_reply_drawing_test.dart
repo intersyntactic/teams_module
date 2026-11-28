@@ -204,6 +204,16 @@ void main() {
         'x',
       ],
       ['--reply-endpoint', 'not json', '--sign-in', 'x'],
+      // A key named twice would otherwise keep whichever came last.
+      [
+        '--reply-endpoint',
+        '{"origin":"$origin","origin":"https://elsewhere.example",'
+            '"pathPrefix":"$prefix"}',
+        '--sign-in',
+        'cam-teams',
+        '--trajectory',
+        trajectoryHex,
+      ],
       [...endpointArgs, '--turn', 'three'],
       [...endpointArgs, '--step', '-1'],
       [...endpointArgs, '--step'],

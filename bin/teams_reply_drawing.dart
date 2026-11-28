@@ -33,9 +33,11 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:checked_json/checked_json.dart'
+    show decodeJsonRefusingDuplicateKeysAndUnsafeIntegers;
 import 'package:is_effects/is_effects.dart'
     show BodyToKeep, ProposedRequest, encodeProposedRequest;
-import 'package:is_conversation_reply_vocabulary/is_conversation_reply_vocabulary.dart'
+import 'package:is_conversation_vocabulary/is_conversation_vocabulary.dart'
     show RepliesUnderWebAddress, ReplyContent, ReplyText;
 import 'package:is_shapes/is_shapes.dart' show TrajectoryId;
 import 'package:is_sign_in_vocabulary/is_sign_in_vocabulary.dart' show SignIn;
@@ -85,7 +87,9 @@ Future<int> run(
   final AddressPrefix replyEndpoint;
   try {
     replyEndpoint = decodeAddressPrefix(
-      jsonDecode(options['--reply-endpoint'] ?? ''),
+      decodeJsonRefusingDuplicateKeysAndUnsafeIntegers(
+        options['--reply-endpoint'] ?? '',
+      ),
       'reply endpoint',
     );
   } on FormatException catch (e) {

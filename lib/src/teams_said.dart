@@ -1,4 +1,4 @@
-import 'package:is_conversation_shapes/is_conversation_shapes.dart';
+import 'package:is_conversation_vocabulary/is_conversation_vocabulary.dart';
 
 import 'teams_ids.dart';
 import 'teams_event.dart';

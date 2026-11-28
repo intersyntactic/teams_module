@@ -1,4 +1,4 @@
-import 'package:is_conversation_shapes/is_conversation_shapes.dart';
+import 'package:is_conversation_vocabulary/is_conversation_vocabulary.dart';
 
 /// A Teams message by where it was said: its conversation, and its id there.
 /// Teams makes a message id unique only within its conversation (it is the
