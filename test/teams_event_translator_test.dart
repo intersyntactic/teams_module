@@ -4,7 +4,8 @@ import 'dart:typed_data';
 import 'package:checked_json/checked_json.dart';
 import 'package:is_annotation_shapes/is_annotation_shapes.dart'
     show ApprovedVerdict, HeldOffVerdict;
-import 'package:is_conversation_vocabulary/is_conversation_vocabulary.dart';
+import 'package:is_conversation_vocabulary/is_conversation_vocabulary.dart'
+    show ConversationKind, KnownAuthor, RepliesUnderWebAddress, UnknownAuthor;
 import 'package:is_docking_station_api/is_docking_station_api.dart';
 import 'package:is_content_id/is_content_id.dart' show ObjectId;
 import 'package:is_shapes/is_shapes.dart';
