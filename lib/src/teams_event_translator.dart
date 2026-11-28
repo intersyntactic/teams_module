@@ -123,6 +123,9 @@ final class TeamsEventTranslator
           addressedTo: addressedTo,
           replyEndpoint: replyEndpoint,
           conversationKind: teamsConversationKind(event.conversationType),
+          // The app asks for no permission to read every message, so Teams
+          // delivers a bot only its one-to-one chats and what @mentions it.
+          forTheAgent: WhetherForTheAgent.everyMessageHereIsForTheAgent,
           key: key,
           node: node,
         );

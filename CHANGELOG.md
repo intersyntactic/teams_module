@@ -3,6 +3,21 @@
 Each version is tagged `vX.Y.Z` on main, and the services that use this
 package pin that tag.
 
+## 0.0.19
+
+- Off `is_effects`, which is broken up into one vocabulary per action:
+  the request and response types now come from is_web_request_vocabulary
+  ^0.1.0, and `Outcome` and its cases from is_outcome_vocabulary ^0.1.0.
+  Their JSON is unchanged.
+- Every dependency at its newest: is_airlock_api ^0.26.0,
+  is_docking_station_api ^0.11.0, is_model_vocabulary ^0.5.0, is_relay
+  ^0.8.0 and is_sign_in_vocabulary ^0.1.2.
+- `MessageSaid` says every message Teams delivers is for the agent
+  (`everyMessageHereIsForTheAgent`): the app asks for no permission to read
+  every message, so Teams delivers a bot only its one-to-one chats and what
+  @mentions it. A docking station reader on is_docking_station_api 0.10
+  refuses the entries this writes.
+
 ## 0.0.18
 
 - On the checked_json ^0.4.0 set: checked_json ^0.4.0, is_docking_station_api

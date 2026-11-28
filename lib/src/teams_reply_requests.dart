@@ -5,20 +5,18 @@ library;
 import 'dart:convert';
 
 import 'package:checked_json/checked_json.dart' show JsonObject;
-import 'package:is_effects/is_effects.dart'
+import 'package:is_airlock_api/is_airlock_api.dart' show WritesReplyRequests;
+import 'package:is_outcome_vocabulary/is_outcome_vocabulary.dart'
+    show NothingRan, Outcome, Ran, StoppedPartway;
+import 'package:is_web_request_vocabulary/is_web_request_vocabulary.dart'
     show
         BodyToKeep,
         BytesBody,
         Method,
         NoBody,
-        NothingRan,
-        Outcome,
         ProposedRequest,
-        Ran,
-        StoppedPartway,
         TextBody,
         WebResponse;
-import 'package:is_airlock_api/is_airlock_api.dart' show WritesReplyRequests;
 import 'package:is_conversation_vocabulary/is_conversation_vocabulary.dart'
     show RepliesUnderWebAddress, ReplyContent, ServerAssignedMessageId;
 import 'package:is_shapes/is_shapes.dart' show TrajectoryId;

@@ -2,7 +2,7 @@ name: is_teams_module
 description: >-
   The Teams module for intersyntactic: what people say and press in
   Microsoft Teams, taken in as nodes on a trajectory.
-version: 0.0.18
+version: 0.0.19
 repository: https://github.com/intersyntactic/teams_module
 publish_to: none
 
@@ -11,16 +11,17 @@ environment:
 
 dependencies:
   checked_json: ^0.4.0
-  is_airlock_api: ^0.25.0
+  is_airlock_api: ^0.26.0
   is_annotation_shapes: ^0.5.0
   is_conversation_vocabulary: ^0.2.0
-  is_docking_station_api: ^0.10.0
-  is_effects: ^0.19.0
-  is_model_vocabulary: ^0.4.0
-  is_relay: ^0.7.0
+  is_docking_station_api: ^0.11.0
+  is_model_vocabulary: ^0.5.0
+  is_outcome_vocabulary: ^0.1.0
+  is_relay: ^0.8.0
   is_shapes: ^0.6.0
-  is_sign_in_vocabulary: ^0.1.0
+  is_sign_in_vocabulary: ^0.1.2
   is_web_address_vocabulary: ^0.1.2
+  is_web_request_vocabulary: ^0.1.0
   pointycastle: ^4.0.0
 
 dev_dependencies:

@@ -1,11 +1,11 @@
 import 'dart:convert';
 
 import 'package:checked_json/checked_json.dart';
-import 'package:is_effects/is_effects.dart';
 import 'package:is_sign_in_vocabulary/is_sign_in_vocabulary.dart' show SignIn;
 import 'package:is_teams_module/is_teams_module.dart';
 import 'package:is_web_address_vocabulary/is_web_address_vocabulary.dart'
     show Origin;
+import 'package:is_web_request_vocabulary/is_web_request_vocabulary.dart';
 import 'package:test/test.dart';
 
 import '../bin/teams_reply_drawing.dart' as app;

@@ -179,6 +179,28 @@ void main() {
       },
     );
 
+    test('says every message Teams delivers is for the agent, in every kind '
+        'of conversation', () {
+      WhetherForTheAgent forTheAgentIn(String conversationType) {
+        final activity = message();
+        activity['conversation'] = {
+          'id': 'a:1personal',
+          'conversationType': conversationType,
+          'tenantId': tenant,
+        };
+        final (_, [r]) = fold([activity]);
+        return (r as MessageSaid).forTheAgent;
+      }
+
+      for (final type in ['personal', 'groupChat', 'channel']) {
+        expect(
+          forTheAgentIn(type),
+          WhetherForTheAgent.everyMessageHereIsForTheAgent,
+          reason: type,
+        );
+      }
+    });
+
     test('in a channel thread is in that thread, within its channel', () {
       // As a channel post arrived on 15 Nov: its conversation names the
       // thread by its first post, and a new post's first post is itself.

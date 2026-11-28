@@ -10,8 +10,8 @@
 ///         [--context-window 200000]
 ///
 /// reads the reply's text, UTF-8, on stdin, and prints the requests as one
-/// JSON array of is_effects' encodeProposedRequest, in posting order, on
-/// stdout.
+/// JSON array of is_web_request_vocabulary's encodeProposedRequest, in
+/// posting order, on stdout.
 /// The requests are [TeamsReplyRequests]' with the sign-in set, as the
 /// airlock will set it once it sends replies itself; until then this
 /// program is how a Teams reply goes out.
@@ -35,8 +35,6 @@ import 'dart:io';
 
 import 'package:checked_json/checked_json.dart'
     show decodeJsonRefusingDuplicateKeysAndUnsafeIntegers;
-import 'package:is_effects/is_effects.dart'
-    show BodyToKeep, ProposedRequest, encodeProposedRequest;
 import 'package:is_conversation_vocabulary/is_conversation_vocabulary.dart'
     show RepliesUnderWebAddress, ReplyContent, ReplyText;
 import 'package:is_shapes/is_shapes.dart' show TrajectoryId;
@@ -44,6 +42,8 @@ import 'package:is_sign_in_vocabulary/is_sign_in_vocabulary.dart' show SignIn;
 import 'package:is_teams_module/is_teams_module.dart';
 import 'package:is_web_address_vocabulary/is_web_address_vocabulary.dart'
     show AddressPrefix, decodeAddressPrefix;
+import 'package:is_web_request_vocabulary/is_web_request_vocabulary.dart'
+    show BodyToKeep, ProposedRequest, encodeProposedRequest;
 
 const usage =
     'usage: teams-reply-drawing --reply-endpoint JSON --sign-in NAME '
