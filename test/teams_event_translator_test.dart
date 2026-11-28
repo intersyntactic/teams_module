@@ -155,6 +155,30 @@ void main() {
       },
     );
 
+    test(
+      'says the kind of conversation: a channel is never claimed public',
+      () {
+        ConversationKind kindIn(String? conversationType) {
+          final activity = message();
+          activity['conversation'] = {
+            'id': 'a:1personal',
+            'conversationType': ?conversationType,
+            'tenantId': tenant,
+          };
+          final (_, [r]) = fold([activity]);
+          return (r as MessageSaid).conversationKind;
+        }
+
+        expect(kindIn('personal'), ConversationKind.oneToOne);
+        expect(kindIn('groupChat'), ConversationKind.groupChat);
+        // Teams' activity doesn't say whether a channel is standard or
+        // private, so the translator claims neither.
+        expect(kindIn('channel'), ConversationKind.notKnown);
+        expect(kindIn('somethingNew'), ConversationKind.notKnown);
+        expect(kindIn(null), ConversationKind.notKnown);
+      },
+    );
+
     test('in a channel thread is in that thread, within its channel', () {
       // As a channel post arrived on 15 Nov: its conversation names the
       // thread by its first post, and a new post's first post is itself.

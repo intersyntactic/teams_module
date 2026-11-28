@@ -1,7 +1,7 @@
 import 'package:is_annotation_shapes/is_annotation_shapes.dart'
     show ApprovedVerdict, HeldOffVerdict, VerdictOnShownMessage;
 import 'package:is_conversation_vocabulary/is_conversation_vocabulary.dart'
-    show RepliesUnderWebAddress;
+    show ConversationKind, RepliesUnderWebAddress;
 import 'package:is_docking_station_api/is_docking_station_api.dart';
 
 import 'teams_event.dart';
@@ -122,6 +122,7 @@ final class TeamsEventTranslator
           containingAddress: containingAddress,
           addressedTo: addressedTo,
           replyEndpoint: replyEndpoint,
+          conversationKind: teamsConversationKind(event.conversationType),
           key: key,
           node: node,
         );
@@ -190,6 +191,19 @@ final class TeamsEventTranslator
     }
   }
 }
+
+/// The kind of conversation Teams' `conversationType` names. A channel is
+/// [ConversationKind.notKnown], never public: a bot's activity doesn't say
+/// whether a channel is standard or private, and calling it public would
+/// claim what the translator can't see. A type Teams doesn't name, or none,
+/// is not known either.
+ConversationKind teamsConversationKind(String? conversationType) =>
+    // wire-ok: Teams' conversationType, read once here.
+    switch (conversationType) {
+      'personal' => ConversationKind.oneToOne,
+      'groupChat' => ConversationKind.groupChat,
+      _ => ConversationKind.notKnown,
+    };
 
 /// What the Teams translator carries from one event to the next: which Entra
 /// user each Teams channel id belongs to, as far as the logbook says. A
