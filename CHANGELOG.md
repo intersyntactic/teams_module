@@ -3,6 +3,17 @@
 Each version is tagged `vX.Y.Z` on main, and the services that use this
 package pin that tag.
 
+## 0.0.20
+
+- Requires and locks checked_json ^0.4.1. With 0.4.0, a Bearer token whose JWT header
+  nests objects about 3,750 deep (about 25 KB) overflowed the stack while
+  the gate read the header, before the signature is checked. That is an
+  Error, which ends the relay, and anyone could send it. 0.4.1 refuses it
+  as a FormatException, read as an unreadable token. An activity body
+  nested as deep is refused as not JSON. The relay should never run
+  v0.0.18 or v0.0.19, which lock 0.4.0. v0.0.16 and v0.0.17 lock 0.2.1 and
+  0.3.0, which don't overflow.
+
 ## 0.0.19
 
 - Off `is_effects`, which is broken up into one vocabulary per action:

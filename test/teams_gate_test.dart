@@ -529,6 +529,24 @@ void main() {
       refused(_gate(message(), token: 'a.b'), TeamsRefusal.tokenUnreadable);
     });
 
+    // Objects within objects, 10,000 deep: deep enough that a recursive
+    // reader overflows its stack, which is an Error that ends the relay.
+    final deep = '${'{"":' * 10000}0${'}' * 10000}';
+
+    test('a token whose header nests deeper than a parser can follow', () {
+      // The header is read before the signature is checked, so this needs
+      // no credentials: it must be refused, never end the relay.
+      final t = '${b64(utf8.encode(deep))}.${b64(utf8.encode('{}'))}.AA';
+      refused(_gate(message(), token: t), TeamsRefusal.tokenUnreadable);
+    });
+
+    test('a body that nests deeper than a parser can follow', () {
+      refused(
+        _gate(message(), body: utf8.encode(deep)),
+        TeamsRefusal.bodyNotJson,
+      );
+    });
+
     test('an unsigned token that says alg none', () {
       String seg(Object o) => b64(utf8.encode(jsonEncode(o)));
       final t = '${seg({'alg': 'none', 'kid': 'k1'})}.${seg(tokenClaims())}.';
