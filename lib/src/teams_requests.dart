@@ -10,7 +10,8 @@ library;
 
 import 'dart:convert';
 
-import 'package:is_effects/is_effects.dart' show Method, ProposedRequest;
+import 'package:is_web_request_vocabulary/is_web_request_vocabulary.dart'
+    show Method, ProposedRequest;
 import 'package:is_sign_in_vocabulary/is_sign_in_vocabulary.dart' show SignIn;
 import 'package:is_web_address_vocabulary/is_web_address_vocabulary.dart'
     show AddressPrefix, Origin, PathPrefix, WebPath;

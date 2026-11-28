@@ -1,9 +1,10 @@
 import 'dart:convert';
 
-import 'package:is_effects/is_effects.dart';
 import 'package:is_conversation_vocabulary/is_conversation_vocabulary.dart';
+import 'package:is_outcome_vocabulary/is_outcome_vocabulary.dart';
 import 'package:is_shapes/is_shapes.dart' show TrajectoryId;
 import 'package:is_teams_module/is_teams_module.dart';
+import 'package:is_web_request_vocabulary/is_web_request_vocabulary.dart';
 import 'package:test/test.dart';
 
 final trajectory = TrajectoryId.parse('a1' * 32)!;
