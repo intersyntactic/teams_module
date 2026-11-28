@@ -1,6 +1,6 @@
 import 'package:is_annotation_shapes/is_annotation_shapes.dart'
     show ApprovedVerdict, HeldOffVerdict, VerdictOnShownMessage;
-import 'package:is_conversation_reply_vocabulary/is_conversation_reply_vocabulary.dart'
+import 'package:is_conversation_vocabulary/is_conversation_vocabulary.dart'
     show RepliesUnderWebAddress;
 import 'package:is_docking_station_api/is_docking_station_api.dart';
 

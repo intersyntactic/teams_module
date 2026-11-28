@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:checked_json/checked_json.dart';
-import 'package:is_conversation_shapes/is_conversation_shapes.dart';
+import 'package:is_conversation_vocabulary/is_conversation_vocabulary.dart';
 import 'package:is_shapes/is_shapes.dart' show TrajectoryId;
 import 'package:is_teams_module/is_teams_module.dart';
 import 'package:test/test.dart';
