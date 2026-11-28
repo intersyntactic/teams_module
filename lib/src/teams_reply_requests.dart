@@ -18,8 +18,7 @@ import 'package:is_effects/is_effects.dart'
         StoppedPartway,
         TextBody,
         WebResponse;
-import 'package:is_airlock_api/is_airlock_api.dart'
-    show WritesWebAddressReplyRequests;
+import 'package:is_airlock_api/is_airlock_api.dart' show WritesReplyRequests;
 import 'package:is_conversation_vocabulary/is_conversation_vocabulary.dart'
     show RepliesUnderWebAddress, ReplyContent, ServerAssignedMessageId;
 import 'package:is_shapes/is_shapes.dart' show TrajectoryId;
@@ -32,7 +31,8 @@ import 'teams_reply.dart';
 /// [drawTeamsReply] draws it, at most [teamsReplyMaxMessages], posted to the
 /// Bot Connector as `POST {prefix}activities`, where the prefix is the
 /// conversation's as the logbook recorded it. Pure: no sign-in, no I/O.
-final class TeamsReplyRequests implements WritesWebAddressReplyRequests {
+final class TeamsReplyRequests
+    implements WritesReplyRequests<RepliesUnderWebAddress> {
   const TeamsReplyRequests();
 
   @override

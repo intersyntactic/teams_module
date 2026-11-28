@@ -3,6 +3,22 @@
 Each version is tagged `vX.Y.Z` on main, and the services that use this
 package pin that tag.
 
+## 0.0.18
+
+- On the checked_json ^0.4.0 set: checked_json ^0.4.0, is_docking_station_api
+  ^0.10.0, is_airlock_api ^0.25.0, is_conversation_vocabulary ^0.2.0,
+  is_annotation_shapes ^0.5.0, is_model_vocabulary ^0.4.0, is_effects ^0.19.0
+  and is_relay ^0.7.0.
+- `MessageSaid` says what kind of conversation it was said in, by
+  `teamsConversationKind`: `personal` is one-to-one, `groupChat` is a group
+  chat, and a channel, or any type Teams doesn't name, is not known. A
+  channel is never claimed public: a bot's activity doesn't say whether a
+  channel is standard or private.
+- `TeamsReplyRequests` implements `WritesReplyRequests<RepliesUnderWebAddress>`,
+  which is is_airlock_api 0.25's name for the same interface.
+- No change to the projection or the wire: every case's recorded bytes, and
+  `teams-reply-drawing`'s output, are byte for byte what 0.0.17 wrote.
+
 ## 0.0.17
 
 - On the checked_json ^0.3.0 set: checked_json ^0.3.0, is_docking_station_api
